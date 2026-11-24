@@ -213,3 +213,5 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .template-grid article>button svg{width:14px!important;height:14px!important;flex:0 0 14px;padding:0!important;background:none!important;border:0!important}
 .template-grid article:hover{border-color:var(--brand-accent,#73977b);box-shadow:none}
 [data-palette=blue] .template-grid article{background:var(--studio-panel);border-color:var(--studio-line)}
+
+.insert-design-dialog{width:min(960px,calc(100vw - 48px));max-height:85vh;overflow:auto;padding:20px;border:1px solid var(--studio-line);border-radius:12px;background:var(--studio-panel);color:var(--studio-ink)}.insert-design-dialog::backdrop{background:#0009}.insert-heading{display:flex;justify-content:space-between;align-items:center}.insert-heading h2{margin:0}.insert-dimensions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.insert-dimensions input{width:100%;box-sizing:border-box;background:var(--studio-paper);color:var(--studio-ink)}.insert-design-dialog .template-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
