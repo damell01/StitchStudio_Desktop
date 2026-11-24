@@ -1,9 +1,10 @@
 import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 const root=process.argv[2]||join(process.env.USERPROFILE||process.env.HOME||'.','StitchStudio Artwork');
-const bluey=['Bluey','Bingo','Bandit','Chilli','Muffin','Socks','Uncle Stripe','Aunt Trixie','Nana','Frisky','Uncle Rad','Grandad'];
-const disney=['Mickey Mouse','Minnie Mouse','Donald Duck','Daisy Duck','Goofy','Pluto','Stitch','Winnie the Pooh','Tigger','Eeyore'];
-const jobs=[...bluey.map(name=>({name,group:'Bluey',url:'https://www.bluey.tv/characters/'+name.toLowerCase().replaceAll(' ','-')+'/'})),...disney.map(name=>({name,group:'Disney',url:'https://characters.disney.com/'+name.toLowerCase().replaceAll(' ','-')}))];
+const bluey=['Bluey','Bingo','Bandit','Chilli','Muffin','Socks','Uncle Stripe','Aunt Trixie','Nana','Frisky','Uncle Rad','Grandad','Lucky','Chloe','Coco','Snickers','Rusty','Jack','Mackenzie','Indy','Honey','Winton'];
+const disney=['Mickey Mouse','Minnie Mouse','Donald Duck','Daisy Duck','Goofy','Pluto','Stitch','Winnie the Pooh','Tigger','Eeyore','Angel','Simba','Nala','Ariel','Belle','Cinderella','Elsa','Anna','Olaf','Moana','Rapunzel'];
+const extra=[...['Hello Kitty','My Melody','Kuromi','Cinnamoroll','Pompompurin','Keroppi','Badtz-Maru'].map(name=>({name,group:'Sanrio',url:'https://www.sanrio.com/collections/'+name.toLowerCase().replaceAll(' ','-')})),...['Mario','Luigi','Peach','Yoshi','Toad','Bowser','Donkey Kong'].map(name=>({name,group:'Nintendo',url:'https://mario.nintendo.com/characters/'}))];
+const jobs=[...extra,...bluey.map(name=>({name,group:'Bluey',url:'https://www.bluey.tv/characters/'+name.toLowerCase().replaceAll(' ','-')+'/'})),...disney.map(name=>({name,group:'Disney',url:'https://characters.disney.com/'+name.toLowerCase().replaceAll(' ','-')}))];
 let failures=0;
 for(const job of jobs){
 try{
