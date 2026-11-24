@@ -123,4 +123,22 @@ fn apply_stitch_properties(fabric:String,spacing:f64,length:f64,angle:f64,pull:f
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
  let p=preview(&d);w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[derive(serde::Serialize)]
+struct EditableObject {uid:usize,label:String,color:[u8;3],kind:String}
+#[tauri::command]
+fn editable_objects(state:tauri::State<'_,Mutex<Workspace>>) -> Result<Vec<EditableObject>,String>{
+ let w=state.lock().map_err(|e|e.to_string())?;
+ Ok(w.source.as_ref().map(|d|d.shapes.iter().map(|s|EditableObject{uid:s.uid,label:s.label.clone(),color:s.color,kind:s.params.kind.map(|k|k.name()).unwrap_or("auto").into()}).collect()).unwrap_or_default())
+}
+#[tauri::command]
+fn set_object_kind(uid:usize,kind:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
+ let kind=if kind=="auto"{None}else{Some(zigzag::params::Kind::parse(&kind).ok_or("Unknown stitch type")?)};
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ let mut doc=w.source.clone().ok_or("No editable artwork")?;
+ let shape=doc.shapes.iter_mut().find(|s|s.uid==uid).ok_or("Object not found")?;
+ if shape.params.kind==Some(zigzag::params::Kind::Manual){return Err("Manual stitches cannot be converted directly".into())}
+ shape.params.kind=kind;
+ let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
+ let p=preview(&d);w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
