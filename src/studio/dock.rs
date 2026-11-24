@@ -250,6 +250,9 @@ fn config_dir() -> Option<std::path::PathBuf> {
     use std::sync::OnceLock;
     static DIR: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     DIR.get_or_init(|| {
+        if cfg!(target_os = "windows") {
+            return std::env::var_os("APPDATA").or_else(|| std::env::var_os("LOCALAPPDATA")).map(|base| std::path::PathBuf::from(base).join("Stitch Studio"));
+        }
         let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
         let (new, old) = if cfg!(target_os = "macos") {
             let base = home.join("Library/Application Support");
@@ -297,13 +300,13 @@ impl DockState {
         d.agent_share = v["agent_share"].as_f64().unwrap_or(0.55).clamp(0.15, 0.95) as f32;
         for (k, id) in ALL.iter().enumerate() {
             let e = &v["panels"][id.title()];
-            d.hidden[k] = e["hidden"].as_bool().unwrap_or(false);
-            d.collapsed[k] = e["collapsed"].as_bool().unwrap_or(false);
+            d.hidden[k] = e["hidden"].as_bool().unwrap_or(d.hidden[k]);
+            d.collapsed[k] = e["collapsed"].as_bool().unwrap_or(d.collapsed[k]);
             d.place[k] = match e["place"].as_str() {
                 Some("left") => Place::Left,
                 Some("right") => Place::Right,
                 Some("float") => Place::Float,
-                _ => default_place(*id),
+                _ => d.place[k],
             };
             if let (Some(x), Some(y)) = (e["x"].as_f64(), e["y"].as_f64()) {
                 d.float_at[k] = Pos2::new(x as f32, y as f32);
