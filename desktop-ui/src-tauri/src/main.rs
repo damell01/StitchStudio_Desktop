@@ -251,22 +251,22 @@ fn remove_font_asset(app:tauri::AppHandle,file:String)->Result<(),String>{
 struct ArtworkInput{name:String,mime:String,bytes:Vec<u8>}
 #[tauri::command]
 async fn choose_artwork()->Result<Option<ArtworkInput>,String>{
- let Some(p)=rfd::AsyncFileDialog::new().add_filter("Raster artwork",&["png","jpg","jpeg","webp"]).pick_file().await else{return Ok(None)};
+ let Some(p)=rfd::AsyncFileDialog::new().add_filter("Artwork",&["png","jpg","jpeg","webp","gif","bmp","tiff","tif","svg"]).pick_file().await else{return Ok(None)};
  let path=p.path().to_owned();
  tauri::async_runtime::spawn_blocking(move||{
  let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
- let mime=match ext.as_str(){"png"=>"image/png","jpg"|"jpeg"=>"image/jpeg","webp"=>"image/webp",_=>return Err("Unsupported image".into())};
+ let mime=match ext.as_str(){"png"=>"image/png","jpg"|"jpeg"=>"image/jpeg","webp"=>"image/webp","gif"=>"image/gif","bmp"=>"image/bmp","tiff"|"tif"=>"image/tiff","svg"=>"image/svg+xml",_=>return Err("Unsupported image".into())};
  if std::fs::metadata(&path).map_err(|e|e.to_string())?.len()>20_000_000{return Err("Image exceeds 20 MB limit".into())}
  Ok(Some(ArtworkInput{name:path.file_stem().unwrap_or_default().to_string_lossy().into_owned(),mime:mime.into(),bytes:std::fs::read(path).map_err(|e|e.to_string())?}))
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
-async fn digitize_artwork(bytes:Vec<u8>,name:String,width_mm:f64,colors:u32,remove_background:bool,detail:f64,fabric:String,cleanup:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+async fn digitize_artwork(bytes:Vec<u8>,name:String,mime:String,width_mm:f64,colors:u32,remove_background:bool,detail:f64,fabric:String,cleanup:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  if bytes.is_empty()||bytes.len()>20_000_000||!width_mm.is_finite()||!(5.0..=300.0).contains(&width_mm)||!detail.is_finite()||!(0.0..=100.0).contains(&detail)||!(colors==0||(2..=10).contains(&colors))||zigzag::params::Fabric::by_id(&fabric).is_none(){return Err("Invalid artwork settings".into())}
  let (doc,d)=tauri::async_runtime::spawn_blocking(move||->Result<_,String>{
  let options=zigzag::trace::TraceOptions{width_mm,colors,remove_background,detail,..Default::default()};
- let traced=if cleanup {zigzag::trace::trace_cleaned_bytes(&bytes,&options)}else{zigzag::trace::trace_bytes(&bytes,&options)}.map_err(|e|e.to_string())?;
- let mut doc=zigzag::document::Document::from_svg(&traced.svg,&name,None).map_err(|e|e.to_string())?;
+ let svg=if mime=="image/svg+xml" {String::from_utf8(bytes).map_err(|e|e.to_string())?}else{if cleanup {zigzag::trace::trace_cleaned_bytes(&bytes,&options)}else{zigzag::trace::trace_bytes(&bytes,&options)}.map_err(|e|e.to_string())?.svg};
+ let mut doc=zigzag::document::Document::from_svg(&svg,&name,None).map_err(|e|e.to_string())?;
  doc.settings.fabric=fabric;let d=doc.plan();if d.blocks.is_empty(){return Err("No stitchable artwork found".into())}Ok((doc,d))
  }).await.map_err(|e|e.to_string())??;
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
