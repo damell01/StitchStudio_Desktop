@@ -24,6 +24,19 @@ fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, state: tauri::S
     }
     Ok(preview(d))
 }
+#[derive(serde::Serialize)]
+struct StitchAudit {short:usize,long:usize,zero:usize,segments:usize}
+#[tauri::command]
+fn audit_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<StitchAudit,String>{
+ let w=state.lock().map_err(|e|e.to_string())?;
+ let d=w.current.as_ref().ok_or("Open artwork first")?;
+ let mut a=StitchAudit{short:0,long:0,zero:0,segments:0};
+ for run in d.blocks.iter().flat_map(|b|&b.runs){for p in run.pts.windows(2){
+ let mm=(p[1].x-p[0].x).hypot(p[1].y-p[0].y)/10.0;
+ a.segments+=1;if mm<0.05{a.zero+=1;}else if mm<0.3{a.short+=1;}if mm>12.0{a.long+=1;}
+ }}
+ Ok(a)
+}
 #[tauri::command]
 fn center_design(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  let mut w=state.lock().map_err(|e|e.to_string())?;
@@ -316,4 +329,4 @@ fn library_open(file:String,state:tauri::State<'_,Mutex<Workspace>>)->Result<Ope
  if !p.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){return Err("Select a Stitch Studio project".into())}
  open_project_path(p,&state)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
