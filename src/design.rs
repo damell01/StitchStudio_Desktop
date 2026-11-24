@@ -1129,6 +1129,7 @@ fn sew_order(shapes: &[Shape], opt: &PlanOptions) -> Vec<usize> {
     let mut done = vec![false; n];
     let mut order = Vec::with_capacity(n);
     let mut color: Option<[u8; 3]> = None;
+    let mut previous_center: Option<P> = None;
     while order.len() < n {
         let pick = (0..n)
             .filter(|&j| !done[j] && deps[j].iter().all(|&i| done[i]))
@@ -1136,7 +1137,8 @@ fn sew_order(shapes: &[Shape], opt: &PlanOptions) -> Vec<usize> {
                 let key = |j: usize| {
                     let c = bounds[j].center();
                     let change = (color.is_some() && Some(shapes[j].color) != color) as u8;
-                    (change, c.x.abs() + 0.5 * (bottom - c.y))
+                    let distance = previous_center.map(|p| (c.x-p.x).hypot(c.y-p.y)).unwrap_or(c.x.abs()+0.5*(bottom-c.y));
+                    (change, distance)
                 };
                 let (ka, kb) = (key(a), key(b));
                 ka.0.cmp(&kb.0).then(ka.1.total_cmp(&kb.1))
@@ -1144,6 +1146,7 @@ fn sew_order(shapes: &[Shape], opt: &PlanOptions) -> Vec<usize> {
             .expect("dependencies only point backwards, so something is always available");
         done[pick] = true;
         color = Some(shapes[pick].color);
+        previous_center = Some(bounds[pick].center());
         order.push(pick);
     }
     order
