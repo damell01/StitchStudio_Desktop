@@ -1080,7 +1080,12 @@ impl Studio {
             .show_separator_line(false)
             .frame(egui::Frame::new().fill(pal.dock))
             .show(ui, |ui| self.doc_tabs(ui));
-        egui::CentralPanel::no_frame().show(ui, |ui| self.canvas(ui));
+        egui::CentralPanel::no_frame().show(ui, |ui| {
+            if self.doc.shapes.is_empty() && self.tool == Tool::Select && ui.available_height() > 460.0 {
+                self.welcome_panel(ui);
+            }
+            self.canvas(ui);
+        });
         crate::profile::mark("canvas");
         self.floating_panels(&ctx);
         self.torn_toolbars(&ctx);
