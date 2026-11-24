@@ -158,13 +158,16 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     let image=Image::decode(bytes)?;
     let raster=prepare_raster(&image.raster,o.remove_background,tolerance,cleanup);
     let mut options=o.clone();options.remove_background=false;
-    if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); if options.colors==0 {options.colors=4; options.detail=options.detail.min(55.0);}}
+    if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); options.detail=options.detail.min(65.0);}
+    if !raster.rgba.chunks_exact(4).any(|p|p[3]>=32){return Err(anyhow!("No foreground remains after background removal. Disable removal or lower sensitivity."));}
     let raster=trim_transparent_margin(&raster);
-    let raster=if cleanup && o.colors==0 {flatten_texture_shades(&raster)}else{raster};
+    // Avoid global hue merging: it destroys intentional shading in character artwork.
+    let raster=raster;
     // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
     let prepared=Image{raster};
     match trace(&prepared,&options) {
-        Ok(t)=>Ok(t),
+        Ok(t) if t.shapes+t.lines>0=>Ok(t),
+        Ok(_)=>Err(anyhow!("No stitchable regions found. Try a larger finished width or lower cleanup.")),
         Err(first)=>{
             let mut fallback=options.clone();
             fallback.detail=fallback.detail.min(40.0);
@@ -314,7 +317,7 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
     } else {
         match vectorcraft_trace::trace_within(r, &logo_params, MAX_ANCHORS) {
             Ok(t) => (t, "flat logo"),
-            Err(TraceError::NotFlat { .. }) => (run(r, &color_params(colors))?, "posterized"),
+            Err(TraceError::NotFlat { .. }) | Err(TraceError::TooComplex { .. }) => (run(r, &color_params(colors))?, "posterized"),
             Err(e) => return Err(explain(e)),
         }
     };
