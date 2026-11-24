@@ -158,8 +158,9 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     let image=Image::decode(bytes)?;
     let raster=prepare_raster(&image.raster,o.remove_background,tolerance,cleanup);
     let mut options=o.clone();options.remove_background=false;
-    if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); if options.colors==0 {options.colors=5;}}
+    if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); if options.colors==0 {options.colors=4; options.detail=options.detail.min(55.0);}}
     let raster=trim_transparent_margin(&raster);
+    let raster=if cleanup && o.colors==0 {flatten_texture_shades(&raster)}else{raster};
     // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
     let prepared=Image{raster};
     match trace(&prepared,&options) {
@@ -207,6 +208,28 @@ fn transparent_padding_does_not_shrink_finished_artwork(){
     assert_eq!((out.width,out.height),(40,30));
 }
 
+// Collapse nearby shades of the same hue in textured artwork, while preserving
+// neutral outlines, alpha, and strongly different colors.
+fn flatten_texture_shades(r:&Raster)->Raster{
+    fn key(rgb:[u8;3])->Option<usize>{
+        let [a,b,c]=rgb.map(f64::from);let hi=a.max(b).max(c);let lo=a.min(b).min(c);let delta=hi-lo;
+        if delta<35.0 || hi<45.0{return None}
+        let hue=if hi==a{((b-c)/delta).rem_euclid(6.0)}else if hi==b{(c-a)/delta+2.0}else{(a-b)/delta+4.0};
+        Some(((hue*2.0+0.5).floor() as usize)%12)
+    }
+    let mut sums=[[0u64;3];12];let mut counts=[0u64;12];
+    for px in r.rgba.chunks_exact(4){if px[3]<128{continue}if let Some(k)=key([px[0],px[1],px[2]]){counts[k]+=1;for j in 0..3{sums[k][j]+=u64::from(px[j]);}}}
+    Raster::from_fn(r.width,r.height,|x,y|{let i=(y as usize*r.width as usize+x as usize)*4;let p=[r.rgba[i],r.rgba[i+1],r.rgba[i+2],r.rgba[i+3]];
+        if p[3]<128{return p}if let Some(k)=key([p[0],p[1],p[2]]){if counts[k]>=16{return [(sums[k][0]/counts[k]) as u8,(sums[k][1]/counts[k]) as u8,(sums[k][2]/counts[k]) as u8,p[3]]}}p})
+}
+#[test]
+fn texture_shades_merge_without_losing_neutral_or_alpha(){
+ let r=Raster::from_fn(20,20,|x,y|if y==0{[240,240,240,0]}else if y==1{[120,120,120,255]}else if x<10{[160,12,25,255]}else{[210,20,35,255]});
+ let out=flatten_texture_shades(&r);
+ assert_eq!(&out.rgba[0..4],&[240,240,240,0]);
+ assert_eq!(&out.rgba[80..84],&[120,120,120,255]);
+ assert_eq!(&out.rgba[160..164],&out.rgba[200..204]);
+}
 fn median_texture(r:&Raster,remove_white:bool)->Raster {
     Raster::from_fn(r.width, r.height, |x,y| {
         let mut channels = [[0u8;9];3];
