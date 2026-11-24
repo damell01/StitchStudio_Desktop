@@ -134,7 +134,18 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     let mut options=o.clone();options.remove_background=false;
     if cleanup {options.speckle_mm=options.speckle_mm.max(0.6);}
     let raster=if cleanup {median_texture(&raster,false)}else{raster};
-    trace(&Image{raster},&options)
+    // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
+    let prepared=Image{raster};
+    match trace(&prepared,&options) {
+        Ok(t)=>Ok(t),
+        Err(first)=>{
+            let mut fallback=options.clone();
+            fallback.detail=fallback.detail.min(40.0);
+            fallback.speckle_mm=fallback.speckle_mm.max(1.5);
+            if fallback.colors==0 {fallback.colors=6;}
+            trace(&prepared,&fallback).map_err(|second|anyhow!("Automatic trace failed: {first}; simplified retry: {second}"))
+        }
+    }
 }
 
 /// Optional texture cleanup for photographed or rendered embroidery artwork.
