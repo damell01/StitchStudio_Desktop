@@ -38,6 +38,30 @@ fn audit_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<StitchAudit,S
  Ok(a)
 }
 #[tauri::command]
+fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ let mut d=w.current.clone().ok_or("Open artwork first")?;
+ let mut total=0usize;
+ for run in d.blocks.iter_mut().flat_map(|b|&mut b.runs){
+   let mut out=Vec::with_capacity(run.pts.len());
+   for p in run.pts.iter().copied(){
+     if let Some(last)=out.last().copied(){
+       let last:zigzag::geom::P=last;
+       let distance=(p.x-last.x).hypot(p.y-last.y);
+       if distance==0.0{continue}
+       let n=(distance/100.0).ceil().max(1.0);
+       if !n.is_finite()||n>10000.0{return Err("Invalid stitch geometry".into())}
+       for k in 1..n as usize{let t=k as f64/n;out.push(zigzag::geom::P::new(last.x+(p.x-last.x)*t,last.y+(p.y-last.y)*t));}
+     }
+     out.push(p);
+     if out.len()>2000000{return Err("Repair exceeds stitch limit".into())}
+   }
+   total+=out.len();if total>2000000{return Err("Repair exceeds stitch limit".into())}
+   run.pts=out;
+ }
+ w.checkpoint();w.source=None;let result=preview(&d);w.current=Some(d);Ok(result)
+}
+#[tauri::command]
 fn center_design(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  let mut w=state.lock().map_err(|e|e.to_string())?;
  let d=w.current.as_ref().ok_or("Open artwork first")?;
@@ -329,4 +353,4 @@ fn library_open(file:String,state:tauri::State<'_,Mutex<Workspace>>)->Result<Ope
  if !p.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){return Err("Select a Stitch Studio project".into())}
  open_project_path(p,&state)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
