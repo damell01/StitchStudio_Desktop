@@ -141,4 +141,16 @@ fn set_object_kind(uid:usize,kind:String,state:tauri::State<'_,Mutex<Workspace>>
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
  let p=preview(&d);w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[tauri::command]
+fn create_specialty(shape:String,style:String,width:f64,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
+ if !width.is_finite() || !(20.0..=200.0).contains(&width){return Err("Choose a width between 20 and 200 mm".into())}
+ let path=match shape.as_str(){"circle"=>"M50 5 A45 45 0 1 1 49.99 5 Z","shield"=>"M10 10 H90 V48 Q90 75 50 95 Q10 75 10 48 Z","heart"=>"M50 90 C-20 45 10 -10 50 25 C90 -10 120 45 50 90 Z","rounded"=>"M15 5 H85 Q95 5 95 15 V85 Q95 95 85 95 H15 Q5 95 5 85 V15 Q5 5 15 5 Z",_=>return Err("Unknown shape".into())};
+ let kind=match style.as_str(){"applique"=>zigzag::params::Kind::parse("applique"),"patch"=>zigzag::params::Kind::parse("fill"),_=>return Err("Unknown workflow".into())};
+ let art=if style=="patch"{format!("<path id=\"body\" d=\"{path}\" fill=\"#73977b\"/><path id=\"border\" d=\"{path}\" fill=\"none\" stroke=\"#234536\" stroke-width=\"4\"/>")}else{format!("<path id=\"fabric\" d=\"{path}\" fill=\"#73977b\"/>")};
+ let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}mm\" height=\"{width}mm\" viewBox=\"0 0 100 100\">{art}</svg>");
+ let mut doc=zigzag::document::Document::from_svg(&svg,&style,None).map_err(|e|e.to_string())?;
+ for s in &mut doc.shapes{s.params.kind=if s.id=="border"{zigzag::params::Kind::parse("satin")}else{kind};}
+ let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
+ let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
