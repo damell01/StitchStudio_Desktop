@@ -97,3 +97,16 @@
 .pdf-import{border-top:1px solid #73977b55;margin-top:20px;padding-top:12px;display:grid;gap:10px}.pdf-import input{max-width:100%}.artwork-preview img{background-color:#fff;background-image:conic-gradient(#ddd 25%,#fff 0 50%,#ddd 0 75%,#fff 0);background-size:16px 16px}.digitizer-layout .wizard-actions{flex-wrap:wrap}
 
 .digitize-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}.digitize-metrics>div{display:flex;flex-direction:column;gap:5px;border:1px solid #73977b55;border-radius:10px;padding:12px 8px}.digitize-metrics strong{font-size:clamp(16px,2vw,23px);font-variant-numeric:tabular-nums}.digitize-metrics small{font-size:11px;opacity:.8}.digitizer-layout .artwork-preview{grid-template-columns:1fr}.digitizer-layout .artwork-preview>img,.digitizer-layout .artwork-preview>svg{width:100%;max-height:42vh!important;object-fit:contain}.digitizer-layout .wizard-actions button{min-height:36px}.digitizer-layout label{gap:6px}.digitizer-layout button:focus-visible{outline:2px solid #73977b;outline-offset:3px}
+
+.app>header{grid-row:1;grid-column:1;position:relative;inset:auto;min-height:0}
+.app>.desktop-nav{grid-row:2;grid-column:1}
+.app>main{grid-row:3;grid-column:1;position:relative;inset:auto;margin:0;min-width:0;padding:20px 24px;overflow:auto}
+.studio-confirm{width:min(440px,calc(100vw - 48px));border:1px solid #dde4de;border-radius:14px;padding:24px;background:#fff;color:#202c26;box-shadow:0 20px 70px #0004}
+.studio-confirm::backdrop{background:#14251db0}
+.studio-confirm h2{margin:0 0 12px;font-size:20px}
+.studio-confirm p{line-height:1.6}
+.studio-confirm footer{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
+[data-theme=dark] .studio-confirm{background:#242d27;color:#e8eee9;border-color:#36463c}
+#studio-toasts{position:fixed;bottom:24px;right:24px;z-index:150;display:grid;gap:8px;max-width:min(420px,90vw)}
+.studio-toast{display:flex;align-items:center;gap:12px;background:#234536;color:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 6px 24px #0003}
+.studio-toast.error{background:#a43c3c}.studio-toast button{margin-left:auto;background:transparent;color:inherit;border:0}
