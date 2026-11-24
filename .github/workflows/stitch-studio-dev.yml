@@ -1,0 +1,26 @@
+name: Stitch Studio desktop validation
+on:
+  push:
+    branches: [Dev]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked --features gui
+      - run: cargo build --locked --release --features gui --bin zigzag-studio
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stitch-studio-${{ matrix.os }}
+          path: |
+            target/release/zigzag-studio
+            target/release/zigzag-studio.exe
+          if-no-files-found: error
