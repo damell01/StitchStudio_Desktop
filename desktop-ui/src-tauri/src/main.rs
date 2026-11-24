@@ -244,4 +244,28 @@ fn remove_font_asset(app:tauri::AppHandle,file:String)->Result<(),String>{
  if !std::fs::symlink_metadata(&target).map_err(|e|e.to_string())?.file_type().is_file(){return Err("Not a regular font file".into())}
  std::fs::remove_file(target).map_err(|e|e.to_string())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[derive(serde::Serialize)]
+struct ArtworkInput{name:String,mime:String,bytes:Vec<u8>}
+#[tauri::command]
+async fn choose_artwork()->Result<Option<ArtworkInput>,String>{
+ let Some(p)=rfd::AsyncFileDialog::new().add_filter("Raster artwork",&["png","jpg","jpeg","webp"]).pick_file().await else{return Ok(None)};
+ let path=p.path().to_owned();
+ tauri::async_runtime::spawn_blocking(move||{
+ let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
+ let mime=match ext.as_str(){"png"=>"image/png","jpg"|"jpeg"=>"image/jpeg","webp"=>"image/webp",_=>return Err("Unsupported image".into())};
+ if std::fs::metadata(&path).map_err(|e|e.to_string())?.len()>20_000_000{return Err("Image exceeds 20 MB limit".into())}
+ Ok(Some(ArtworkInput{name:path.file_stem().unwrap_or_default().to_string_lossy().into_owned(),mime:mime.into(),bytes:std::fs::read(path).map_err(|e|e.to_string())?}))
+ }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+async fn digitize_artwork(bytes:Vec<u8>,name:String,width_mm:f64,colors:u32,remove_background:bool,detail:f64,fabric:String,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+ if bytes.is_empty()||bytes.len()>20_000_000||!width_mm.is_finite()||!(5.0..=300.0).contains(&width_mm)||!detail.is_finite()||!(0.0..=100.0).contains(&detail)||!(colors==0||(2..=10).contains(&colors))||zigzag::params::Fabric::by_id(&fabric).is_none(){return Err("Invalid artwork settings".into())}
+ let (doc,d)=tauri::async_runtime::spawn_blocking(move||->Result<_,String>{
+ let options=zigzag::trace::TraceOptions{width_mm,colors,remove_background,detail,..Default::default()};
+ let traced=zigzag::trace::trace_bytes(&bytes,&options).map_err(|e|e.to_string())?;
+ let mut doc=zigzag::document::Document::from_svg(&traced.svg,&name,None).map_err(|e|e.to_string())?;
+ doc.settings.fabric=fabric;let d=doc.plan();if d.blocks.is_empty(){return Err("No stitchable artwork found".into())}Ok((doc,d))
+ }).await.map_err(|e|e.to_string())??;
+ let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
