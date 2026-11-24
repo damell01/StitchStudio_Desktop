@@ -12,6 +12,34 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 const TRAFFIC_LIGHTS: f32 = 70.0;
 
 impl Studio {
+    /// Quick start panel for a blank document; all actions use the native editor.
+    pub fn welcome_panel(&mut self, ui: &mut egui::Ui) {
+        let p = pal_ui(ui);
+        egui::Frame::new().fill(p.desk).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.vertical_centered(|ui| {
+                ui.add_space(24.0);
+                ui.label(egui::RichText::new("Welcome to Stitch Studio").size(24.0).strong().color(p.text));
+                caption(ui, "Create something beautiful, one stitch at a time.");
+                ui.add_space(12.0);
+                ui.horizontal_wrapped(|ui| {
+                    for (label, action) in [
+                        ("Open design", Action::Open),
+                        ("Import artwork", Action::Place),
+                        ("Add lettering", Action::AddText),
+                    ] {
+                        if ui.add_enabled(self.action_enabled(action), egui::Button::new(label).min_size(Vec2::new(112.0, 34.0))).clicked() {
+                            self.run_action(action);
+                        }
+                    }
+                });
+                ui.add_space(12.0);
+                caption(ui, "Or use the drawing tools to create a design directly on the hoop.");
+                ui.add_space(12.0);
+            });
+        });
+    }
+
     /// Labeled, discoverable shortcuts backed by the existing editor commands.
     pub fn workspace_toolbar(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
