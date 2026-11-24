@@ -25,6 +25,18 @@ fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, state: tauri::S
     Ok(preview(d))
 }
 #[tauri::command]
+fn center_design(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ let d=w.current.as_ref().ok_or("Open artwork first")?;
+ let mut bounds=[f64::INFINITY,f64::INFINITY,f64::NEG_INFINITY,f64::NEG_INFINITY];
+ for p in d.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.pts){bounds[0]=bounds[0].min(p.x);bounds[1]=bounds[1].min(p.y);bounds[2]=bounds[2].max(p.x);bounds[3]=bounds[3].max(p.y);}
+ if !bounds.iter().all(|v|v.is_finite()){return Err("No stitches to center".into())}
+ let x=(bounds[0]+bounds[2])/2.0;let y=(bounds[1]+bounds[3])/2.0;
+ w.checkpoint();w.source=None;let d=w.current.as_mut().unwrap();
+ for p in d.blocks.iter_mut().flat_map(|b|&mut b.runs).flat_map(|r|&mut r.pts){p.x-=x;p.y-=y;}
+ Ok(preview(d))
+}
+#[tauri::command]
 fn mirror_design(horizontal:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  let mut w=state.lock().map_err(|e|e.to_string())?;
  if w.current.is_none(){return Err("Open artwork first".into())}
@@ -304,4 +316,4 @@ fn library_open(file:String,state:tauri::State<'_,Mutex<Workspace>>)->Result<Ope
  if !p.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){return Err("Select a Stitch Studio project".into())}
  open_project_path(p,&state)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
