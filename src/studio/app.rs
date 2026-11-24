@@ -1037,6 +1037,11 @@ impl Studio {
                     .inner_margin(egui::Margin::symmetric(10, 0)),
             )
             .show(ui, |ui| self.status_bar(ui));
+        egui::Panel::bottom("simulator-toolbar")
+            .exact_size(42.0)
+            .resizable(false)
+            .frame(egui::Frame::new().fill(pal.toolbar).inner_margin(egui::Margin::symmetric(10, 0)))
+            .show(ui, |ui| self.simulator_bar(ui));
         egui::Panel::left("tools")
             .exact_size(44.0)
             .resizable(false)
