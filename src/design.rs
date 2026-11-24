@@ -1072,7 +1072,15 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
   if s.params.kind.is_some(){continue}
   if let Geometry::Fill{rings,..}=&s.geometry{
    if rings.len()!=1{continue}
-   let b=geometry_bounds(&s.geometry);let short=b.width().min(b.height());let long=b.width().max(b.height());
+   // Estimate oriented dimensions using principal axes, including diagonal lettering.
+   let ring=&rings[0];if ring.len()<3{continue}
+   let n=ring.len() as f64;
+   let mx=ring.iter().map(|p|p.x).sum::<f64>()/n;let my=ring.iter().map(|p|p.y).sum::<f64>()/n;
+   let (mut xx,mut yy,mut xy)=(0.0,0.0,0.0);
+   for p in ring {let x=p.x-mx;let y=p.y-my;xx+=x*x;yy+=y*y;xy+=x*y;}
+   let theta=0.5*(2.0*xy).atan2(xx-yy);let (sn,cs)=theta.sin_cos();
+   let mut b=Bounds::empty();for p in ring{b.add(P::new((p.x-mx)*cs+(p.y-my)*sn,-(p.x-mx)*sn+(p.y-my)*cs));}
+   let short=b.width().min(b.height());let long=b.width().max(b.height());
    if short>=8.0 && short<=45.0 && long>=short*2.8 {s.params.kind=Some(Kind::Satin);}
   }
  }
