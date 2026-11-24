@@ -147,6 +147,13 @@ fn preparation_preserves_enclosed_light_region(){
     assert_eq!(out.rgba[(20*40+20)*4+3],255);
 }
 
+/// Return the same preprocessed pixels used by automatic tracing, before cropping.
+pub fn prepared_pixels(bytes:&[u8],remove_background:bool,tolerance:u8,cleanup:bool)->Result<(u32,u32,Vec<u8>)>{
+    let image=Image::decode(bytes)?;
+    let r=prepare_raster(&image.raster,remove_background,tolerance,cleanup);
+    Ok((r.width,r.height,r.rgba.to_vec()))
+}
+
 pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:bool)->Result<Traced>{
     let image=Image::decode(bytes)?;
     let raster=prepare_raster(&image.raster,o.remove_background,tolerance,cleanup);
