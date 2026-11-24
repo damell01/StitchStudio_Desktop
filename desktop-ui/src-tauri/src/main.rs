@@ -353,4 +353,14 @@ fn library_open(file:String,state:tauri::State<'_,Mutex<Workspace>>)->Result<Ope
  if !p.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){return Err("Select a Stitch Studio project".into())}
  open_project_path(p,&state)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[derive(serde::Serialize)]
+struct PreparedArtwork {width:u32,height:u32,rgba:Vec<u8>}
+#[tauri::command]
+async fn preview_cleanup(bytes:Vec<u8>,remove_background:bool,tolerance:u8,cleanup:bool)->Result<PreparedArtwork,String>{
+ if bytes.is_empty()||bytes.len()>20_000_000{return Err("Invalid artwork size".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+ let (width,height,rgba)=zigzag::trace::prepared_pixels(&bytes,remove_background,tolerance,cleanup).map_err(|e|e.to_string())?;
+ Ok(PreparedArtwork{width,height,rgba})
+ }).await.map_err(|e|e.to_string())?
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
