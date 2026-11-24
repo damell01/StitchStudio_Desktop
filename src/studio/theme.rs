@@ -70,7 +70,7 @@ pub const DARK: Pal = Pal {
     secondary: Color32::from_rgb(170, 190, 176),
     tertiary: Color32::from_rgb(115, 151, 123),
     accent: Color32::from_rgb(154, 188, 159),
-    hover: Color32::from_rgba_premultiplied(16, 16, 16, 16),
+    hover: Color32::from_rgba_premultiplied(20, 28, 22, 32),
     pressed: Color32::from_rgba_premultiplied(28, 28, 28, 28),
     control: Color32::from_rgb(43, 56, 47),
     control_border: Color32::from_rgb(65, 84, 71),
@@ -221,6 +221,7 @@ fn visuals(p: &Pal) -> Visuals {
 fn style_for(p: &Pal, base: &egui::Style) -> egui::Style {
     let mut s = base.clone();
     s.visuals = visuals(p);
+    s.animation_time = if std::env::var_os("STITCH_STUDIO_REDUCED_MOTION").is_some() { 0.0 } else { 0.14 };
     s.text_styles = [
         (TextStyle::Heading, FontId::proportional(17.0)),
         (TextStyle::Body, FontId::proportional(13.0)),
@@ -240,7 +241,7 @@ fn style_for(p: &Pal, base: &egui::Style) -> egui::Style {
     sp.icon_width = 14.0;
     sp.icon_width_inner = 8.0;
     sp.scroll.floating = true;
-    sp.scroll.bar_width = 7.0;
+    sp.scroll.bar_width = 6.0;
     s.interaction.tooltip_delay = 0.6;
     s
 }
@@ -264,7 +265,7 @@ pub fn install(ctx: &egui::Context) {
     ctx.set_style_of(Theme::Dark, style_for(&DARK, &base));
     // Follow the system appearance; ZIGZAG_THEME=light|dark overrides it
     // (THREADLINE_THEME still works, from before the rename).
-    let forced = std::env::var("ZIGZAG_THEME").or_else(|_| std::env::var("THREADLINE_THEME"));
+    let forced = std::env::var("STITCH_STUDIO_THEME").or_else(|_| std::env::var("ZIGZAG_THEME")).or_else(|_| std::env::var("THREADLINE_THEME"));
     ctx.set_theme(match forced.as_deref() {
         Ok("light") => egui::ThemePreference::Light,
         Ok("dark") => egui::ThemePreference::Dark,
@@ -429,6 +430,7 @@ pub fn icon_button(
     });
     let p = pal_ui(ui);
     let enabled = ui.is_enabled();
+    let hover = ui.ctx().animate_bool(resp.id.with("hover-motion"), enabled && resp.hovered());
     let bg = if selected {
         Some(if p.dark {
             Color32::from_rgb(54, 70, 60)
@@ -437,8 +439,8 @@ pub fn icon_button(
         })
     } else if resp.is_pointer_button_down_on() {
         Some(p.pressed)
-    } else if resp.hovered() && enabled {
-        Some(p.hover)
+    } else if hover > 0.0 && enabled {
+        Some(p.hover.gamma_multiply(hover))
     } else {
         None
     };
@@ -448,6 +450,8 @@ pub fn icon_button(
     let c = if !enabled {
         p.tertiary
     } else if selected {
+        p.accent
+    } else if resp.hovered() {
         p.accent
     } else {
         p.secondary
