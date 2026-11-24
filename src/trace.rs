@@ -132,8 +132,8 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     let image=Image::decode(bytes)?;
     let raster=if o.remove_background {remove_edge_background(&image.raster,tolerance)}else{image.raster};
     let mut options=o.clone();options.remove_background=false;
-    if cleanup {options.speckle_mm=options.speckle_mm.max(0.6);}
-    let raster=if cleanup {median_texture(&raster,false)}else{raster};
+    if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); if options.colors==0 {options.colors=5;}}
+    let raster=if cleanup {median_texture(&median_texture(&raster,false),false)}else{raster};
     let raster=trim_transparent_margin(&raster);
     // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
     let prepared=Image{raster};
