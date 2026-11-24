@@ -1082,6 +1082,11 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
    let mut b=Bounds::empty();for p in ring{b.add(P::new((p.x-mx)*cs+(p.y-my)*sn,-(p.x-mx)*sn+(p.y-my)*cs));}
    let short=b.width().min(b.height());let long=b.width().max(b.height());
    if short>=8.0 && short<=45.0 && long>=short*2.8 {s.params.kind=Some(Kind::Satin);}
+   else if short>=45.0 && long>=short*1.6 && s.params.angle.is_none() {
+    // Follow the shorter axis to limit long fill traversals. Preserve explicit angles.
+    let axis=if b.width()>b.height(){theta.to_degrees()+90.0}else{theta.to_degrees()};
+    s.params.angle=Some(axis.rem_euclid(180.0));
+   }
   }
  }
 }
