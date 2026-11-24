@@ -1984,10 +1984,27 @@ impl Studio {
     /// The design's issues, each naming its object (click to select it).
     pub(crate) fn issues_body(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
+        ui.label(egui::RichText::new("Design quality").size(17.0).strong().color(p.text));
+        caption(ui, "Review automated stitch checks before exporting.");
+        ui.add_space(theme::space::S);
         if self.issues.is_empty() {
-            caption(ui, "No problems found.");
+            caption(ui, "No problems found by automated checks. Test sew before production.");
             return;
         }
+        let errors = self.issues.iter().filter(|i| matches!(i.level, Level::Error)).count();
+        let warnings = self.issues.iter().filter(|i| matches!(i.level, Level::Warning)).count();
+        let info = self.issues.len() - errors - warnings;
+        ui.horizontal_wrapped(|ui| {
+            for (label, count, color) in [("Errors", errors, p.error), ("Warnings", warnings, p.warning), ("Notes", info, p.secondary)] {
+                egui::Frame::new().fill(p.hover).corner_radius(8).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.label(egui::RichText::new(count.to_string()).size(20.0).strong().color(color));
+                        caption(ui, label);
+                    });
+                });
+            }
+        });
+        theme::section_break(ui);
         let mut pick = None;
         egui::ScrollArea::vertical()
             .id_salt("issues")
@@ -2004,6 +2021,7 @@ impl Studio {
                         let (r, _) = ui.allocate_exact_size(Vec2::splat(13.0), Sense::hover());
                         icons::paint(ui.painter(), r, icon, c);
                         ui.vertical(|ui| {
+                            ui.label(egui::RichText::new(match issue.level { Level::Error => "Error", Level::Warning => "Warning", Level::Info => "Note" }).strong().color(c));
                             if let Some(i) = issue.shape
                                 && ui
                                     .link(
@@ -2076,6 +2094,8 @@ impl Studio {
                 format!("Showing {name}'s settings. Stitch types apply to all."),
             );
         }
+        ui.label(egui::RichText::new("Stitch type").strong().size(14.0).color(p.text));
+        caption(ui, "Choose how the selected artwork will be sewn.");
         // The stitch type: the main decision for every object.
         let allowed = allowed_kinds(&self.doc.shapes[i]);
         let current = self.doc.shapes[i].params.kind.unwrap_or(Kind::Fill);
@@ -2106,6 +2126,7 @@ impl Studio {
         let f = self.doc.settings.fabric();
         theme::section_break(ui);
 
+        ui.label(egui::RichText::new("Stitch settings").strong().size(14.0).color(p.text));
         let default_width = design::default_satin_width(&self.doc.shapes[i]);
         // Only a satin needs its width (worked out once, not every frame;
         // not at all while its text is being typed, when every keystroke
