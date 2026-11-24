@@ -176,6 +176,20 @@ fn load_template(id:String,art:String,state:tauri::State<'_,Mutex<Workspace>>) -
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(source);Ok(p)
 }
 #[tauri::command]
+fn insert_template(id:String,art:String,width_mm:f64,x_mm:f64,y_mm:f64,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+ if !["heart","star","leaf","football","bow","mountain","wildflower","sunrise","baseball","anchor","butterfly","laurel","bear","bunny","fox","penguin","dino","whale","ghost","rocket"].contains(&id.as_str()) || art.len()>4096 || art.contains("href") || art.contains("<image") || art.contains("<script"){return Err("Invalid design".into())}
+ if ![width_mm,x_mm,y_mm].iter().all(|v|v.is_finite()) || !(5.0..=250.0).contains(&width_mm) || x_mm.abs()>500.0 || y_mm.abs()>500.0{return Err("Invalid design dimensions".into())}
+ let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width_mm}mm\" height=\"{width_mm}mm\" viewBox=\"0 0 100 100\">{art}</svg>");
+ let source=zigzag::document::Document::from_svg(&svg,&id,None).map_err(|e|e.to_string())?;
+ let mut added=source.plan();if added.blocks.is_empty(){return Err("No stitches generated".into())}
+ for block in &mut added.blocks {for run in &mut block.runs {for p in &mut run.pts {p.x+=x_mm*10.0;p.y+=y_mm*10.0;}}}
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ let mut combined=w.current.clone().unwrap_or_default();
+ if combined.blocks.is_empty(){combined.name=id;} 
+ combined.blocks.extend(added.blocks);combined.per_shape.clear();combined.sew_order.clear();combined.notes.clear();combined.block_shapes.clear();combined.covered.clear();
+ let p=preview(&combined);w.checkpoint();w.current=Some(combined);w.source=None;Ok(p)
+}
+#[tauri::command]
 fn apply_stitch_properties(uid:Option<usize>,fabric:String,spacing:f64,length:f64,angle:f64,pull:f64,underlay:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
  if zigzag::params::Fabric::by_id(&fabric).is_none() || ![spacing,length,angle,pull].iter().all(|v|v.is_finite()) || !(0.15..=2.0).contains(&spacing) || !(0.5..=7.0).contains(&length) || !(0.0..=1.0).contains(&pull){return Err("Invalid stitch properties".into())}
  let mut w=state.lock().map_err(|e|e.to_string())?;
@@ -363,4 +377,4 @@ async fn preview_cleanup(bytes:Vec<u8>,remove_background:bool,tolerance:u8,clean
  Ok(PreparedArtwork{width,height,rgba})
  }).await.map_err(|e|e.to_string())?
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
