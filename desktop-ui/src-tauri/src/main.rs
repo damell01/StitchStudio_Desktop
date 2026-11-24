@@ -25,6 +25,15 @@ fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, state: tauri::S
     Ok(preview(d))
 }
 #[tauri::command]
+fn mirror_design(horizontal:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ if w.current.is_none(){return Err("Open artwork first".into())}
+ w.checkpoint();w.source=None;
+ let d=w.current.as_mut().unwrap();
+ for p in d.blocks.iter_mut().flat_map(|b|&mut b.runs).flat_map(|r|&mut r.pts){if horizontal{p.x=-p.x}else{p.y=-p.y}}
+ Ok(preview(d))
+}
+#[tauri::command]
 fn recolor_block(index: usize, color: [u8;3], state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview,String> {
     let mut guard=state.lock().map_err(|e|e.to_string())?;
     guard.checkpoint();
@@ -295,4 +304,4 @@ fn library_open(file:String,state:tauri::State<'_,Mutex<Workspace>>)->Result<Ope
  if !p.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){return Err("Select a Stitch Studio project".into())}
  open_project_path(p,&state)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
