@@ -340,3 +340,24 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 [data-palette=lavender][data-theme=light] .page-workspace>h1{font-size:25px;font-weight:650;letter-spacing:-.7px}
 [data-palette=lavender][data-theme=light] .page-workspace article{border-radius:10px;box-shadow:none}
 [data-palette=lavender][data-theme=light] .template-grid .template-art{background:#f6f5f8}
+
+/* Digitizing workstation: preview first, compact controls on the right. */
+.digitizer-layout{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(290px,360px)!important;gap:14px;margin:12px 0!important;align-items:stretch}
+.digitizer-layout .digitizer-controls{grid-column:2;grid-row:1;min-width:0;padding:18px!important}
+.digitizer-layout .artwork-preview{grid-column:1;grid-row:1;min-width:0;display:flex;flex-direction:column;align-items:stretch;padding:16px!important;gap:10px}
+.digitizer-stage-0{grid-template-columns:minmax(0,1fr)!important}
+.digitizer-stage-0 .digitizer-controls{grid-column:1}
+.digitizer-stage-0 .artwork-preview{display:none}
+.digitizer-stage-0 .artwork-import-zone{width:100%;min-height:156px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;border:1px dashed var(--brand-accent,#9675ca);background:var(--brand-soft,#f0eafb);color:var(--brand,#7650b5);border-radius:10px;margin:8px 0 18px}
+.artwork-import-zone strong{font-size:16px}
+.artwork-import-zone span{font-size:12px}
+.artwork-import-zone small{font-size:10px;letter-spacing:.03em}
+.preview-heading{display:flex;justify-content:space-between;gap:10px;align-items:center;min-width:0}
+.preview-heading span{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.digitizer-source-image,.digitizer-stitch-image{display:block;width:100%;height:clamp(240px,48vh,650px);object-fit:contain;border:1px solid var(--lav-border,#e5e3eb);border-radius:8px;background:#fffdf8}
+.digitizer-stage-3 .digitizer-source-image,.digitizer-stage-3 .digitizer-stitch-image{height:clamp(160px,29vh,360px)}
+.digitizer-controls .digitizer-presets{grid-template-columns:1fr;gap:6px}
+.digitizer-controls .digitizer-presets button{min-height:54px;padding:10px}
+.digitizer-controls .wizard-actions{position:sticky;bottom:0;padding:10px 0 0;background:var(--lav-panel,#fff);border-top:1px solid var(--lav-border,#e5e3eb);margin-top:16px}
+.digitizer-controls .wizard-actions .primary{flex:1;justify-content:center}
+@media(max-width:950px){.digitizer-layout:not(.digitizer-stage-0){grid-template-columns:minmax(0,1fr) 285px!important}}
