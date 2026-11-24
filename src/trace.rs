@@ -111,7 +111,11 @@ pub fn remove_edge_background(r: &Raster, tolerance: u8) -> Raster {
         let key=[r.rgba[i]/16,r.rgba[i+1]/16,r.rgba[i+2]/16];
         *bins.entry(key).or_default()+=1;
     }}
-    let bg=bins.into_iter().max_by_key(|(_,n)|*n).map(|(c,_)|c.map(|v|v*16+8));
+    let opaque_border:usize=bins.values().sum();
+    let border=w.saturating_mul(2).saturating_add(h.saturating_mul(2)).saturating_sub(4).max(1);
+    // Already transparent artwork must not lose opaque foreground touching an edge.
+    if opaque_border*2<border{return r.clone();}
+    let bg=bins.into_iter().filter(|(_,n)|*n*5>=opaque_border).max_by_key(|(_,n)|*n).map(|(c,_)|c.map(|v|v*16+8));
     let mut seen=vec![false;w*h];let mut queue=std::collections::VecDeque::new();
     let matches=|p:usize| {let i=p*4;r.rgba[i+3]<32 || bg.is_some_and(|c|(0..3).all(|k|r.rgba[i+k].abs_diff(c[k])<=tolerance))};
     let mut push=|p:usize,seen:&mut Vec<bool>,q:&mut std::collections::VecDeque<usize>|{if !seen[p]&&matches(p){seen[p]=true;q.push_back(p)}};
@@ -148,11 +152,13 @@ fn median_texture(r:&Raster,remove_white:bool)->Raster {
     Raster::from_fn(r.width, r.height, |x,y| {
         let mut channels = [[0u8;9];3];
         let mut k=0;
+        let center=(y as usize*r.width as usize+x as usize)*4;
+        if r.rgba[center+3]<32{return [0,0,0,0];}
         for dy in -1i64..=1 { for dx in -1i64..=1 {
             let xx=(i64::from(x)+dx).clamp(0,i64::from(r.width)-1) as usize;
             let yy=(i64::from(y)+dy).clamp(0,i64::from(r.height)-1) as usize;
             let i=(yy*r.width as usize+xx)*4;
-            for ch in 0..3 {channels[ch][k]=r.rgba[i+ch];}
+            for ch in 0..3 {channels[ch][k]=if r.rgba[i+3]<32{r.rgba[center+ch]}else{r.rgba[i+ch]};}
             k+=1;
         }}
         for ch in &mut channels {ch.sort_unstable();}
@@ -497,6 +503,18 @@ mod tests {
         assert_eq!(out.rgba[3],0);
         assert_eq!(out.rgba[(10*20+10)*4+3],255);
         assert_eq!(out.rgba[(5*20+5)*4+3],255);
+    }
+    #[test]
+    fn transparent_logo_keeps_edge_foreground(){
+        let r=Raster::from_fn(30,30,|x,y|if x<3&&(10..20).contains(&y){[180,20,40,255]}else{[0,0,0,0]});
+        let out=remove_edge_background(&r,32);
+        assert_eq!(out.rgba[(15*30)*4+3],255);
+    }
+    #[test]
+    fn median_does_not_bleed_transparent_background_into_foreground(){
+        let r=Raster::from_fn(5,5,|x,y|if x==2&&y==2{[180,20,40,255]}else{[255,255,255,0]});
+        let out=median_texture(&r,false);
+        assert_eq!(&out.rgba[(2*5+2)*4..(2*5+2)*4+4],&[180,20,40,255]);
     }
     #[test]
     fn garbage_is_an_error() {
