@@ -383,7 +383,7 @@ async fn digitize_artwork(bytes:Vec<u8>,name:String,mime:String,width_mm:f64,col
  let mut doc=zigzag::document::Document::from_svg(&svg,&name,None).map_err(|e|e.to_string())?;
  doc.settings.fabric=fabric;
  // Automatic raster artwork can use overlap-aware color grouping; preserve explicit SVG ordering.
- if mime!="image/svg+xml" && doc.shapes.len()<=1000 {doc.settings.hat_order=true;}
+ if mime!="image/svg+xml" {zigzag::design::auto_stitch_types(&mut doc.shapes);if doc.shapes.len()<=1000 {doc.settings.hat_order=true;}}
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitchable artwork found".into())}Ok((doc,d))
  }).await.map_err(|e|e.to_string())??;
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
