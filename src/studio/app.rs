@@ -1023,6 +1023,11 @@ impl Studio {
                     .inner_margin(egui::Margin::symmetric(10, 0)),
             )
             .show(ui, |ui| self.titlebar(ui));
+        egui::Panel::top("workspace-toolbar")
+            .exact_size(42.0)
+            .resizable(false)
+            .frame(egui::Frame::new().fill(pal.toolbar).inner_margin(egui::Margin::symmetric(10, 0)))
+            .show(ui, |ui| self.workspace_toolbar(ui));
         egui::Panel::bottom("statusbar")
             .exact_size(30.0)
             .resizable(false)
@@ -1059,9 +1064,9 @@ impl Studio {
             panel = if self.dock_iconic(side) {
                 panel.exact_size(crate::dock::ICON_STRIP_W).resizable(false)
             } else if side == Place::Left {
-                panel.default_size(340.0).min_size(240.0).max_size(560.0)
+                panel.default_size(270.0).min_size(220.0).max_size(560.0)
             } else {
-                panel.default_size(300.0).min_size(270.0).max_size(460.0)
+                panel.default_size(290.0).min_size(270.0).max_size(460.0)
             };
             panel
                 .frame(egui::Frame::new().fill(pal.dock))
