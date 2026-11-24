@@ -100,4 +100,12 @@ async fn open_project(state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<
  let result=OpenedProject{plan:preview(&d),width:p.width,height:p.height,format:p.format};
  *state.lock().map_err(|e|e.to_string())?=Workspace{current:Some(d),..Default::default()};Ok(Some(result))
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[tauri::command]
+fn load_template(id:String,art:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
+ if !["heart","star","leaf","football","bow","mountain"].contains(&id.as_str()) || art.len()>4096 || art.contains("href") || art.contains("<image") || art.contains("<script"){return Err("Invalid starter template".into())}
+ let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"65mm\" height=\"65mm\" viewBox=\"0 0 100 100\">{art}</svg>");
+ let d=zigzag::document::Document::from_svg(&svg,&id,None).map_err(|e|e.to_string())?.plan();
+ if d.blocks.is_empty(){return Err("Template contains no stitches".into())}
+ let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);Ok(p)
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
