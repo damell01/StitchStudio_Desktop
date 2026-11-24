@@ -128,12 +128,30 @@ pub fn remove_edge_background(r: &Raster, tolerance: u8) -> Raster {
     Raster::from_fn(r.width,r.height,|x,y|{let p=y as usize*w+x as usize;let i=p*4;[r.rgba[i],r.rgba[i+1],r.rgba[i+2],if seen[p]{0}else{r.rgba[i+3]}]})
 }
 
+// Shared preprocessing pipeline for tracing and future pixel preview.
+fn prepare_raster(r:&Raster,remove_background:bool,tolerance:u8,cleanup:bool)->Raster{
+    // Suppress fabric texture before edge flood fill, preserving the original alpha.
+    let cleaned=if cleanup {median_texture(&median_texture(r,false),false)}else{r.clone()};
+    if remove_background {remove_edge_background(&cleaned,tolerance)}else{cleaned}
+}
+
+#[test]
+fn preparation_preserves_enclosed_light_region(){
+    let r=Raster::from_fn(40,40,|x,y|{
+        if (8..32).contains(&x)&&(8..32).contains(&y){
+            if (15..25).contains(&x)&&(15..25).contains(&y){[245,245,245,255]}else{[160,10,30,255]}
+        }else{[245,245,245,255]}
+    });
+    let out=prepare_raster(&r,true,32,true);
+    assert_eq!(out.rgba[3],0);
+    assert_eq!(out.rgba[(20*40+20)*4+3],255);
+}
+
 pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:bool)->Result<Traced>{
     let image=Image::decode(bytes)?;
-    let raster=if o.remove_background {remove_edge_background(&image.raster,tolerance)}else{image.raster};
+    let raster=prepare_raster(&image.raster,o.remove_background,tolerance,cleanup);
     let mut options=o.clone();options.remove_background=false;
     if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); if options.colors==0 {options.colors=5;}}
-    let raster=if cleanup {median_texture(&median_texture(&raster,false),false)}else{raster};
     let raster=trim_transparent_margin(&raster);
     // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
     let prepared=Image{raster};
