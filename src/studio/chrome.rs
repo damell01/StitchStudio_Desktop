@@ -24,9 +24,9 @@ impl Studio {
                 ui.add_space(12.0);
                 ui.horizontal_wrapped(|ui| {
                     for (label, action) in [
-                        ("Open design", Action::Open),
-                        ("Import artwork", Action::Place),
-                        ("Add lettering", Action::AddText),
+                        ("Open embroidery file", Action::Open),
+                        ("Digitize a picture", Action::Place),
+                        ("Create lettering", Action::AddText),
                     ] {
                         if ui.add_enabled(self.action_enabled(action), egui::Button::new(label).min_size(Vec2::new(112.0, 34.0))).clicked() {
                             self.run_action(action);
@@ -34,7 +34,10 @@ impl Studio {
                     }
                 });
                 ui.add_space(12.0);
-                caption(ui, "Or use the drawing tools to create a design directly on the hoop.");
+                caption(ui, "New to embroidery? Learn the workflow before creating your first design.");
+                if ui.button("Start guided tour").clicked() {
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("studio-tour"), 0usize));
+                }
                 ui.add_space(12.0);
             });
         });
@@ -63,6 +66,14 @@ impl Studio {
                         }
                     }
                     ui.separator();
+                    egui::ComboBox::from_id_salt("workspace-hoop")
+                        .selected_text(crate::app::HOOPS[self.doc.settings.hoop.min(crate::app::HOOPS.len() - 1)].1)
+                        .width(150.0)
+                        .show_ui(ui, |ui| {
+                            for (k, h) in crate::app::HOOPS.iter().enumerate() {
+                                ui.selectable_value(&mut self.doc.settings.hoop, k, h.1);
+                            }
+                        }).response.on_hover_text("Select the hoop matching your machine. This does not resize your design.");
                     let export = ui.add_enabled(
                         !self.design.blocks.is_empty(),
                         egui::Button::new(egui::RichText::new("Export design ▾").strong().color(
@@ -94,7 +105,7 @@ impl Studio {
         let Some(mut step) = ctx.data(|d| d.get_temp::<usize>(id)) else { return; };
         let steps = [
             ("Welcome", "Open an embroidery file or import a picture to get started."),
-            ("Choose your hoop", "Expand Document on the right and choose the hoop matching your machine."),
+            ("Choose your hoop", "Choose the hoop matching your machine from the top toolbar."),
             ("Import artwork", "Use Import artwork to trace a picture into editable embroidery shapes."),
             ("Layers and stitches", "Select an object in Layers to change its thread and stitch properties."),
             ("Fit and position", "Use Fit hoop to resize explicitly, and Fit view to zoom without resizing."),
@@ -114,8 +125,9 @@ impl Studio {
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {
                     if ui.add_enabled(step > 0, egui::Button::new("Back")).clicked() { step -= 1; }
-                    if ui.button("Skip").clicked() { step = steps.len(); }
-                    if ui.button(if step + 1 == steps.len() { "Finish" } else { "Next" }).clicked() { step += 1; }
+                    let skip = ui.button("Skip").clicked();
+                    let next = ui.button(if step + 1 == steps.len() { "Finish" } else { "Next" }).clicked();
+                    if skip { step = steps.len(); } else if next { step += 1; }
                 });
             });
         ctx.data_mut(|d| {
