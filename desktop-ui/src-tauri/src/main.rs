@@ -268,4 +268,22 @@ async fn digitize_artwork(bytes:Vec<u8>,name:String,width_mm:f64,colors:u32,remo
  }).await.map_err(|e|e.to_string())??;
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[derive(serde::Serialize)]
+struct LibraryEntry {file:String,name:String,stitches:usize,colors:usize,width:f64,height:f64,modified:u64}
+#[tauri::command]
+async fn scan_projects()->Result<Option<Vec<LibraryEntry>>,String>{
+ let Some(folder)=rfd::AsyncFileDialog::new().pick_folder().await else{return Ok(None)};
+ let root=folder.path().to_owned();
+ tauri::async_runtime::spawn_blocking(move||{
+ let mut stack=vec![root];let mut out=Vec::new();let mut visited=0;
+ while let Some(path)=stack.pop(){visited+=1;if visited>50000||out.len()>=2000{break}
+ let Ok(meta)=std::fs::symlink_metadata(&path) else{continue};
+ if meta.file_type().is_symlink(){continue}
+ if meta.is_dir(){if let Ok(entries)=std::fs::read_dir(&path){stack.extend(entries.flatten().map(|e|e.path()))}continue}
+ if !meta.is_file()||meta.len()>100_000_000||!path.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){continue}
+ let Ok(bytes)=std::fs::read(&path) else{continue};let Ok(p)=serde_json::from_slice::<Project>(&bytes) else{continue};if p.version!=1{continue}
+ out.push(LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0)});
+ }out.sort_by(|a,b|b.modified.cmp(&a.modified));Some(out)
+ }).await.map_err(|e|e.to_string())
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,digitize_artwork,scan_projects]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
