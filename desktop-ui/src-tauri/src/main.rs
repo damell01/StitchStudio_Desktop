@@ -182,4 +182,16 @@ fn recovery_open(app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>) -
  let result=OpenedProject{plan:preview(&d),width:p.width,height:p.height,format:p.format};
  *state.lock().map_err(|e|e.to_string())?=Workspace{source,current:Some(d),..Default::default()};Ok(Some(result))
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[tauri::command]
+fn lettering_fonts()->Vec<String>{zigzag::document::font_families()}
+#[tauri::command]
+fn create_lettering(text:String,font:String,size:f64,spacing:f64,arc:f64,bold:bool,italic:bool,color:[u8;3],align:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
+ if text.trim().is_empty()||text.chars().count()>120||![size,spacing,arc].iter().all(|v|v.is_finite())||!(3.0..=80.0).contains(&size)||!(0.0..=5.0).contains(&spacing)||arc.abs()>300.0{return Err("Invalid lettering settings".into())}
+ if !zigzag::document::font_families().contains(&font){return Err("Select an installed font".into())}
+ let spec=zigzag::document::TextSpec{text,font,size_mm:size,spacing_mm:spacing,arc_mm:arc,bold,italic,color,align:zigzag::document::Align::parse(&align).unwrap_or_default(),..Default::default()};
+ let mut doc=zigzag::document::Document::empty();
+ doc.add_lettering(&spec,(0.0,0.0)).map_err(|e|e.to_string())?;
+ let d=doc.plan();if d.blocks.is_empty(){return Err("Font produced no stitches".into())}
+ let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
