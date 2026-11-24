@@ -456,4 +456,23 @@ async fn character_image(group:String,file:String)->Result<Vec<u8>,String>{
  tauri::async_runtime::spawn_blocking(move||std::fs::read(path).map_err(|e|e.to_string())).await.map_err(|e|e.to_string())?
 }
 
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+
+#[tauri::command]
+async fn insert_character(bytes:Vec<u8>,name:String,width_mm:f64,x_mm:f64,y_mm:f64,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+ if bytes.is_empty()||bytes.len()>20_000_000||![width_mm,x_mm,y_mm].iter().all(|v|v.is_finite())||!(5.0..=250.0).contains(&width_mm)||x_mm.abs()>500.0||y_mm.abs()>500.0{return Err("Invalid artwork or dimensions".into())}
+ let mut added=tauri::async_runtime::spawn_blocking(move||->Result<_,String>{
+ let options=zigzag::trace::TraceOptions{width_mm,remove_background:true,..Default::default()};
+ let svg=zigzag::trace::trace_prepared_bytes(&bytes,&options,32,false).map_err(|e|e.to_string())?.svg;
+ let mut doc=zigzag::document::Document::from_svg(&svg,&name,None).map_err(|e|e.to_string())?;
+ doc.settings.hat_order=true;
+ let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}Ok(d)
+ }).await.map_err(|e|e.to_string())??;
+ for block in &mut added.blocks{for run in &mut block.runs{for p in &mut run.pts{p.x+=x_mm*10.0;p.y+=y_mm*10.0;}}}
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ let mut combined=w.current.clone().unwrap_or_default();
+ if combined.blocks.is_empty(){combined.name=added.name.clone();}
+ combined.blocks.extend(added.blocks);combined.per_shape.clear();combined.sew_order.clear();combined.notes.clear();combined.block_shapes.clear();combined.covered.clear();
+ let p=preview(&combined);w.checkpoint();w.current=Some(combined);w.source=None;Ok(p)
+}
+
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
