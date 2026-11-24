@@ -56,3 +56,5 @@
 [data-theme=dark]:is([data-palette=blue],[data-palette=slate]) :is(article,.tour,.studio-tools,button,input,select){background:#202631;border-color:#394352;color:#e7edf7}
 [data-theme=dark]:is([data-palette=blue],[data-palette=slate]) :is(.tile-icon,.learn,aside>button.active){color:#e7edf7;background:var(--brand-soft)}
 [data-theme=dark]:is([data-palette=blue],[data-palette=slate]) aside>button:not(.active){background:transparent}
+
+.stitch-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.stitch-picker button{display:flex;flex-direction:column;align-items:center;white-space:normal;padding:6px;font-size:11px}.stitch-picker button[aria-pressed=true],.lesson-tabs button[aria-pressed=true]{outline:2px solid var(--brand-accent,#73977b);outline-offset:-2px}.stitch-tip{font-size:12px;padding:10px;border:1px solid #73977b;border-radius:8px;margin:10px 0}.lesson-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.template-grid article svg{color:#315b47}[data-theme=dark] .template-grid article svg{color:#234536}.lesson-tabs+article li{margin:10px 0;line-height:1.5}
