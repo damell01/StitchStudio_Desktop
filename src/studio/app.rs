@@ -1132,7 +1132,7 @@ impl Studio {
         } else {
             &self.doc.name
         };
-        let title = format!("{}{} — ZigZag", if self.modified { "• " } else { "" }, name);
+        let title = format!("{}{} — Stitch Studio", if self.modified { "• " } else { "" }, name);
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
