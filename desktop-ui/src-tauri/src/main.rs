@@ -236,4 +236,12 @@ async fn import_fonts(folder:bool,app:tauri::AppHandle)->Result<Option<FontImpor
  }Some(result)
  }).await.map_err(|e|e.to_string())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[tauri::command]
+fn remove_font_asset(app:tauri::AppHandle,file:String)->Result<(),String>{
+ let p=std::path::Path::new(&file);
+ if p.components().count()!=1||!matches!(p.components().next(),Some(std::path::Component::Normal(_)))||!["bx","ttf","otf"].contains(&p.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase().as_str()){return Err("Invalid font filename".into())}
+ let target=font_dir(&app)?.join(p);
+ if !std::fs::symlink_metadata(&target).map_err(|e|e.to_string())?.file_type().is_file(){return Err("Not a regular font file".into())}
+ std::fs::remove_file(target).map_err(|e|e.to_string())
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
