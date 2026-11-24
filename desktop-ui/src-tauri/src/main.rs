@@ -261,10 +261,10 @@ async fn choose_artwork()->Result<Option<ArtworkInput>,String>{
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
-async fn digitize_artwork(bytes:Vec<u8>,name:String,mime:String,width_mm:f64,colors:u32,remove_background:bool,detail:f64,fabric:String,cleanup:bool,tolerance:u8,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+async fn digitize_artwork(bytes:Vec<u8>,name:String,mime:String,width_mm:f64,colors:u32,remove_background:bool,detail:f64,fabric:String,cleanup:bool,tolerance:u8,thin_lines:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  if bytes.is_empty()||bytes.len()>20_000_000||!width_mm.is_finite()||!(5.0..=300.0).contains(&width_mm)||!detail.is_finite()||!(0.0..=100.0).contains(&detail)||!(colors==0||(2..=10).contains(&colors))||zigzag::params::Fabric::by_id(&fabric).is_none(){return Err("Invalid artwork settings".into())}
  let (doc,d)=tauri::async_runtime::spawn_blocking(move||->Result<_,String>{
- let options=zigzag::trace::TraceOptions{width_mm,colors,remove_background,detail,..Default::default()};
+ let options=zigzag::trace::TraceOptions{width_mm,colors,remove_background,detail,lines:thin_lines,..Default::default()};
  let svg=if mime=="image/svg+xml" {String::from_utf8(bytes).map_err(|e|e.to_string())?}else{zigzag::trace::trace_prepared_bytes(&bytes,&options,tolerance,cleanup).map_err(|e|e.to_string())?.svg};
  let mut doc=zigzag::document::Document::from_svg(&svg,&name,None).map_err(|e|e.to_string())?;
  doc.settings.fabric=fabric;let d=doc.plan();if d.blocks.is_empty(){return Err("No stitchable artwork found".into())}Ok((doc,d))
