@@ -68,7 +68,7 @@ pub const DARK: Pal = Pal {
     separator: Color32::from_rgb(54, 70, 60),
     text: Color32::from_rgb(232, 238, 233),
     secondary: Color32::from_rgb(170, 190, 176),
-    tertiary: Color32::from_rgb(125, 151, 132),
+    tertiary: Color32::from_rgb(115, 151, 123),
     accent: Color32::from_rgb(154, 188, 159),
     hover: Color32::from_rgba_premultiplied(16, 16, 16, 16),
     pressed: Color32::from_rgba_premultiplied(28, 28, 28, 28),
@@ -139,7 +139,7 @@ fn visuals(p: &Pal) -> Visuals {
     } else {
         Visuals::light()
     };
-    let r = CornerRadius::same(6);
+    let r = CornerRadius::same(9);
     let w = &mut v.widgets;
     w.noninteractive.bg_fill = p.dock;
     w.noninteractive.weak_bg_fill = p.dock;
@@ -175,7 +175,7 @@ fn visuals(p: &Pal) -> Visuals {
     w.active.expansion = 0.0;
     w.open = w.hovered;
     v.selection.bg_fill = p.accent;
-    v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
+    v.selection.stroke = Stroke::new(1.0, if p.dark { Color32::from_rgb(23, 30, 26) } else { Color32::WHITE });
     v.hyperlink_color = p.accent;
     v.faint_bg_color = p.header;
     v.extreme_bg_color = if p.dark {
@@ -200,13 +200,13 @@ fn visuals(p: &Pal) -> Visuals {
             Color32::from_rgb(221, 228, 222)
         },
     );
-    v.window_corner_radius = CornerRadius::same(10);
-    v.menu_corner_radius = CornerRadius::same(8);
+    v.window_corner_radius = CornerRadius::same(14);
+    v.menu_corner_radius = CornerRadius::same(12);
     let shadow = Shadow {
-        offset: [0, 6],
-        blur: 24,
+        offset: [0, 5],
+        blur: 20,
         spread: 0,
-        color: Color32::from_black_alpha(if p.dark { 110 } else { 45 }),
+        color: Color32::from_black_alpha(if p.dark { 100 } else { 28 }),
     };
     v.window_shadow = shadow;
     v.popup_shadow = shadow;
@@ -222,7 +222,7 @@ fn style_for(p: &Pal, base: &egui::Style) -> egui::Style {
     let mut s = base.clone();
     s.visuals = visuals(p);
     s.text_styles = [
-        (TextStyle::Heading, FontId::proportional(15.0)),
+        (TextStyle::Heading, FontId::proportional(17.0)),
         (TextStyle::Body, FontId::proportional(13.0)),
         (TextStyle::Button, FontId::proportional(13.0)),
         (TextStyle::Small, FontId::proportional(11.0)),
@@ -231,8 +231,8 @@ fn style_for(p: &Pal, base: &egui::Style) -> egui::Style {
     .into();
     let sp = &mut s.spacing;
     sp.item_spacing = Vec2::new(space::S, space::S);
-    sp.button_padding = Vec2::new(10.0, 3.0);
-    sp.interact_size = Vec2::new(24.0, 22.0);
+    sp.button_padding = Vec2::new(12.0, 5.0);
+    sp.interact_size = Vec2::new(28.0, 26.0);
     sp.slider_width = 120.0;
     sp.combo_width = 140.0;
     sp.menu_margin = Margin::same(space::XS as i8 + 2);
@@ -287,7 +287,7 @@ pub mod space {
 }
 
 /// Height of a row in a list (objects, threads, sewing order).
-pub const ROW_H: f32 = 24.0;
+pub const ROW_H: f32 = 28.0;
 /// A color swatch in a list row.
 pub const LIST_SWATCH: f32 = 16.0;
 
@@ -443,7 +443,7 @@ pub fn icon_button(
         None
     };
     if let Some(bg) = bg {
-        ui.painter().rect_filled(rect, 6.0, bg);
+        ui.painter().rect_filled(rect, 9.0, bg);
     }
     let c = if !enabled {
         p.tertiary
@@ -482,7 +482,7 @@ pub fn segmented<T: PartialEq + Copy>(
     } else {
         Color32::from_rgb(229, 237, 230)
     };
-    ui.painter().rect_filled(rect, 7.0, track);
+    ui.painter().rect_filled(rect, 10.0, track);
     let mut x = rect.left() + 2.0;
     let mut changed = false;
     for (k, ((v, label), w)) in options.iter().zip(&widths).enumerate() {
@@ -499,17 +499,17 @@ pub fn segmented<T: PartialEq + Copy>(
             } else {
                 Color32::WHITE
             };
-            ui.painter().rect_filled(r, 5.0, sel);
+            ui.painter().rect_filled(r, 8.0, sel);
             if !p.dark {
                 ui.painter().rect_stroke(
                     r,
-                    5.0,
+                    8.0,
                     Stroke::new(0.5, Color32::from_black_alpha(30)),
                     egui::StrokeKind::Inside,
                 );
             }
         } else if resp.hovered() {
-            ui.painter().rect_filled(r, 5.0, p.hover);
+            ui.painter().rect_filled(r, 8.0, p.hover);
         }
         ui.painter().text(
             r.center(),
@@ -540,7 +540,7 @@ pub fn callout(ui: &mut egui::Ui, color: Color32, icon: Icon, text: &str) {
     let p = pal_ui(ui);
     egui::Frame::new()
         .fill(color.gamma_multiply(if p.dark { 0.18 } else { 0.12 }))
-        .corner_radius(6)
+        .corner_radius(10)
         .inner_margin(Margin::symmetric(space::S as i8, space::XS as i8 + 2))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
