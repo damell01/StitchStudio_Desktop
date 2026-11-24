@@ -194,4 +194,46 @@ fn create_lettering(text:String,font:String,size:f64,spacing:f64,arc:f64,bold:bo
  let d=doc.plan();if d.blocks.is_empty(){return Err("Font produced no stitches".into())}
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[derive(serde::Serialize)]
+struct FontAsset {name:String,file:String,format:String,bytes:u64}
+fn font_dir(app:&tauri::AppHandle)->Result<std::path::PathBuf,String>{
+ use tauri::Manager;
+ let dir=app.path().app_local_data_dir().map_err(|e|e.to_string())?.join("fonts");
+ std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;Ok(dir)
+}
+#[tauri::command]
+fn font_assets(app:tauri::AppHandle)->Result<Vec<FontAsset>,String>{
+ let mut out=Vec::new();
+ for e in std::fs::read_dir(font_dir(&app)?).map_err(|e|e.to_string())?{
+ let e=e.map_err(|e|e.to_string())?;if !e.file_type().map_err(|e|e.to_string())?.is_file(){continue}
+ let p=e.path();let ext=p.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
+ if !["bx","ttf","otf"].contains(&ext.as_str()){continue}
+ out.push(FontAsset{name:p.file_stem().unwrap_or_default().to_string_lossy().into_owned(),file:e.file_name().to_string_lossy().into_owned(),format:ext,bytes:e.metadata().map_err(|e|e.to_string())?.len()});
+ }out.sort_by_key(|f|f.name.to_lowercase());Ok(out)
+}
+#[derive(serde::Serialize,Default)]
+struct FontImport {imported:usize,duplicates:usize,skipped:usize,errors:Vec<String>}
+#[tauri::command]
+async fn import_fonts(folder:bool,app:tauri::AppHandle)->Result<Option<FontImport>,String>{
+ let paths=if folder{let Some(p)=rfd::AsyncFileDialog::new().pick_folder().await else{return Ok(None)};vec![p.path().to_owned()]}else{let Some(p)=rfd::AsyncFileDialog::new().add_filter("Font files",&["bx","ttf","otf"]).pick_files().await else{return Ok(None)};p.into_iter().map(|p|p.path().to_owned()).collect()};
+ let dir=font_dir(&app)?;
+ tauri::async_runtime::spawn_blocking(move||{
+ let mut result=FontImport::default();let mut stack=paths;let mut visited=0;
+ while let Some(p)=stack.pop(){visited+=1;if visited>100000{result.errors.push("Scan limit reached".into());break}
+ let meta=match std::fs::symlink_metadata(&p){Ok(m)=>m,Err(e)=>{result.errors.push(format!("{}: {e}",p.display()));continue}};
+ if meta.file_type().is_symlink(){result.skipped+=1;continue}
+ if meta.is_dir(){match std::fs::read_dir(&p){Ok(entries)=>for e in entries{match e{Ok(e)=>stack.push(e.path()),Err(e)=>result.errors.push(e.to_string())}},Err(e)=>result.errors.push(e.to_string())}continue}
+ let ext=p.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
+ if !meta.is_file()||!["bx","ttf","otf"].contains(&ext.as_str())||meta.len()>50_000_000||meta.len()==0{result.skipped+=1;continue}
+ let bytes=match std::fs::read(&p){Ok(b)=>b,Err(e)=>{result.errors.push(e.to_string());continue}};
+ let stem=p.file_stem().unwrap_or_default().to_string_lossy();
+ let mut n=0;loop{let name=if n==0{format!("{stem}.{ext}")}else{format!("{stem} ({n}).{ext}")};let dest=dir.join(name);
+ match std::fs::OpenOptions::new().write(true).create_new(true).open(&dest){
+ Ok(mut f)=>{use std::io::Write;if let Err(e)=f.write_all(&bytes){let _=std::fs::remove_file(&dest);result.errors.push(e.to_string())}else{result.imported+=1}break},
+ Err(e) if e.kind()==std::io::ErrorKind::AlreadyExists=>{if std::fs::read(&dest).ok().as_deref()==Some(bytes.as_slice()){result.duplicates+=1;break}n+=1;if n>10000{result.errors.push("Too many filename conflicts".into());break}},
+ Err(e)=>{result.errors.push(e.to_string());break}
+ }}
+ }Some(result)
+ }).await.map_err(|e|e.to_string())
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
