@@ -28,6 +28,7 @@ fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, state: tauri::S
 fn recolor_block(index: usize, color: [u8;3], state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview,String> {
     let mut guard=state.lock().map_err(|e|e.to_string())?;
     guard.checkpoint();
+    guard.source=None;
     let d=guard.current.as_mut().ok_or("Open artwork first")?;
     d.blocks.get_mut(index).ok_or("Invalid thread block")?.color=color;
     Ok(preview(d))
@@ -114,12 +115,13 @@ fn load_template(id:String,art:String,state:tauri::State<'_,Mutex<Workspace>>) -
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(source);Ok(p)
 }
 #[tauri::command]
-fn apply_stitch_properties(fabric:String,spacing:f64,length:f64,angle:f64,pull:f64,underlay:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
+fn apply_stitch_properties(uid:Option<usize>,fabric:String,spacing:f64,length:f64,angle:f64,pull:f64,underlay:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
  if zigzag::params::Fabric::by_id(&fabric).is_none() || ![spacing,length,angle,pull].iter().all(|v|v.is_finite()) || !(0.15..=2.0).contains(&spacing) || !(0.5..=7.0).contains(&length) || !(0.0..=1.0).contains(&pull){return Err("Invalid stitch properties".into())}
  let mut w=state.lock().map_err(|e|e.to_string())?;
  let mut doc=w.source.clone().ok_or("Reimport original artwork to regenerate stitches after stitch-level edits")?;
- doc.settings.fabric=fabric;
- for shape in &mut doc.shapes {if shape.params.kind==Some(zigzag::params::Kind::Manual){continue}shape.params.spacing=Some(spacing);shape.params.len=Some(length);shape.params.angle=Some(angle);shape.params.pull=Some(pull);shape.params.underlay=Some(underlay);}
+ if uid.is_none(){doc.settings.fabric=fabric;}
+ if let Some(id)=uid{if !doc.shapes.iter().any(|s|s.uid==id){return Err("Object not found".into())}}
+ for shape in &mut doc.shapes {if uid.is_some_and(|id|id!=shape.uid){continue}if shape.params.kind==Some(zigzag::params::Kind::Manual){continue}shape.params.spacing=Some(spacing);shape.params.len=Some(length);shape.params.angle=Some(angle);shape.params.pull=Some(pull);shape.params.underlay=Some(underlay);}
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
  let p=preview(&d);w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
