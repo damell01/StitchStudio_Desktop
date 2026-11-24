@@ -1,3 +1,4 @@
+// Modified for Stitch Studio: desktop window branding.
 //! ZigZag studio: visual stitch editor (egui, OpenGL via glow) with an
 //! MCP server so agents can work on the same canvas.
 
@@ -95,7 +96,7 @@ fn main() -> eframe::Result {
         renderer: eframe::Renderer::Glow,
         viewport: {
             let v = eframe::egui::ViewportBuilder::default()
-                .with_title("ZigZag")
+                .with_title("Stitch Studio")
                 .with_app_id("zigzag-studio")
                 .with_inner_size([1360.0, 860.0])
                 .with_min_inner_size([1000.0, 620.0])
