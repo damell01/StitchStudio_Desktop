@@ -128,7 +128,8 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     let image=Image::decode(bytes)?;
     let raster=if o.remove_background {remove_edge_background(&image.raster,tolerance)}else{image.raster};
     let mut options=o.clone();options.remove_background=false;
-    if cleanup {if options.colors==0{options.colors=4;}options.speckle_mm=options.speckle_mm.max(1.2);}
+    if cleanup {options.speckle_mm=options.speckle_mm.max(0.6);}
+    let raster=if cleanup {median_texture(&raster,false)}else{raster};
     trace(&Image{raster},&options)
 }
 
@@ -137,7 +138,14 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
 pub fn trace_cleaned_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {
     let image = Image::decode(bytes)?;
     let r = &image.raster;
-    let cleaned = Raster::from_fn(r.width, r.height, |x,y| {
+    let cleaned = median_texture(r,o.remove_background);
+    let mut options=o.clone();
+    options.speckle_mm=options.speckle_mm.max(0.6);
+    trace(&Image{raster:cleaned}, &options)
+}
+
+fn median_texture(r:&Raster,remove_white:bool)->Raster {
+    Raster::from_fn(r.width, r.height, |x,y| {
         let mut channels = [[0u8;9];3];
         let mut k=0;
         for dy in -1i64..=1 { for dx in -1i64..=1 {
@@ -151,14 +159,10 @@ pub fn trace_cleaned_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {
         let mut rgb=[channels[0][4],channels[1][4],channels[2][4]];
         let lo=*rgb.iter().min().unwrap();
         let hi=*rgb.iter().max().unwrap();
-        if o.remove_background && lo>=218 && hi-lo<=20 {rgb=[255;3];}
+        if remove_white && lo>=218 && hi-lo<=20 {rgb=[255;3];}
         let alpha=r.rgba[(y as usize*r.width as usize+x as usize)*4+3];
         [rgb[0],rgb[1],rgb[2],alpha]
-    });
-    let mut options=o.clone();
-    if options.colors==0 {options.colors=4;}
-    options.speckle_mm=options.speckle_mm.max(1.2);
-    trace(&Image{raster:cleaned}, &options)
+    })
 }
 
 /// Trace `img` with `o`.
