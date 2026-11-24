@@ -1066,6 +1066,17 @@ fn geometry_bounds(g: &Geometry) -> Bounds {
     b
 }
 
+/// Conservative automatic satin selection for narrow, elongated filled artwork.
+pub fn auto_stitch_types(shapes:&mut [Shape]){
+ for s in shapes {
+  if s.params.kind.is_some(){continue}
+  if let Geometry::Fill{rings,..}=&s.geometry{
+   if rings.len()!=1{continue}
+   let b=geometry_bounds(&s.geometry);let short=b.width().min(b.height());let long=b.width().max(b.height());
+   if short>=8.0 && short<=45.0 && long>=short*2.8 {s.params.kind=Some(Kind::Satin);}
+  }
+ }
+}
 fn overlaps(a: &Bounds, b: &Bounds) -> bool {
     !a.is_empty()
         && !b.is_empty()
