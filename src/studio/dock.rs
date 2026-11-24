@@ -203,15 +203,23 @@ impl Default for DockState {
         // Tests start without the Agent panel, so the others have the
         // whole dock (its own tests open it).
         let mut hidden = [false; N];
-        hidden[PanelId::Agent.index()] = cfg!(test);
+        hidden[PanelId::Agent.index()] = true;
+        let mut place = ALL.map(default_place);
+        if !cfg!(test) { place[PanelId::Objects.index()] = Place::Left; }
+        let mut collapsed = [false; N];
+        if !cfg!(test) {
+            for panel in [PanelId::Transform, PanelId::Lettering, PanelId::Threads, PanelId::Document] {
+                collapsed[panel.index()] = true;
+            }
+        }
         DockState {
             left: true,
             right: true,
             hidden,
-            collapsed: [false; N],
+            collapsed,
             show_palette: false,
             units: Default::default(),
-            place: ALL.map(default_place),
+            place,
             order: ALL.to_vec(),
             float_at: std::array::from_fn(|k| {
                 Pos2::new(360.0 + 24.0 * k as f32, 120.0 + 24.0 * k as f32)
