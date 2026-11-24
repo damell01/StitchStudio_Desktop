@@ -98,6 +98,40 @@ pub fn trace_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {
     trace(&Image::decode(bytes)?, o)
 }
 
+/// Remove only background connected to the image boundary, preserving enclosed
+/// white lettering and other interior details. Uses a robust border sample.
+pub fn remove_edge_background(r: &Raster, tolerance: u8) -> Raster {
+    let w=r.width as usize; let h=r.height as usize;
+    if w==0 || h==0 {return r.clone();}
+    let mut bins=std::collections::BTreeMap::<[u8;3],usize>::new();
+    for y in 0..h {for x in 0..w {
+        if x!=0 && y!=0 && x+1!=w && y+1!=h {continue}
+        let i=(y*w+x)*4;
+        if r.rgba[i+3]<32 {continue}
+        let key=[r.rgba[i]/16,r.rgba[i+1]/16,r.rgba[i+2]/16];
+        *bins.entry(key).or_default()+=1;
+    }}
+    let bg=bins.into_iter().max_by_key(|(_,n)|*n).map(|(c,_)|c.map(|v|v*16+8));
+    let mut seen=vec![false;w*h];let mut queue=std::collections::VecDeque::new();
+    let matches=|p:usize| {let i=p*4;r.rgba[i+3]<32 || bg.is_some_and(|c|(0..3).all(|k|r.rgba[i+k].abs_diff(c[k])<=tolerance))};
+    let mut push=|p:usize,seen:&mut Vec<bool>,q:&mut std::collections::VecDeque<usize>|{if !seen[p]&&matches(p){seen[p]=true;q.push_back(p)}};
+    for x in 0..w {push(x,&mut seen,&mut queue);push((h-1)*w+x,&mut seen,&mut queue)}
+    for y in 0..h {push(y*w,&mut seen,&mut queue);push(y*w+w-1,&mut seen,&mut queue)}
+    while let Some(p)=queue.pop_front(){let x=p%w;let y=p/w;
+        if x>0{push(p-1,&mut seen,&mut queue)}if x+1<w{push(p+1,&mut seen,&mut queue)}
+        if y>0{push(p-w,&mut seen,&mut queue)}if y+1<h{push(p+w,&mut seen,&mut queue)}
+    }
+    Raster::from_fn(r.width,r.height,|x,y|{let p=y as usize*w+x as usize;let i=p*4;[r.rgba[i],r.rgba[i+1],r.rgba[i+2],if seen[p]{0}else{r.rgba[i+3]}]})
+}
+
+pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:bool)->Result<Traced>{
+    let image=Image::decode(bytes)?;
+    let raster=if o.remove_background {remove_edge_background(&image.raster,tolerance)}else{image.raster};
+    let mut options=o.clone();options.remove_background=false;
+    if cleanup {if options.colors==0{options.colors=4;}options.speckle_mm=options.speckle_mm.max(1.2);}
+    trace(&Image{raster},&options)
+}
+
 /// Optional texture cleanup for photographed or rendered embroidery artwork.
 /// Median filtering suppresses isolated thread highlights without averaging edges.
 pub fn trace_cleaned_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {
@@ -452,6 +486,14 @@ mod tests {
         );
     }
 
+    #[test]
+    fn edge_background_preserves_enclosed_white(){
+        let r=Raster::from_fn(20,20,|x,y|if x<3||y<3||x>=17||y>=17||(x>=8&&x<12&&y>=8&&y<12){[250,250,250,255]}else{[180,20,40,255]});
+        let out=remove_edge_background(&r,24);
+        assert_eq!(out.rgba[3],0);
+        assert_eq!(out.rgba[(10*20+10)*4+3],255);
+        assert_eq!(out.rgba[(5*20+5)*4+3],255);
+    }
     #[test]
     fn garbage_is_an_error() {
         assert!(trace_bytes(b"not an image", &TraceOptions::default()).is_err());
