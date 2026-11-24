@@ -237,3 +237,27 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 [data-palette=lavender] header input{background:transparent;color:white}
 [data-palette=lavender] .editor-grid article:nth-child(2){background:var(--lav-bg)}
 [data-palette=lavender] input[type=range],[data-palette=lavender] input[type=checkbox]{accent-color:var(--brand)}
+
+/* Canvas-first desktop refinement */
+.app:has(.editor-workspace){grid-template-rows:0 38px minmax(0,1fr)!important}
+.app:has(.editor-workspace)>.desktop-nav{grid-row:2;grid-column:1;min-height:38px}
+.app:has(.editor-workspace)>main{grid-row:3;grid-column:1}
+.app:has(.editor-workspace).tour-active{grid-template-rows:0 38px minmax(0,1fr) auto!important}
+[data-palette=lavender] .desktop-nav{border-bottom:1px solid var(--lav-border)}
+[data-palette=lavender] .editor-workspace{background:var(--lav-bg)}
+.editor-workspace .editor-heading{min-height:38px;gap:8px;flex-wrap:nowrap}
+.editor-workspace .editor-heading h1{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.editor-workspace .editor-heading button,.editor-workspace .editor-actions button,.editor-workspace .canvas-tools button{min-height:30px;padding:5px 9px;font-size:12px;white-space:nowrap}
+.editor-workspace .editor-grid{gap:6px}
+.editor-workspace .editor-grid>article{border-radius:8px;padding:10px;min-width:0}
+.editor-workspace .editor-grid h2{font-size:13px;margin:0 0 8px}
+.editor-workspace .editor-grid label{font-size:12px}
+.editor-workspace .canvas-panel{padding:5px!important}
+.editor-workspace .canvas-tools{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+[data-palette=lavender] .template-grid article{border:1px solid var(--lav-border);box-shadow:0 2px 8px #35274408;transition:border-color .15s,box-shadow .15s}
+[data-palette=lavender] .template-grid article:hover{border-color:var(--brand-accent);box-shadow:0 4px 16px #6945a218}
+[data-palette=lavender] .template-grid article button:last-child{background:var(--brand-soft);color:var(--lav-text);border-color:transparent}
+[data-palette=lavender] .template-grid article button:last-child:hover{background:var(--brand);color:white}
+.template-grid article h3{font-size:14px;margin:4px 0;line-height:1.3}
+.template-grid article img{display:block}
+[data-palette=lavender] .insert-design-dialog{border:1px solid var(--lav-border);border-radius:16px;box-shadow:0 24px 80px #35274435}
