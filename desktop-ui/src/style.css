@@ -157,3 +157,22 @@ label{color:var(--studio-ink)}
 .digitize-metrics strong,.playback-tools span{font-variant-numeric:tabular-nums}
 .thread-catalog>div{border-radius:7px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Studio Blue: neutral creative workspace, electric-blue interaction accents. */
+:root[data-palette=blue]{--brand:#2563eb;--brand-hover:#1d4ed8;--brand-soft:#e8efff;--brand-accent:#2563eb;--studio-ink:#182233;--studio-line:#cbd5e1;--studio-paper:#f4f6fa;--studio-panel:#fff;--studio-muted:#526176;--chrome:#172033;--canvas:#e4e9f1}
+:root[data-palette=blue][data-theme=dark]{--brand:#2563eb;--brand-hover:#438bff;--brand-soft:#243854;--brand-accent:#78aaff;--studio-ink:#e8edf5;--studio-line:#394454;--studio-paper:#101216;--studio-panel:#222936;--studio-muted:#a9b6c8;--chrome:#171b23;--canvas:#151922}
+[data-palette=blue] body{background:var(--studio-paper);color:var(--studio-ink)}
+[data-palette=blue] .app>header{background:var(--chrome);color:#fff}
+[data-palette=blue] :is(.desktop-nav,.desktop-nav details>div,article,.studio-tools,.studio-confirm,.processing-card){background:var(--studio-panel);color:var(--studio-ink);border-color:var(--studio-line)}
+[data-palette=blue] :is(button,input,select,textarea){border-color:var(--studio-line)}
+[data-palette=blue] :is(.primary,.segmented .selected){background:var(--brand);color:white;border-color:var(--brand)}
+[data-palette=blue] :is(.muted,small,.studio-tools span){color:var(--studio-muted)}
+[data-palette=blue] .editor-grid>article:nth-child(2){background:var(--canvas)}
+[data-palette=blue] .editor-grid h2{background:var(--studio-panel);border-color:var(--studio-line)}
+[data-palette=blue] :is(button,input,select,summary,textarea):focus-visible{outline-color:var(--brand-accent)}
+[data-palette=blue] input[type=range],[data-palette=blue] input[type=checkbox],[data-palette=blue] progress{accent-color:var(--brand)}
+[data-palette=blue] .studio-spinner{border-color:var(--studio-line);border-top-color:var(--brand-accent)}
+[data-palette=blue] .studio-toast:not(.error){background:#203b65}
+[data-palette=blue] .desktop-nav summary:hover,[data-palette=blue] .desktop-nav details[open]>summary{background:var(--brand-soft);color:var(--studio-ink)}
+[data-palette=blue] .editor-grid label{color:var(--studio-ink)}
+[data-palette=blue] .editor-grid input:not([type=checkbox]):not([type=color]):not([type=range]),[data-palette=blue] .editor-grid select{background:var(--studio-panel);color:var(--studio-ink);border-color:var(--studio-line)}
