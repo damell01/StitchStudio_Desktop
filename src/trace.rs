@@ -162,8 +162,7 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     if !raster.rgba.chunks_exact(4).any(|p|p[3]>=32){return Err(anyhow!("No foreground remains after background removal. Disable removal or lower sensitivity."));}
     let raster=trim_transparent_margin(&raster);
     // Avoid global hue merging: it destroys intentional shading in character artwork.
-    let raster=raster;
-    // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
+        // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
     let prepared=Image{raster};
     match trace(&prepared,&options) {
         Ok(t) if t.shapes+t.lines>0=>Ok(t),
@@ -173,7 +172,8 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
             fallback.detail=fallback.detail.min(40.0);
             fallback.speckle_mm=fallback.speckle_mm.max(1.5);
             if fallback.colors==0 {fallback.colors=6;}
-            trace(&prepared,&fallback).map_err(|second|anyhow!("Automatic trace failed: {first}; simplified retry: {second}"))
+            let t=trace(&prepared,&fallback).map_err(|second|anyhow!("Automatic trace failed: {first}; simplified retry: {second}"))?;
+            if t.shapes+t.lines==0{return Err(anyhow!("No stitchable regions after simplified retry"));}Ok(t)
         }
     }
 }
@@ -605,4 +605,16 @@ mod tests {
     fn garbage_is_an_error() {
         assert!(trace_bytes(b"not an image", &TraceOptions::default()).is_err());
     }
+}
+
+#[test]
+fn clean_character_palette_retains_distinct_shades(){
+ let r=Raster::from_fn(160,100,|x,y|{
+ if !(10..150).contains(&x)||!(10..90).contains(&y){return [0,0,0,0]}
+ match x {10..=44=>[20,70,150,255],45..=79=>[90,170,240,255],80..=114=>[245,210,150,255],_=>[35,30,40,255]}
+ });
+ let r=trim_transparent_margin(&prepare_raster(&r,true,32,false));
+ let t=trace(&Image{raster:r},&TraceOptions{remove_background:false,colors:4,..Default::default()}).unwrap();
+ assert!(t.colors.len()>=4,"distinct colors lost: {:?}",t.colors);
+ assert!(t.shapes>=4);
 }
