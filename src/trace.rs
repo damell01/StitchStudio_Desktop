@@ -98,6 +98,35 @@ pub fn trace_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {
     trace(&Image::decode(bytes)?, o)
 }
 
+/// Optional texture cleanup for photographed or rendered embroidery artwork.
+/// Median filtering suppresses isolated thread highlights without averaging edges.
+pub fn trace_cleaned_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {
+    let image = Image::decode(bytes)?;
+    let r = &image.raster;
+    let cleaned = Raster::from_fn(r.width, r.height, |x,y| {
+        let mut channels = [[0u8;9];3];
+        let mut k=0;
+        for dy in -1i64..=1 { for dx in -1i64..=1 {
+            let xx=(i64::from(x)+dx).clamp(0,i64::from(r.width)-1) as usize;
+            let yy=(i64::from(y)+dy).clamp(0,i64::from(r.height)-1) as usize;
+            let i=(yy*r.width as usize+xx)*4;
+            for ch in 0..3 {channels[ch][k]=r.rgba[i+ch];}
+            k+=1;
+        }}
+        for ch in &mut channels {ch.sort_unstable();}
+        let mut rgb=[channels[0][4],channels[1][4],channels[2][4]];
+        let lo=*rgb.iter().min().unwrap();
+        let hi=*rgb.iter().max().unwrap();
+        if o.remove_background && lo>=218 && hi-lo<=20 {rgb=[255;3];}
+        let alpha=r.rgba[(y as usize*r.width as usize+x as usize)*4+3];
+        [rgb[0],rgb[1],rgb[2],alpha]
+    });
+    let mut options=o.clone();
+    if options.colors==0 {options.colors=4;}
+    options.speckle_mm=options.speckle_mm.max(1.2);
+    trace(&Image{raster:cleaned}, &options)
+}
+
 /// Trace `img` with `o`.
 pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
     let r = &img.raster;
