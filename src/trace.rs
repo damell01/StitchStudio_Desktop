@@ -134,6 +134,7 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     let mut options=o.clone();options.remove_background=false;
     if cleanup {options.speckle_mm=options.speckle_mm.max(0.6);}
     let raster=if cleanup {median_texture(&raster,false)}else{raster};
+    let raster=trim_transparent_margin(&raster);
     // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
     let prepared=Image{raster};
     match trace(&prepared,&options) {
@@ -157,6 +158,28 @@ pub fn trace_cleaned_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {
     let mut options=o.clone();
     options.speckle_mm=options.speckle_mm.max(0.6);
     trace(&Image{raster:cleaned}, &options)
+}
+
+// Fit the requested embroidery width to visible artwork, not transparent padding.
+fn trim_transparent_margin(r:&Raster)->Raster {
+    let (mut l,mut t,mut right,mut bottom)=(r.width,r.height,0,0);
+    for y in 0..r.height {for x in 0..r.width {
+        if r.rgba[(y as usize*r.width as usize+x as usize)*4+3]>=32 {
+            l=l.min(x);t=t.min(y);right=right.max(x+1);bottom=bottom.max(y+1);
+        }
+    }}
+    if l>=right||t>=bottom{return r.clone();}
+    Raster::from_fn(right-l,bottom-t,|x,y|{
+        let i=((y+t) as usize*r.width as usize+(x+l) as usize)*4;
+        [r.rgba[i],r.rgba[i+1],r.rgba[i+2],r.rgba[i+3]]
+    })
+}
+
+#[test]
+fn transparent_padding_does_not_shrink_finished_artwork(){
+    let r=Raster::from_fn(100,80,|x,y|if (20..60).contains(&x)&&(10..40).contains(&y){[200,0,0,255]}else{[0,0,0,0]});
+    let out=trim_transparent_margin(&r);
+    assert_eq!((out.width,out.height),(40,30));
 }
 
 fn median_texture(r:&Raster,remove_white:bool)->Raster {
