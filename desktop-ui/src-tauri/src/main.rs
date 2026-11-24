@@ -155,4 +155,31 @@ fn create_specialty(shape:String,style:String,width:f64,state:tauri::State<'_,Mu
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[tauri::command]
+fn recovery_save(app:tauri::AppHandle,width:f64,height:f64,format:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<(),String>{
+ use tauri::Manager;
+ let project={let w=state.lock().map_err(|e|e.to_string())?;let Some(d)=w.current.as_ref() else{return Ok(())};
+ Project{source_svg:w.source.as_ref().map(|s|s.to_svg()).transpose().map_err(|e|e.to_string())?,version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
+ let dir=app.path().app_local_data_dir().map_err(|e|e.to_string())?;
+ std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+ let bytes=serde_json::to_vec(&project).map_err(|e|e.to_string())?;
+ if bytes.len()>100_000_000{return Err("Recovery file exceeds size limit".into())}
+ let tmp=dir.join("recovery.tmp");let target=dir.join("recovery.stitchstudio");let backup=dir.join("recovery.previous");
+ std::fs::write(&tmp,bytes).map_err(|e|e.to_string())?;
+ if target.exists(){if backup.exists(){std::fs::remove_file(&backup).map_err(|e|e.to_string())?;}std::fs::rename(&target,&backup).map_err(|e|e.to_string())?;}
+ std::fs::rename(tmp,target).map_err(|e|e.to_string())?;Ok(())
+}
+#[tauri::command]
+fn recovery_open(app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<OpenedProject>,String>{
+ use tauri::Manager;
+ let dir=app.path().app_local_data_dir().map_err(|e|e.to_string())?;
+ let mut found=None;
+ for name in ["recovery.stitchstudio","recovery.previous"]{let path=dir.join(name);if let Ok(meta)=std::fs::metadata(&path){if meta.len()<=100_000_000{if let Ok(bytes)=std::fs::read(path){if let Ok(p)=serde_json::from_slice::<Project>(&bytes){found=Some(p);break}}}}}
+ let Some(p)=found else{return Ok(None)};
+ if p.version!=1||!p.width.is_finite()||!p.height.is_finite()||p.width<=0.0||p.height<=0.0||!["dst","pes","jef","exp","vp3","pec"].contains(&p.format.as_str())||p.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.points).flatten().any(|v|!v.is_finite()||v.abs()>1000000.0){return Err("Invalid recovery project".into())}
+ let source=p.source_svg.as_ref().map(|svg|zigzag::document::Document::from_svg(svg,&p.name,None)).transpose().map_err(|e|e.to_string())?;
+ let d=Design{name:p.name,blocks:p.blocks.into_iter().map(|b|zigzag::design::Block{color:b.color,runs:b.runs.into_iter().map(|r|zigzag::design::Run{pts:r.points.into_iter().map(|v|zigzag::geom::P::new(v[0],v[1])).collect(),trim_before:r.trim_before}).collect()}).collect(),..Default::default()};
+ let result=OpenedProject{plan:preview(&d),width:p.width,height:p.height,format:p.format};
+ *state.lock().map_err(|e|e.to_string())?=Workspace{source,current:Some(d),..Default::default()};Ok(Some(result))
+}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,recolor_block,history_step,current_preview,save_project,open_project,load_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
