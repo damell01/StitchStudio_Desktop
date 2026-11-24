@@ -381,7 +381,10 @@ async fn digitize_artwork(bytes:Vec<u8>,name:String,mime:String,width_mm:f64,col
  let options=zigzag::trace::TraceOptions{width_mm,colors,remove_background,detail,lines:thin_lines,..Default::default()};
  let svg=if mime=="image/svg+xml" {String::from_utf8(bytes).map_err(|e|e.to_string())?}else{zigzag::trace::trace_prepared_bytes(&bytes,&options,tolerance,cleanup).map_err(|e|e.to_string())?.svg};
  let mut doc=zigzag::document::Document::from_svg(&svg,&name,None).map_err(|e|e.to_string())?;
- doc.settings.fabric=fabric;let d=doc.plan();if d.blocks.is_empty(){return Err("No stitchable artwork found".into())}Ok((doc,d))
+ doc.settings.fabric=fabric;
+ // Automatic raster artwork can use overlap-aware color grouping; preserve explicit SVG ordering.
+ if mime!="image/svg+xml" && doc.shapes.len()<=1000 {doc.settings.hat_order=true;}
+ let d=doc.plan();if d.blocks.is_empty(){return Err("No stitchable artwork found".into())}Ok((doc,d))
  }).await.map_err(|e|e.to_string())??;
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
