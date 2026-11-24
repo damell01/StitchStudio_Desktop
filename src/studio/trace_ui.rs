@@ -243,28 +243,39 @@ impl Studio {
         let mut open = true;
         let (mut ok, mut cancel) = (false, false);
         let busy = t.running.is_some();
-        egui::Window::new("Trace Image")
+        egui::Window::new("Auto Digitizer")
             .title_frame(crate::theme::title_frame(ctx))
             .open(&mut open)
             .resizable(false)
             .collapsible(false)
             .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 80.0))
             .show(ctx, |ui| {
+                let p = theme::pal_ui(ui);
+                ui.label(egui::RichText::new("Turn artwork into embroidery").size(22.0).strong().color(p.text));
+                theme::caption(ui, "Prepare your image, review the traced artwork, then refine stitches in Design Studio.");
+                ui.add_space(space::S);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("01  Import").color(p.secondary));
+                    ui.label(egui::RichText::new("02  Prepare & review").strong().color(p.accent));
+                    ui.label(egui::RichText::new("03  Edit stitches").color(p.secondary));
+                });
+                theme::section_break(ui);
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = space::M;
                     // Preview.
                     ui.vertical(|ui| {
+                        ui.label(egui::RichText::new("Artwork preview").strong().size(15.0));
                         theme::segmented(
                             ui,
                             "trace-view",
                             &mut t.show_original,
-                            &[(false, "Traced"), (true, "Original")],
+                            &[(false, "Traced artwork"), (true, "Original")],
                         );
                         ui.add_space(space::S);
                         let (r, _) = ui.allocate_exact_size(PREVIEW, egui::Sense::hover());
                         let p = theme::pal_ui(ui);
                         // On the hat's color (Document › Preview on), as it will sew.
-                        ui.painter().rect_filled(r, 6.0, Color32::from_rgb(cloth[0], cloth[1], cloth[2]));
+                        ui.painter().rect_filled(r, 12.0, Color32::from_rgb(cloth[0], cloth[1], cloth[2]));
                         let tex = if t.show_original { t.original.as_ref() } else { t.preview.as_ref() };
                         if let Some(tex) = tex {
                             let size = tex.size_vec2();
@@ -312,7 +323,10 @@ impl Studio {
                     });
                     // Options.
                     ui.vertical(|ui| {
-                        ui.set_width(280.0);
+                        ui.set_width(300.0);
+                        ui.label(egui::RichText::new("Image preparation").strong().size(15.0));
+                        theme::caption(ui, "Adjust the artwork before generating the design.");
+                        ui.add_space(space::XS);
                         let o = &mut t.opts;
                         theme::form(ui, "trace-form", |f| {
                             f.row("Colors", |ui, l| {
@@ -341,7 +355,8 @@ impl Studio {
                                     .labelled_by(l);
                             });
                         });
-                        ui.add_space(space::S);
+                        theme::section_break(ui);
+                        ui.label(egui::RichText::new("Cleanup & thread matching").strong());
                         ui.spacing_mut().item_spacing.y = space::S;
                         ui.checkbox(&mut o.remove_background, "Remove white background");
                         ui.checkbox(&mut t.use_threads, format!("Use {palette_name} thread colors"));
@@ -361,13 +376,19 @@ impl Studio {
                         );
                     });
                 });
-                ui.add_space(space::M);
+                theme::section_break(ui);
+                ui.horizontal(|ui| {
+                    if busy { ui.spinner(); theme::caption(ui, "Processing artwork locally…"); }
+                    else if matches!(&t.result, Some(Ok(_))) { ui.label(egui::RichText::new("Artwork ready for stitch editing").color(p.accent)); }
+                    else { theme::caption(ui, "Review the preview or adjust image settings."); }
+                });
+                ui.add_space(space::S);
                 ui.allocate_ui_with_layout(
                     egui::vec2(ui.available_width(), 24.0),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
                         let accent = theme::pal_ui(ui).accent;
-                        let ready = matches!(t.result, Some(Ok(_))) && !busy;
+                        let ready = matches!(t.result, Some(Ok(_))) && !busy && t.traced.as_ref() == Some(&(t.opts.clone(), t.use_threads)) && t.shown == t.asked;
                         let label = match t.target {
                             Target::Open => "Open",
                             Target::Place => "Place",
@@ -375,7 +396,7 @@ impl Studio {
                         ok = ui
                             .add_enabled(
                                 ready,
-                                egui::Button::new(egui::RichText::new(label).color(Color32::WHITE)).fill(accent),
+                                egui::Button::new(egui::RichText::new(label).strong().color(if theme::pal_ui(ui).dark { Color32::from_rgb(23, 30, 26) } else { Color32::WHITE })).fill(accent),
                             )
                             .clicked()
                             || (ready && ui.input(|i| i.key_pressed(Key::Enter)));
