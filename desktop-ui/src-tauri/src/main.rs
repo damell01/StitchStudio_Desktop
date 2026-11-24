@@ -13,10 +13,16 @@ fn preview(design: &Design) -> Preview { Preview { name: design.name.clone(), st
 fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview,String> {
     if ![scale,rotation,dx,dy].iter().all(|v| v.is_finite()) || !(0.1..=10.0).contains(&scale) || dx.abs()>500.0 || dy.abs()>500.0 { return Err("Invalid transformation".into()); }
     let mut guard=state.lock().map_err(|e|e.to_string())?;
-    guard.checkpoint();
-    guard.source=None;
-    let d=guard.current.as_mut().ok_or("Open artwork first")?;
     let (s,c)=rotation.to_radians().sin_cos();
+    if let Some(mut doc)=guard.source.clone(){
+        let indices:Vec<usize>=(0..doc.shapes.len()).collect();
+        doc.transform(&indices,[scale*c,scale*s,-scale*s,scale*c,dx*10.0,dy*10.0]).map_err(|e|e.to_string())?;
+        let design=doc.plan();if design.blocks.is_empty(){return Err("Transformation produced no stitches".into())}
+        let p=preview(&design);guard.checkpoint();guard.current=Some(design);guard.source=Some(doc);return Ok(p)
+    }
+    if guard.current.is_none(){return Err("Open artwork first".into())}
+    guard.checkpoint();
+    let d=guard.current.as_mut().ok_or("Open artwork first")?;
     for p in d.blocks.iter_mut().flat_map(|b| &mut b.runs).flat_map(|r| &mut r.pts) {
         let (x,y)=(p.x,p.y);
         p.x=scale*(x*c-y*s)+dx*10.0;
