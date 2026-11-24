@@ -41,3 +41,18 @@
 [data-theme=dark] .thread-row,[data-theme=dark] .editor-grid h2,[data-theme=dark] .preferences label,[data-theme=dark] .setup-row{border-color:#36463c}
 [data-theme=dark] .search input{background:transparent}
 [data-reduced=true] *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+
+[data-palette=blue]{--brand:#172c50;--brand-hover:#2857a0;--brand-soft:#e7effc;--brand-accent:#477fd2}
+[data-palette=slate]{--brand:#292e38;--brand-hover:#4c5668;--brand-soft:#e9ecf1;--brand-accent:#8490a3}
+:is([data-palette=blue],[data-palette=slate]) header,:is([data-palette=blue],[data-palette=slate]) aside{background:var(--brand)}
+:is([data-palette=blue],[data-palette=slate]) .primary,:is([data-palette=blue],[data-palette=slate]) .segmented .selected{background:var(--brand);color:white}
+:is([data-palette=blue],[data-palette=slate]) .primary:hover{background:var(--brand-hover)}
+:is([data-palette=blue],[data-palette=slate]) .tile-icon,:is([data-palette=blue],[data-palette=slate]) .learn,:is([data-palette=blue],[data-palette=slate]) aside>button.active{background:var(--brand-soft);color:var(--brand)}
+:is([data-palette=blue],[data-palette=slate]) header button,:is([data-palette=blue],[data-palette=slate]) .search{background:var(--brand-hover);border-color:var(--brand-accent)}
+:is([data-palette=blue],[data-palette=slate]) button:focus-visible,:is([data-palette=blue],[data-palette=slate]) input:focus-visible{outline-color:var(--brand-accent)}
+[data-theme=dark][data-palette=blue]{--brand:#101b30;--brand-hover:#2857a0;--brand-soft:#263953;--brand-accent:#83b4ff}
+[data-theme=dark][data-palette=slate]{--brand:#171a20;--brand-hover:#414b5d;--brand-soft:#303743;--brand-accent:#b1bdcf}
+[data-theme=dark]:is([data-palette=blue],[data-palette=slate]) body{background:#11151d;color:#e7edf7}
+[data-theme=dark]:is([data-palette=blue],[data-palette=slate]) :is(article,.tour,.studio-tools,button,input,select){background:#202631;border-color:#394352;color:#e7edf7}
+[data-theme=dark]:is([data-palette=blue],[data-palette=slate]) :is(.tile-icon,.learn,aside>button.active){color:#e7edf7;background:var(--brand-soft)}
+[data-theme=dark]:is([data-palette=blue],[data-palette=slate]) aside>button:not(.active){background:transparent}
