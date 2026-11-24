@@ -1,5 +1,5 @@
-//! A macOS-flavoured look for the studio: system font, light and dark
-//! palettes that follow the system appearance, accent blue, rounded controls,
+//! Modified for Stitch Studio: a macOS-flavoured look for the studio: system font, light and dark
+//! palettes that follow the system appearance, forest and sage accents, rounded controls,
 //! and a few helpers for Mac-style forms (right-aligned labels, grouped
 //! sections, segmented controls).
 
@@ -41,19 +41,19 @@ pub struct Pal {
 
 pub const LIGHT: Pal = Pal {
     dark: false,
-    toolbar: Color32::from_rgb(246, 246, 246),
-    dock: Color32::from_rgb(242, 242, 242),
-    header: Color32::from_rgb(234, 234, 234),
-    desk: Color32::from_rgb(222, 222, 222),
-    separator: Color32::from_rgb(214, 214, 214),
-    text: Color32::from_rgb(29, 29, 31),
-    secondary: Color32::from_rgb(110, 110, 115),
-    tertiary: Color32::from_rgb(160, 160, 165),
-    accent: Color32::from_rgb(0, 122, 255),
+    toolbar: Color32::from_rgb(247, 248, 245),
+    dock: Color32::from_rgb(255, 255, 255),
+    header: Color32::from_rgb(229, 237, 230),
+    desk: Color32::from_rgb(247, 248, 245),
+    separator: Color32::from_rgb(221, 228, 222),
+    text: Color32::from_rgb(32, 44, 38),
+    secondary: Color32::from_rgb(105, 118, 110),
+    tertiary: Color32::from_rgb(125, 139, 129),
+    accent: Color32::from_rgb(35, 69, 54),
     hover: Color32::from_rgba_premultiplied(0, 0, 0, 13),
     pressed: Color32::from_rgba_premultiplied(0, 0, 0, 26),
     control: Color32::WHITE,
-    control_border: Color32::from_rgb(204, 204, 204),
+    control_border: Color32::from_rgb(221, 228, 222),
     warning: Color32::from_rgb(255, 149, 0),
     error: Color32::from_rgb(255, 59, 48),
     hud: Color32::from_rgba_premultiplied(30, 30, 30, 215),
@@ -61,19 +61,19 @@ pub const LIGHT: Pal = Pal {
 
 pub const DARK: Pal = Pal {
     dark: true,
-    toolbar: Color32::from_rgb(44, 44, 46),
-    dock: Color32::from_rgb(36, 36, 38),
-    header: Color32::from_rgb(44, 44, 46),
-    desk: Color32::from_rgb(24, 24, 26),
-    separator: Color32::from_rgb(58, 58, 60),
-    text: Color32::from_rgb(235, 235, 240),
-    secondary: Color32::from_rgb(152, 152, 157),
-    tertiary: Color32::from_rgb(99, 99, 102),
-    accent: Color32::from_rgb(10, 132, 255),
+    toolbar: Color32::from_rgb(36, 45, 39),
+    dock: Color32::from_rgb(36, 45, 39),
+    header: Color32::from_rgb(36, 45, 39),
+    desk: Color32::from_rgb(23, 30, 26),
+    separator: Color32::from_rgb(54, 70, 60),
+    text: Color32::from_rgb(232, 238, 233),
+    secondary: Color32::from_rgb(170, 190, 176),
+    tertiary: Color32::from_rgb(125, 151, 132),
+    accent: Color32::from_rgb(154, 188, 159),
     hover: Color32::from_rgba_premultiplied(16, 16, 16, 16),
     pressed: Color32::from_rgba_premultiplied(28, 28, 28, 28),
-    control: Color32::from_rgb(64, 64, 68),
-    control_border: Color32::from_rgb(78, 78, 82),
+    control: Color32::from_rgb(43, 56, 47),
+    control_border: Color32::from_rgb(65, 84, 71),
     warning: Color32::from_rgb(255, 159, 10),
     error: Color32::from_rgb(255, 69, 58),
     hud: Color32::from_rgba_premultiplied(20, 20, 22, 225),
@@ -93,6 +93,16 @@ pub fn pal_ui(ui: &egui::Ui) -> Pal {
 
 /// System UI font: San Francisco on macOS, else Inter or another clean sans.
 fn system_font() -> Option<(String, Vec<u8>, u32)> {
+    let db = zigzag::svg::fontdb();
+    let query = usvg::fontdb::Query {
+        families: &[usvg::fontdb::Family::Name("DM Sans")],
+        ..Default::default()
+    };
+    if let Some(id) = db.query(&query)
+        && let Some((bytes, index)) = db.with_face_data(id, |d, i| (d.to_vec(), i))
+    {
+        return Some(("dm-sans".into(), bytes, index));
+    }
     for path in [
         "/System/Library/Fonts/SFNS.ttf",
         "/System/Library/Fonts/SFNSText.ttf",
@@ -142,14 +152,14 @@ fn visuals(p: &Pal) -> Visuals {
     w.inactive.fg_stroke = Stroke::new(1.0, p.text);
     w.inactive.corner_radius = r;
     let hover_bg = if p.dark {
-        Color32::from_rgb(76, 76, 80)
+        Color32::from_rgb(49, 65, 54)
     } else {
-        Color32::from_rgb(247, 247, 247)
+        Color32::from_rgb(237, 243, 238)
     };
     let active_bg = if p.dark {
-        Color32::from_rgb(90, 90, 95)
+        Color32::from_rgb(59, 79, 65)
     } else {
-        Color32::from_rgb(232, 232, 232)
+        Color32::from_rgb(229, 237, 230)
     };
     w.hovered.bg_fill = hover_bg;
     w.hovered.weak_bg_fill = hover_bg;
@@ -169,7 +179,7 @@ fn visuals(p: &Pal) -> Visuals {
     v.hyperlink_color = p.accent;
     v.faint_bg_color = p.header;
     v.extreme_bg_color = if p.dark {
-        Color32::from_rgb(28, 28, 30)
+        Color32::from_rgb(23, 30, 26)
     } else {
         Color32::WHITE
     };
@@ -178,16 +188,16 @@ fn visuals(p: &Pal) -> Visuals {
     v.error_fg_color = p.error;
     v.panel_fill = p.dock;
     v.window_fill = if p.dark {
-        Color32::from_rgb(40, 40, 42)
+        Color32::from_rgb(36, 45, 39)
     } else {
-        Color32::from_rgb(250, 250, 250)
+        Color32::from_rgb(255, 255, 255)
     };
     v.window_stroke = Stroke::new(
         1.0,
         if p.dark {
-            Color32::from_rgb(70, 70, 74)
+            Color32::from_rgb(54, 70, 60)
         } else {
-            Color32::from_rgb(208, 208, 208)
+            Color32::from_rgb(221, 228, 222)
         },
     );
     v.window_corner_radius = CornerRadius::same(10);
@@ -421,9 +431,9 @@ pub fn icon_button(
     let enabled = ui.is_enabled();
     let bg = if selected {
         Some(if p.dark {
-            Color32::from_rgb(70, 70, 74)
+            Color32::from_rgb(54, 70, 60)
         } else {
-            Color32::from_rgb(222, 222, 224)
+            Color32::from_rgb(229, 237, 230)
         })
     } else if resp.is_pointer_button_down_on() {
         Some(p.pressed)
@@ -468,9 +478,9 @@ pub fn segmented<T: PartialEq + Copy>(
     let total: f32 = widths.iter().sum::<f32>() + 4.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(total, 24.0), Sense::hover());
     let track = if p.dark {
-        Color32::from_rgb(28, 28, 30)
+        Color32::from_rgb(23, 30, 26)
     } else {
-        Color32::from_rgb(227, 227, 229)
+        Color32::from_rgb(229, 237, 230)
     };
     ui.painter().rect_filled(rect, 7.0, track);
     let mut x = rect.left() + 2.0;
@@ -485,7 +495,7 @@ pub fn segmented<T: PartialEq + Copy>(
         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, on, *label));
         if on {
             let sel = if p.dark {
-                Color32::from_rgb(99, 99, 102)
+                Color32::from_rgb(125, 151, 132)
             } else {
                 Color32::WHITE
             };
