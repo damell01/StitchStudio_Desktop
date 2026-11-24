@@ -1,8 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::sync::Mutex;
 #[derive(Default)]
-struct Workspace { source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<Design>, redo: Vec<Design> }
-impl Workspace { fn checkpoint(&mut self) { if let Some(d)=self.current.clone(){self.undo.push(d);if self.undo.len()>20{self.undo.remove(0);}self.redo.clear();} } }
+struct Workspace { source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)> }
+impl Workspace { fn checkpoint(&mut self) { if let Some(d)=self.current.clone(){self.undo.push((d,self.source.clone()));if self.undo.len()>20{self.undo.remove(0);}self.redo.clear();} } }
 use zigzag::{design::Design, formats};
 #[derive(serde::Serialize)]
 struct Preview { name: String, blocks: Vec<PreviewBlock>, stitches: usize, trims: usize }
@@ -73,12 +73,13 @@ fn current_preview(state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<Pre
 fn history_step(redo:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String> {
  let mut w=state.lock().map_err(|e|e.to_string())?;
  let next=if redo {w.redo.pop()} else {w.undo.pop()}.ok_or("No more history")?;
- w.source=None;
- if let Some(old)=w.current.replace(next){if redo {w.undo.push(old)}else{w.redo.push(old)}}
+ let (design,source)=next;
+ let previous_source=std::mem::replace(&mut w.source,source);
+ if let Some(old)=w.current.replace(design){if redo {w.undo.push((old,previous_source))}else{w.redo.push((old,previous_source))}}
  Ok(preview(w.current.as_ref().ok_or("No design")?))
 }
 #[derive(serde::Serialize,serde::Deserialize)]
-struct Project { version:u32,name:String,width:f64,height:f64,format:String,blocks:Vec<ProjectBlock> }
+struct Project { #[serde(default)] source_svg:Option<String>, version:u32,name:String,width:f64,height:f64,format:String,blocks:Vec<ProjectBlock> }
 #[derive(serde::Serialize,serde::Deserialize)]
 struct ProjectBlock {color:[u8;3],runs:Vec<ProjectRun>}
 #[derive(serde::Serialize,serde::Deserialize)]
@@ -88,7 +89,7 @@ struct OpenedProject {plan:Preview,width:f64,height:f64,format:String}
 #[tauri::command]
 async fn save_project(width:f64,height:f64,format:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<bool,String> {
  let project={let w=state.lock().map_err(|e|e.to_string())?;let d=w.current.as_ref().ok_or("No design")?;
- Project{version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
+ Project{source_svg:w.source.as_ref().map(|s|s.to_svg()).transpose().map_err(|e|e.to_string())?,version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
  let bytes=serde_json::to_vec(&project).map_err(|e|e.to_string())?;
  let Some(path)=rfd::AsyncFileDialog::new().add_filter("Stitch Studio project",&["stitchstudio"]).set_file_name("design.stitchstudio").save_file().await else{return Ok(false)};
  std::fs::write(path.path(),bytes).map_err(|e|e.to_string())?;Ok(true)
@@ -99,9 +100,10 @@ async fn open_project(state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<
  if std::fs::metadata(path.path()).map_err(|e|e.to_string())?.len()>100_000_000{return Err("Project exceeds size limit".into())}
  let p:Project=serde_json::from_slice(&std::fs::read(path.path()).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
  if p.version!=1 || !p.width.is_finite() || !p.height.is_finite() || p.width<=0.0 || p.height<=0.0 || !["dst","pes","jef","exp","vp3","pec"].contains(&p.format.as_str()) || p.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.points).flatten().any(|v|!v.is_finite()||v.abs()>1000000.0){return Err("Invalid project".into())}
+ let source=p.source_svg.as_ref().map(|svg|zigzag::document::Document::from_svg(svg,&p.name,None)).transpose().map_err(|e|e.to_string())?;
  let d=Design{name:p.name,blocks:p.blocks.into_iter().map(|b|zigzag::design::Block{color:b.color,runs:b.runs.into_iter().map(|r|zigzag::design::Run{pts:r.points.into_iter().map(|v|zigzag::geom::P::new(v[0],v[1])).collect(),trim_before:r.trim_before}).collect()}).collect(),..Default::default()};
  let result=OpenedProject{plan:preview(&d),width:p.width,height:p.height,format:p.format};
- *state.lock().map_err(|e|e.to_string())?=Workspace{current:Some(d),..Default::default()};Ok(Some(result))
+ *state.lock().map_err(|e|e.to_string())?=Workspace{source,current:Some(d),..Default::default()};Ok(Some(result))
 }
 #[tauri::command]
 fn load_template(id:String,art:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
