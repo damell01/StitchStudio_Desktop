@@ -176,6 +176,24 @@ fn load_template(id:String,art:String,state:tauri::State<'_,Mutex<Workspace>>) -
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(source);Ok(p)
 }
 #[tauri::command]
+async fn insert_embroidery(x_mm:f64,y_mm:f64,state:tauri::State<'_,Mutex<Workspace>>)->Result<Option<Preview>,String>{
+ if ![x_mm,y_mm].iter().all(|v|v.is_finite()&&v.abs()<=500.0){return Err("Invalid placement".into())}
+ let Some(path)=rfd::AsyncFileDialog::new().add_filter("Embroidery designs",&["dst","pes","pec","exp","jef"]).pick_file().await else{return Ok(None)};
+ let path=path.path().to_owned();
+ let added=tauri::async_runtime::spawn_blocking(move||->Result<Design,String>{
+ if std::fs::metadata(&path).map_err(|e|e.to_string())?.len()>20_000_000{return Err("Design exceeds 20 MB".into())}
+ let bytes=std::fs::read(&path).map_err(|e|e.to_string())?;
+ let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
+ let file=formats::read::read_stitch_file(&bytes,&ext).map_err(|e|e.to_string())?;
+ let mut d=Design::default();d.name=path.file_stem().and_then(|s|s.to_str()).unwrap_or("Imported design").to_owned();
+ for b in file.blocks {d.blocks.push(zigzag::design::Block{color:b.color,runs:b.runs.into_iter().enumerate().map(|(i,mut pts)|{for p in &mut pts{p.x+=x_mm*10.0;p.y+=y_mm*10.0;}zigzag::design::Run{pts,trim_before:i>0}}).collect()});}
+ if d.blocks.is_empty(){return Err("No stitches found".into())}Ok(d)
+ }).await.map_err(|e|e.to_string())??;
+ let mut w=state.lock().map_err(|e|e.to_string())?;let mut combined=w.current.clone().unwrap_or_default();if combined.blocks.is_empty(){combined.name=added.name;}
+ combined.blocks.extend(added.blocks);combined.per_shape.clear();combined.sew_order.clear();combined.notes.clear();combined.block_shapes.clear();combined.covered.clear();
+ let p=preview(&combined);w.checkpoint();w.current=Some(combined);w.source=None;Ok(Some(p))
+}
+#[tauri::command]
 fn insert_template(id:String,art:String,width_mm:f64,x_mm:f64,y_mm:f64,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  if !["heart","star","leaf","football","bow","mountain","wildflower","sunrise","baseball","anchor","butterfly","laurel","bear","bunny","fox","penguin","dino","whale","ghost","rocket","puppy","mouse","turtle","gingerbread","duck","sailboat","mickey","minnie","bluey","bingo","stitch","coquette","bluebow","cherrybow","hello-kitty","pikachu","pooh","spongebob","snoopy","rainbow","cherries","strawberry","unicorn"].contains(&id.as_str()) || art.len()>4096 || art.contains("href") || art.contains("<image") || art.contains("<script"){return Err("Invalid design".into())}
  if ![width_mm,x_mm,y_mm].iter().all(|v|v.is_finite()) || !(5.0..=250.0).contains(&width_mm) || x_mm.abs()>500.0 || y_mm.abs()>500.0{return Err("Invalid design dimensions".into())}
@@ -377,4 +395,4 @@ async fn preview_cleanup(bytes:Vec<u8>,remove_background:bool,tolerance:u8,clean
  Ok(PreparedArtwork{width,height,rgba})
  }).await.map_err(|e|e.to_string())?
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
