@@ -9,3 +9,5 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 zigzag = { path = "../.." }
 rfd = "0.15"
+
+serde_json = "1"
