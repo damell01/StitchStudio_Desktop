@@ -333,11 +333,17 @@ impl Studio {
         });
     }
 
-    pub fn status_bar(&mut self, ui: &mut egui::Ui) {
+    pub fn simulator_bar(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
         let total = self.design.stitch_count();
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
+            ui.label(egui::RichText::new("Stitch simulator").strong().size(13.0).color(p.text));
+            ui.separator();
+            if ui.add_enabled(total > 0, egui::Button::new("Restart")).clicked() {
+                self.playing = false;
+                self.player = Some(0);
+            }
             let icon = if self.playing {
                 Icon::Pause
             } else {
@@ -358,7 +364,7 @@ impl Studio {
                 }
             });
             let mut pos = self.player.unwrap_or(total);
-            ui.spacing_mut().slider_width = 220.0;
+            ui.spacing_mut().slider_width = (ui.available_width() * 0.28).clamp(100.0, 340.0);
             let slider = ui
                 .add_enabled(
                     total > 0,
@@ -406,9 +412,21 @@ impl Studio {
                     (StitchView::Lines, "Stitch Lines"),
                 ],
             );
+            if ui.add_enabled(total > 0, egui::Button::new("End")).clicked() {
+                self.playing = false;
+                self.player = None;
+            }
+        });
+    }
+
+    pub fn status_bar(&mut self, ui: &mut egui::Ui) {
+        let p = pal_ui(ui);
+        let total = self.design.stitch_count();
+        ui.horizontal_centered(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
             let b = self.design_bounds();
             let stats = format!(
-                "{} · {} colors · {} trims · ~{:.0} min",
+                "{} · {} color blocks · {} trims · ~{:.0} min",
                 crate::units::fmt_size(b.width(), b.height()),
                 self.design.blocks.len(),
                 self.design.trim_count(),
