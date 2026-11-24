@@ -12,6 +12,41 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
 const TRAFFIC_LIGHTS: f32 = 70.0;
 
 impl Studio {
+    /// Labeled, discoverable shortcuts backed by the existing editor commands.
+    pub fn workspace_toolbar(&mut self, ui: &mut egui::Ui) {
+        let p = pal_ui(ui);
+        ui.horizontal_centered(|ui| {
+            ui.spacing_mut().item_spacing.x = 5.0;
+            egui::ScrollArea::horizontal().id_salt("workspace-actions").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Design Studio").strong().size(15.0).color(p.text));
+                    ui.separator();
+                    for (label, action) in [
+                        ("New", Action::New), ("Open", Action::Open), ("Save", Action::Save),
+                        ("Undo", Action::Undo), ("Redo", Action::Redo),
+                        ("Import artwork", Action::Place), ("Lettering", Action::AddText),
+                        ("Fit hoop", Action::FitToHoop), ("Fit view", Action::ZoomFit),
+                        ("Simulate", Action::PlayPause), ("Density", Action::ToggleDensity),
+                        ("Inspect", Action::ShowIssues),
+                    ] {
+                        let enabled = self.action_enabled(action);
+                        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                            self.run_action(action);
+                        }
+                    }
+                    ui.separator();
+                    let enabled = self.action_enabled(Action::Export("pes"));
+                    let fg = if p.dark { Color32::from_rgb(23, 30, 26) } else { Color32::WHITE };
+                    if ui.add_enabled(enabled, egui::Button::new(
+                        egui::RichText::new("Export PES").strong().color(fg)
+                    ).fill(p.accent)).clicked() {
+                        self.run_action(Action::Export("pes"));
+                    }
+                });
+            });
+        });
+    }
+
     pub fn titlebar(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
         let ctx = ui.ctx().clone();
