@@ -175,11 +175,35 @@ fn load_template(id:String,art:String,state:tauri::State<'_,Mutex<Workspace>>) -
  if d.blocks.is_empty(){return Err("Template contains no stitches".into())}
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(source);Ok(p)
 }
+fn personal_design_dir(app:&tauri::AppHandle)->Result<std::path::PathBuf,String>{
+ use tauri::Manager;let dir=app.path().app_local_data_dir().map_err(|e|e.to_string())?.join("designs");std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;Ok(dir)
+}
 #[tauri::command]
-async fn insert_embroidery(x_mm:f64,y_mm:f64,state:tauri::State<'_,Mutex<Workspace>>)->Result<Option<Preview>,String>{
+fn personal_designs(app:tauri::AppHandle)->Result<Vec<String>,String>{
+ let mut names=Vec::new();for entry in std::fs::read_dir(personal_design_dir(&app)?).map_err(|e|e.to_string())?.flatten(){if entry.file_type().map(|t|t.is_file()).unwrap_or(false){names.push(entry.file_name().to_string_lossy().into_owned());}}names.sort();Ok(names)
+}
+#[tauri::command]
+async fn import_personal_designs(folder:bool,app:tauri::AppHandle)->Result<usize,String>{
+ let paths=if folder{let Some(p)=rfd::AsyncFileDialog::new().pick_folder().await else{return Ok(0)};vec![p.path().to_owned()]}else{let Some(p)=rfd::AsyncFileDialog::new().add_filter("Embroidery",&["dst","pes","pec","exp","jef"]).pick_files().await else{return Ok(0)};p.into_iter().map(|p|p.path().to_owned()).collect()};
+ let dir=personal_design_dir(&app)?;
+ tauri::async_runtime::spawn_blocking(move||->Result<usize,String>{
+ let mut stack=paths;let mut count=0;let mut visited=0;
+ while let Some(p)=stack.pop(){visited+=1;if visited>50000||count>=2000{break}
+ let Ok(meta)=std::fs::symlink_metadata(&p) else{continue};if meta.file_type().is_symlink(){continue}
+ if meta.is_dir(){if let Ok(entries)=std::fs::read_dir(&p){stack.extend(entries.flatten().map(|e|e.path()))}continue}
+ let ext=p.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
+ if !meta.is_file()||meta.len()>20_000_000||!["dst","pes","pec","exp","jef"].contains(&ext.as_str()){continue}
+ let Ok(bytes)=std::fs::read(&p) else{continue};if formats::read::read_stitch_file(&bytes,&ext).map(|f|f.blocks.is_empty()).unwrap_or(true){continue}
+ let stem=p.file_stem().unwrap_or_default().to_string_lossy();
+ for n in 0..1000{let name=if n==0{format!("{stem}.{ext}")}else{format!("{stem} ({n}).{ext}")};let dest=dir.join(name);
+ match std::fs::OpenOptions::new().write(true).create_new(true).open(&dest){Ok(mut f)=>{use std::io::Write;if let Err(e)=f.write_all(&bytes){let _=std::fs::remove_file(&dest);return Err(e.to_string())}count+=1;break},Err(e) if e.kind()==std::io::ErrorKind::AlreadyExists=>{if std::fs::read(&dest).ok().as_deref()==Some(bytes.as_slice()){break}},Err(e)=>return Err(e.to_string())}
+ }}Ok(count)
+ }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+async fn insert_embroidery(x_mm:f64,y_mm:f64,file:Option<String>,app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>)->Result<Option<Preview>,String>{
  if ![x_mm,y_mm].iter().all(|v|v.is_finite()&&v.abs()<=500.0){return Err("Invalid placement".into())}
- let Some(path)=rfd::AsyncFileDialog::new().add_filter("Embroidery designs",&["dst","pes","pec","exp","jef"]).pick_file().await else{return Ok(None)};
- let path=path.path().to_owned();
+ let path=if let Some(name)=file{let p=std::path::Path::new(&name);if p.components().count()!=1||!matches!(p.components().next(),Some(std::path::Component::Normal(_))){return Err("Invalid design filename".into())}personal_design_dir(&app)?.join(p)}else{let Some(path)=rfd::AsyncFileDialog::new().add_filter("Embroidery designs",&["dst","pes","pec","exp","jef"]).pick_file().await else{return Ok(None)};path.path().to_owned()};
  let added=tauri::async_runtime::spawn_blocking(move||->Result<Design,String>{
  if std::fs::metadata(&path).map_err(|e|e.to_string())?.len()>20_000_000{return Err("Design exceeds 20 MB".into())}
  let bytes=std::fs::read(&path).map_err(|e|e.to_string())?;
@@ -395,4 +419,4 @@ async fn preview_cleanup(bytes:Vec<u8>,remove_background:bool,tolerance:u8,clean
  Ok(PreparedArtwork{width,height,rgba})
  }).await.map_err(|e|e.to_string())?
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
