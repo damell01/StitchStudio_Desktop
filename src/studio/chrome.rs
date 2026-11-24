@@ -61,7 +61,15 @@ impl Studio {
                         ("Inspect", Action::ShowIssues),
                     ] {
                         let enabled = self.action_enabled(action);
-                        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                        if ui.add_enabled(enabled, egui::Button::new(label).min_size(Vec2::new(0.0, 28.0))).on_hover_text(match label {
+                            "Import artwork" => "Turn a picture or vector artwork into embroidery objects",
+                            "Fit hoop" => "Resize the design to fit the selected hoop",
+                            "Fit view" => "Zoom to the design without changing its size",
+                            "Inspect" => "Check the design for potential sewing problems",
+                            "Simulate" => "Play or pause the actual stitch sequence",
+                            "Density" => "Show or hide stitch density visualization",
+                            _ => label,
+                        }).clicked() {
                             self.run_action(action);
                         }
                     }
@@ -156,7 +164,7 @@ impl Studio {
             }
         }
         ui.horizontal_centered(|ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
+            ui.spacing_mut().item_spacing.x = 10.0;
             if cfg!(target_os = "macos") {
                 ui.add_space(TRAFFIC_LIGHTS);
             } else {
