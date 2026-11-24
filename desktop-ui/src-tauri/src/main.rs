@@ -56,8 +56,9 @@ async fn open_svg(width_mm: f64, colors: u32, remove_background: bool, detail: f
     Ok(Some(preview))
 }
 #[tauri::command]
-async fn export_design(format: String, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool,String> {
-    let bytes = { let guard = state.lock().map_err(|e| e.to_string())?; let d = guard.current.as_ref().ok_or("Open artwork first")?; formats::write_format(d,&format).map_err(|e|e.to_string())? };
+async fn export_design(format: String, width: f64, height: f64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool,String> {
+    if !width.is_finite() || !height.is_finite() || width<=0.0 || height<=0.0 {return Err("Invalid hoop dimensions".into());}
+    let bytes = { let guard = state.lock().map_err(|e| e.to_string())?; let d = guard.current.as_ref().ok_or("Open artwork first")?; if d.blocks.iter().flat_map(|b| &b.runs).flat_map(|r| &r.pts).any(|p| !p.x.is_finite() || !p.y.is_finite() || p.x.abs()>width*5.0 || p.y.abs()>height*5.0) {return Err("Design exceeds selected hoop".into());} formats::write_format(d,&format).map_err(|e|e.to_string())? };
     let Some(path) = rfd::AsyncFileDialog::new().add_filter("Embroidery", &[format.as_str()]).set_file_name(format!("design.{format}")).save_file().await else {return Ok(false)};
     std::fs::write(path.path(),bytes).map_err(|e|e.to_string())?;
     Ok(true)
