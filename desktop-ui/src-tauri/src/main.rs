@@ -422,4 +422,38 @@ async fn preview_cleanup(bytes:Vec<u8>,remove_background:bool,tolerance:u8,clean
  Ok(PreparedArtwork{width,height,rgba})
  }).await.map_err(|e|e.to_string())?
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+
+#[derive(serde::Serialize)]
+struct CharacterEntry {group:String,name:String,file:String}
+fn character_root()->Result<std::path::PathBuf,String>{
+ let home=std::env::var_os("USERPROFILE").or_else(||std::env::var_os("HOME")).ok_or("Home folder unavailable")?;
+ Ok(std::path::PathBuf::from(home).join("StitchStudio Artwork"))
+}
+fn character_component(s:&str)->bool{let mut c=std::path::Path::new(s).components();matches!(c.next(),Some(std::path::Component::Normal(_)))&&c.next().is_none()}
+#[tauri::command]
+fn character_list()->Result<Vec<CharacterEntry>,String>{
+ let mut out=Vec::new();let root=character_root()?;
+ if !root.exists(){return Ok(out)}
+ for group in std::fs::read_dir(root).map_err(|e|e.to_string())?.flatten(){
+ if !group.file_type().is_ok_and(|t|t.is_dir()){continue}
+ let Ok(files)=std::fs::read_dir(group.path()) else{continue};
+ for f in files.flatten(){if out.len()>=1000{break}
+ if !f.file_type().is_ok_and(|t|t.is_file()){continue}
+ let path=f.path();let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_lowercase();
+ if !matches!(ext.as_str(),"png"|"webp"|"jpg"|"jpeg"){continue}
+ if !f.metadata().is_ok_and(|m|m.len()<=20_000_000){continue}
+ out.push(CharacterEntry{group:group.file_name().to_string_lossy().into_owned(),name:path.file_stem().unwrap_or_default().to_string_lossy().into_owned(),file:f.file_name().to_string_lossy().into_owned()});
+ }}
+ out.sort_by(|a,b|(&a.group,&a.name).cmp(&(&b.group,&b.name)));Ok(out)
+}
+#[tauri::command]
+async fn character_image(group:String,file:String)->Result<Vec<u8>,String>{
+ if !character_component(&group)||!character_component(&file){return Err("Invalid artwork name".into())}
+ let dir=character_root()?.join(group);let path=dir.join(file);
+ if !std::fs::symlink_metadata(&dir).is_ok_and(|m|m.file_type().is_dir())||!std::fs::symlink_metadata(&path).is_ok_and(|m|m.file_type().is_file()&&m.len()<=20_000_000){return Err("Artwork unavailable".into())}
+ let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_lowercase();
+ if !matches!(ext.as_str(),"png"|"webp"|"jpg"|"jpeg"){return Err("Unsupported artwork".into())}
+ tauri::async_runtime::spawn_blocking(move||std::fs::read(path).map_err(|e|e.to_string())).await.map_err(|e|e.to_string())?
+}
+
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
