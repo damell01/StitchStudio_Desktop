@@ -1624,6 +1624,16 @@ impl Studio {
     fn objects_body(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
         let rows = self.object_rows();
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Design layers").strong().size(15.0).color(p.text));
+            caption(ui, format!("{} objects", self.doc.shapes.len()));
+        });
+        caption(ui, "Select objects to edit their stitch settings.");
+        if rows.is_empty() {
+            ui.add_space(theme::space::S);
+            caption(ui, "Import artwork, add lettering or draw to create your first layer.");
+        }
+        ui.add_space(theme::space::XS);
         // The list fills its dock when it's alone there; sharing, it's as
         // tall as its rows, up to a third of the dock (then it scrolls).
         let list_h = match self.dock_ui.current {
@@ -1632,7 +1642,7 @@ impl Studio {
             Some(side) => {
                 let h = self.dock_ui.column_h[side.side()];
                 if self.panels_in(side).len() > 1 {
-                    (rows.len().max(3) as f32 * 26.0 + 8.0).clamp(110.0, (h * 0.36).max(110.0))
+                    (rows.len().max(3) as f32 * 30.0 + 8.0).clamp(110.0, (h * 0.36).max(110.0))
                 } else {
                     (h - 20.0 - 26.0 - 64.0).max(120.0)
                 }
@@ -1652,7 +1662,7 @@ impl Studio {
         let mut group_click: Option<Vec<usize>> = None;
         // Only the rows in view are laid out and painted (a traced design
         // has hundreds; each row is text, an icon and a hover check).
-        const ROW: f32 = 26.0;
+        const ROW: f32 = 30.0;
         egui::ScrollArea::vertical()
             .id_salt("objects")
             .max_height(list_h)
@@ -1682,11 +1692,11 @@ impl Studio {
                             });
                             let painter = ui.painter();
                             if all {
-                                painter.rect_filled(rect, 5.0, p.accent);
+                                painter.rect_filled(rect, 8.0, p.accent);
                             } else if resp.hovered() {
-                                painter.rect_filled(rect, 5.0, p.hover);
+                                painter.rect_filled(rect, 8.0, p.hover);
                             } else if some {
-                                painter.rect_filled(rect, 5.0, p.accent.gamma_multiply(0.18));
+                                painter.rect_filled(rect, 8.0, p.accent.gamma_multiply(0.18));
                             }
                             let fg = if all { Color32::WHITE } else { p.text };
                             let fg2 = if all {
@@ -1797,7 +1807,7 @@ impl Studio {
                         };
                         painter.rect_filled(rect, 5.0, c);
                     } else if resp.hovered() || self.hovered == Some(i) {
-                        painter.rect_filled(rect, 5.0, p.hover);
+                        painter.rect_filled(rect, 8.0, p.hover);
                     }
                     let fg = if selected { Color32::WHITE } else { p.text };
                     let fg2 = if selected {
