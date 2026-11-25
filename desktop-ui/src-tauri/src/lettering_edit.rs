@@ -12,6 +12,9 @@ pub(crate) struct LetteringSettings {
     pub italic: bool,
     pub color: [u8; 3],
     pub align: String,
+    #[serde(default)] pub h_scale: Option<f64>,
+    #[serde(default)] pub v_scale: Option<f64>,
+    #[serde(default)] pub kern: Option<Vec<(usize,f64)>>,
 }
 
 impl LetteringSettings {
@@ -28,10 +31,13 @@ impl LetteringSettings {
             return Err("Choose an installed font.".into());
         }
         let align = Align::parse(&self.align).ok_or("Choose a lettering alignment.")?;
+        let h_scale=self.h_scale.unwrap_or(100.0);let v_scale=self.v_scale.unwrap_or(100.0);
+        let kern=self.kern.unwrap_or_default();
+        if !(25.0..=250.0).contains(&h_scale)||!(25.0..=250.0).contains(&v_scale)||kern.len()>120||kern.iter().any(|(i,v)|*i>=self.text.chars().count()||!(-10.0..=10.0).contains(v)){return Err("Check lettering scale and character spacing.".into())}
         Ok(TextSpec {
             text: self.text, font: self.font, size_mm: self.size, spacing_mm: self.spacing,
             arc_mm: self.arc, bold: self.bold, italic: self.italic, color: self.color, align,
-            ..Default::default()
+            h_scale,v_scale,kern,..Default::default()
         })
     }
 }
@@ -79,24 +85,29 @@ pub(crate) fn lettering_settings(uid:usize,state:tauri::State<'_,std::sync::Mute
  let w=state.lock().map_err(|e|e.to_string())?;
  let Some(doc)=w.source.as_ref() else{return Ok(None)};
  let Some(index)=doc.shapes.iter().position(|s|s.uid==uid) else{return Ok(None)};
- Ok(doc.lettering(index).map(|s|LetteringSettings{text:s.text,font:s.font,size:s.size_mm,spacing:s.spacing_mm,arc:s.arc_mm,bold:s.bold,italic:s.italic,color:s.color,align:s.align.name().into()}))
+ Ok(doc.lettering(index).map(|s|LetteringSettings{text:s.text,font:s.font,size:s.size_mm,spacing:s.spacing_mm,arc:s.arc_mm,bold:s.bold,italic:s.italic,color:s.color,align:s.align.name().into(),h_scale:Some(s.h_scale),v_scale:Some(s.v_scale),kern:Some(s.kern)}))
 }
 #[tauri::command]
 pub(crate) async fn update_lettering(uid:usize,settings:LetteringSettings,app:tauri::AppHandle)->Result<Preview,String>{
  use tauri::Manager;
  tauri::async_runtime::spawn_blocking(move||{
- let next=settings.spec()?;
+ let scale_x=settings.h_scale.is_some();let scale_y=settings.v_scale.is_some();let has_kern=settings.kern.is_some();let next=settings.spec()?;
  let state=app.state::<std::sync::Mutex<Workspace>>();
  let mut w=state.lock().map_err(|e|e.to_string())?;
  let mut doc=w.source.clone().ok_or("No editable design")?;
  let index=doc.shapes.iter().position(|s|s.uid==uid).ok_or("Text object not found")?;
  let mut spec=doc.lettering(index).ok_or("Selected object is not editable text")?;
- spec.text=next.text;spec.font=next.font;spec.size_mm=next.size_mm;spec.spacing_mm=next.spacing_mm;spec.arc_mm=next.arc_mm;spec.bold=next.bold;spec.italic=next.italic;spec.color=next.color;spec.align=next.align;
+ spec.text=next.text;spec.font=next.font;spec.size_mm=next.size_mm;spec.spacing_mm=next.spacing_mm;spec.arc_mm=next.arc_mm;spec.bold=next.bold;spec.italic=next.italic;spec.color=next.color;spec.align=next.align;if scale_x{spec.h_scale=next.h_scale}if scale_y{spec.v_scale=next.v_scale}if has_kern{spec.kern=next.kern}
  doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
  let design=doc.plan();
  if design.stitch_count()==0{return Err("No stitches generated".into())}
  let result=preview(&design);w.checkpoint();w.current=Some(design);w.source=Some(doc);Ok(result)
  }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+pub(crate) async fn insert_lettering_settings(settings:LetteringSettings,app:tauri::AppHandle)->Result<Preview,String>{
+ use tauri::Manager;
+ tauri::async_runtime::spawn_blocking(move||{let spec=settings.spec()?;let state=app.state::<std::sync::Mutex<Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;apply(&mut w,&spec,Some([0.0,0.0]))}).await.map_err(|e|e.to_string())?
 }
 #[cfg(test)]
 mod tests {
