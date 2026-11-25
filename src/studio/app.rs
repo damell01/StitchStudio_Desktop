@@ -709,6 +709,14 @@ impl Studio {
 
     pub fn export_to(&mut self, ext: &str, path: &Path) -> anyhow::Result<()> {
         self.plan_now();
+        if ext != "html" {
+            if let Some(issue) = self.issues.iter().find(|i| i.level == zigzag::checks::Level::Error) {
+                anyhow::bail!("Export blocked: {}", issue.message);
+            }
+            if self.design.stitch_count() == 0 {
+                anyhow::bail!("Export blocked: no stitches to export.");
+            }
+        }
         let bytes = if ext == "html" {
             self.worksheet_html()?.into_bytes()
         } else {
