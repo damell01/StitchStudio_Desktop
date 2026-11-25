@@ -196,6 +196,9 @@ const selectionTransform=resizePreview
   ? `translate(${resizePreview.x} ${resizePreview.y}) scale(${resizePreview.sx} ${resizePreview.sy}) translate(${-resizePreview.x} ${-resizePreview.y})`
   : `translate(${objectOffset.join(' ')})`;
 const points=useMemo(()=>plan?.blocks.flatMap(block=>block.runs.flat())??[],[plan]);
+const [historyLabels,setHistoryLabels]=useState<[string[],string[]]>([[],[]]);
+useEffect(()=>{if(busy)return;let active=true;invoke<[string[],string[]]>('history_labels').then(h=>{if(active)setHistoryLabels(h)}).catch(()=>{if(active)setHistoryLabels([[],[]])});return()=>{active=false}},[plan,busy]);
+
 const [sewingSpm,setSewingSpm]=useState(()=>{const n=Number(localStorage.getItem('studio-sewing-spm')||800);return Number.isFinite(n)&&n>=100&&n<=1500?n:800});
 const [trimSeconds,setTrimSeconds]=useState(()=>{const n=Number(localStorage.getItem('studio-trim-seconds')||3);return Number.isFinite(n)&&n>=0&&n<=30?n:3});
 const [changeSeconds,setChangeSeconds]=useState(()=>{const n=Number(localStorage.getItem('studio-change-seconds')||8);return Number.isFinite(n)&&n>=0&&n<=120?n:8});
@@ -452,8 +455,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     
   </div>
   <div className="studio-command-group">
-    <button className="studio-tool-icon" title="Undo" aria-label="Undo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:false})}><Undo2 size={17}/></button>
-    <button className="studio-tool-icon" title="Redo" aria-label="Redo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:true})}><Redo2 size={17}/></button>
+    <button className="studio-tool-icon" title={historyLabels[0].length?"Undo: "+historyLabels[0].at(-1):"Undo"} aria-label="Undo" disabled={!historyLabels[0].length||busy} onClick={()=>edit('history_step',{redo:false})}><Undo2 size={17}/></button>
+    <button className="studio-tool-icon" title={historyLabels[1].length?"Redo: "+historyLabels[1].at(-1):"Redo"} aria-label="Redo" disabled={!historyLabels[1].length||busy} onClick={()=>edit('history_step',{redo:true})}><Redo2 size={17}/></button>
   </div>
   <div className="studio-command-group studio-design-tools" role="group" aria-label="Create and edit"><button className="studio-add-text" disabled={busy} onClick={()=>openText()}><Type size={17}/> Add Text</button>
     <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/></button>
@@ -493,7 +496,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   ]}/>
   <details className="workspace-options">
     <summary title="Workspace options" aria-label="Workspace options"><Menu size={18}/></summary>
-    <div className="workspace-options-panel">
+    <div className="workspace-options-panel"><details className="studio-inspector-section"><summary>Editing history</summary><small>Undo · latest first</small>{historyLabels[0].length?<ol>{[...historyLabels[0]].reverse().map((label,i)=><li key={i}>{label}</li>)}</ol>:<p>No undo actions</p>}<small>Redo · latest first</small>{historyLabels[1].length?<ol>{[...historyLabels[1]].reverse().map((label,i)=><li key={i}>{label}</li>)}</ol>:<p>No redo actions</p>}</details>
       <button disabled={busy} onClick={projectOpen}>Open project</button>
       <button disabled={busy} onClick={recover}>Recover last design</button>
       <label><span>Layers panel width</span><input aria-label="Left panel width" type="range" min="160" max="340" value={leftWidth} onChange={e=>setLeftWidth(Number(e.target.value))}/></label>
