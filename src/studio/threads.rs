@@ -653,6 +653,18 @@ impl Studio {
         });
         ui.collapsing("Advanced color tools", |ui| {
             let selection = self.sel_indices();
+            if ui.add_enabled(!selection.is_empty(), egui::Button::new("Automatic stitch settings")).on_hover_text("Reset selected objects to automatic stitch type and fabric spacing").clicked() {
+                for &i in &selection {
+                    let p = &mut self.doc.shapes[i].params;
+                    if p.kind == Some(Kind::Skip) { continue; }
+                    p.kind = None;
+                    p.spacing = None;
+                    p.underlay = None;
+                    p.angle = None;
+                }
+                self.status = "Restored automatic stitch settings for selection.".into();
+            }
+
             if ui.add_enabled(!selection.is_empty(), egui::Button::new("Restore original artwork colors")).clicked() {
                 for &i in &selection {
                     self.doc.shapes[i].color = self.doc.shapes[i].paint;
