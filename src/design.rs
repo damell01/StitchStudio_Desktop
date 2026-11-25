@@ -278,6 +278,17 @@ pub fn travel_ring(rings: &[Polyline], rule: FillRule) -> Vec<Polyline> {
     inset
 }
 
+/// Try a small inset as a fallback for thin artwork where the normal
+/// half-millimeter inset disappears. Every sewn segment is independently
+/// checked against the original filled region by the caller.
+fn thin_travel_ring(rings: &[Polyline], rule: FillRule) -> Vec<Polyline> {
+    let mut inset = boolean::offset(rings, rule, -1.0);
+    for r in &mut inset {
+        if r.len() >= 3 && r.first() != r.last() { r.push(r[0]); }
+    }
+    inset
+}
+
 /// [`route_inside`] along rings already worked out by [`travel_ring`].
 fn route_along(inset: &[Polyline], from: P, to: P, max_len: f64) -> Option<Polyline> {
     // Both ends must be nearest the same inset ring.
@@ -1689,6 +1700,7 @@ pub fn plan_cached(
         }
         // The fill's travel ring, worked out when a gap first needs it.
         let mut travel: Option<Vec<Polyline>> = None;
+        let mut thin_travel: Option<Vec<Polyline>> = None;
         let start_at = shape
             .params
             .start
@@ -1838,7 +1850,7 @@ pub fn plan_cached(
                 // disconnected islands. For automatic fills, prefer a slightly
                 // farther endpoint reachable by a covered straight stitch.
                 // Bound the geometry checks and preserve reserved end pieces.
-                if (opt.hat_order || shape.groups.iter().any(|g| g.starts_with("tl-lettering-"))) && !force_trim && !from_start && !finishing
+                if shape.params.kind != Some(Kind::Manual) && !force_trim && !from_start && !finishing
                     && same_shape && cursor.is_some()
                     && let Some((rings, rule)) = sr.area.as_ref()
                 {
@@ -1864,7 +1876,7 @@ pub fn plan_cached(
                             }
                         }
                         nearby.sort_by(|a,b| a.0.total_cmp(&b.0));
-                        if let Some((_, i, alt, at, _)) = nearby.into_iter().take(8)
+                        if let Some((_, i, alt, at, _)) = nearby.into_iter().take(16)
                             .find(|(_,_,_,_,q)| segment_inside(rings,*rule,here,*q,1.0))
                         {
                             best=i;best_alt=alt;best_at=at;
@@ -1960,17 +1972,24 @@ pub fn plan_cached(
                         && (same_shape || opt.hat_order)
                         && opt.travel_route > 0.0
                         && let Some((rings, rule)) = sr.area.as_ref()
-                        && let Some(route) = route_along(
-                            travel.get_or_insert_with(|| travel_ring(rings, *rule)),
-                            prev,
-                            start,
-                            opt.travel_route,
-                        )
-                        // Validate the entire routed path, including the
-                        // connectors from and to the inset boundary.
-                        && std::iter::once(prev).chain(route.iter().copied())
-                            .zip(route.iter().copied().chain(std::iter::once(start)))
-                            .all(|(a,b)| segment_inside(rings, *rule, a, b, 1.0))
+                        && let Some(route) = {
+                            let valid = |route: &Polyline| {
+                                std::iter::once(prev).chain(route.iter().copied())
+                                    .zip(route.iter().copied().chain(std::iter::once(start)))
+                                    .all(|(a,b)| segment_inside(rings, *rule, a, b, 0.5))
+                            };
+                            let normal = route_along(
+                                travel.get_or_insert_with(|| travel_ring(rings, *rule)),
+                                prev, start, opt.travel_route,
+                            ).filter(&valid);
+                            normal.or_else(|| {
+                                if !same_shape || shape.params.kind == Some(Kind::Manual) { return None; }
+                                route_along(
+                                    thin_travel.get_or_insert_with(|| thin_travel_ring(rings, *rule)),
+                                    prev, start, opt.travel_route.min(150.0),
+                                ).filter(valid)
+                            })
+                        }
                     {
                         run.pts
                             .extend(route.into_iter().filter(|q| q.dist(start) > 1e-6));
