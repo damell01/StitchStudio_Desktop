@@ -130,6 +130,9 @@ pub fn pairs(r: &Rails, step: f64) -> Vec<(P, P)> {
     if r.a.len() < 2 || r.b.len() < 2 {
         return Vec::new();
     }
+    if !step.is_finite() || step <= 0.0 {
+        return Vec::new();
+    }
     let (a, b) = (Arc::new(&r.a), Arc::new(&r.b));
     let mut syncs = vec![(0.0, 0.0)];
     for &(sa, sb) in &r.sync {
@@ -709,6 +712,14 @@ mod tests {
             short_stitches: true,
             split: None,
             style: Default::default(),
+        }
+    }
+
+    #[test]
+    fn invalid_satin_spacing_is_rejected_without_allocation() {
+        let r = rails_from_centerline(&[P::new(0.0, 0.0), P::new(100.0, 0.0)], false, 30.0);
+        for step in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(pairs(&r, step).is_empty());
         }
     }
 
