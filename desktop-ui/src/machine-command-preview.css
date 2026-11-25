@@ -1,0 +1,51 @@
+.machine-command-dialog {
+  width: min(660px, calc(100vw - 32px));
+  font-variant-numeric: tabular-nums;
+}
+
+.machine-command-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .5rem;
+}
+
+.machine-command-counts div {
+  min-width: 0;
+  padding: .55rem .65rem;
+  border: 1px solid var(--lav-border, #ded3ed);
+  border-radius: .65rem;
+}
+
+.machine-command-counts dt {
+  font-size: .75rem;
+}
+
+.machine-command-counts dd {
+  margin: .2rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.machine-command-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: .85rem;
+}
+
+.machine-command-table :is(th, td) {
+  padding: .35rem .5rem;
+  border-bottom: 1px solid var(--lav-border, #ded3ed);
+}
+
+.machine-command-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .4rem;
+  margin-top: .5rem;
+}
+
+.machine-command-pagination p {
+  margin-right: auto;
+}
