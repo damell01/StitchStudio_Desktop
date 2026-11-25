@@ -1,0 +1,30 @@
+name: Desktop quality checks
+on:
+  push:
+    branches: [Dev]
+  pull_request:
+    branches: [Dev]
+  workflow_dispatch:
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install UI dependencies
+        working-directory: desktop-ui
+        run: npm install
+      - name: Typecheck and bundle UI
+        working-directory: desktop-ui
+        run: npm run build
+      - name: Core stitch engine tests
+        run: cargo test --lib
+      - name: Native desktop tests
+        run: cargo test --manifest-path desktop-ui/src-tauri/Cargo.toml
