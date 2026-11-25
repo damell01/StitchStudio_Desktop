@@ -491,7 +491,16 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
         hue_bins[((h*2.0).floor() as usize).min(11)] += 1;
     }
     let diverse = hue_bins.iter().filter(|&&n| n > opaque / 100).count() >= 4;
-    let auto_colors = if diverse { 10 } else { 8 };
+    // Use the actual foreground palette to detect loss of meaningful accents.
+    // A bounded histogram avoids letting antialiasing dominate the decision.
+    let mut bins = [0usize; 4096];
+    for p in r.rgba.chunks_exact(4) {
+        if p[3] < 128 { continue; }
+        let k = ((p[0] as usize >> 4) << 8) | ((p[1] as usize >> 4) << 4) | (p[2] as usize >> 4);
+        bins[k] += 1;
+    }
+    let significant = bins.iter().filter(|&&n| n > opaque / 50).count();
+    let auto_colors = if diverse || significant > 8 { 10 } else { 8 };
     let logo_params = TraceParams {
         mode: Mode::Logo,
         colors: colors.unwrap_or(auto_colors),
