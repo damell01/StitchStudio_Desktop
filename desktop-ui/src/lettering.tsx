@@ -149,3 +149,30 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
     <LetteringPreview settings={settings} valid={valid}/>
   </section>;
 }
+
+export function InlineLettering({uid,disabled,onBusy,onDone}:{uid:number|null;disabled:boolean;onBusy:(busy:boolean)=>void;onDone:()=>void}){
+ const [fonts,setFonts]=useState<string[]>([]);
+ const [target,setTarget]=useState(uid);
+ const [settings,setSettings]=useState<Settings>({text:'Your name',font:'',size:12,spacing:.4,arc:0,bold:true,italic:false,color:[105,69,162],align:'center'});
+ const [loading,setLoading]=useState(true),[error,setError]=useState(''),[saving,setSaving]=useState(false);
+ const lock=useRef(false);
+ useEffect(()=>{let active=true;Promise.all([invoke<string[]>('lettering_fonts'),uid===null?Promise.resolve(null):invoke<Settings|null>('lettering_settings',{uid})]).then(([list,s])=>{if(!active)return;setFonts(list);setTarget(s?uid:null);setSettings(old=>s??{...old,font:list.find(f=>f==='Arial')||list[0]||''});setLoading(false)}).catch(e=>{if(active){setError(String(e));setLoading(false)}});return()=>{active=false}},[uid]);
+ function change<K extends keyof Settings>(key:K,value:Settings[K]){setSettings(s=>({...s,[key]:value}))}
+ const hex='#'+settings.color.map(v=>v.toString(16).padStart(2,'0')).join('');
+ const valid=!!settings.font&&!!settings.text.trim()&&settings.size>=3&&settings.size<=80&&settings.spacing>=0&&settings.spacing<=5&&Math.abs(settings.arc)<=300;
+ async function apply(){if(lock.current||disabled||!valid)return;lock.current=true;setSaving(true);onBusy(true);setError('');try{
+ if(target!==null){await invoke('update_lettering',{uid:target,settings})}
+ else {const before=await invoke<{uid:number}[]>('editable_objects');await invoke('create_lettering',{...settings,placement:[0,0]});const after=await invoke<{uid:number}[]>('editable_objects');const added=after.find(o=>!before.some(b=>b.uid===o.uid));if(added)setTarget(added.uid)}
+ onDone();
+ }catch(e){setError(String(e))}finally{lock.current=false;setSaving(false);onBusy(false)}}
+ return <section className="inline-lettering workspace-inspector-group"><h3><Type size={18}/>{target===null?'Add lettering':'Edit lettering'}</h3><p className="muted">Adjust text here while keeping your design visible.</p>{loading?<p role="status">Loading fonts…</p>:<>
+ <label>Text<textarea rows={2} maxLength={120} value={settings.text} onChange={e=>change('text',e.target.value)}/></label>
+ <label>Font<select value={settings.font} onChange={e=>change('font',e.target.value)}>{fonts.map(f=><option key={f}>{f}</option>)}</select></label>
+ <div className="inline-text-sample" style={{fontFamily:settings.font,fontWeight:settings.bold?'bold':'normal',fontStyle:settings.italic?'italic':'normal',color:hex}}>{settings.text}</div>
+ <div className="inline-lettering-grid"><label>Height (mm)<input type="number" min="3" max="80" value={settings.size} onChange={e=>change('size',Number(e.target.value))}/></label><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={settings.spacing} onChange={e=>change('spacing',Number(e.target.value))}/></label></div>
+ <div className="inline-lettering-style"><button aria-pressed={settings.bold} onClick={()=>change('bold',!settings.bold)}><b>B</b></button><button aria-pressed={settings.italic} onClick={()=>change('italic',!settings.italic)}><i>I</i></button><label>Thread color<input type="color" value={hex} onChange={e=>change('color',[1,3,5].map(i=>parseInt(e.target.value.slice(i,i+2),16)))}/></label></div>
+ <h4>Text layout</h4><div className="inline-lettering-layout" role="group" aria-label="Text direction">{[{label:'Straight',arc:0},{label:'Arc up',arc:60},{label:'Arc down',arc:-60}].map(a=><button key={a.label} aria-pressed={a.arc===0?settings.arc===0:a.arc>0?settings.arc>0:settings.arc<0} onClick={()=>change('arc',a.arc)}>{a.label}</button>)}</div>
+ <label>Curve radius (mm)<input type="number" min="-300" max="300" value={settings.arc} onChange={e=>change('arc',Number(e.target.value))}/></label>
+ <label>Alignment<select value={settings.align} onChange={e=>change('align',e.target.value)}>{['left','center','right'].map(a=><option key={a}>{a}</option>)}</select></label>
+ <button className="primary" disabled={disabled||saving||!valid} onClick={()=>void apply()}>{saving?'Updating…':target===null?'Add text to design':'Apply text changes'}</button></>}{error&&<p role="alert">{error}</p>}</section>
+}
