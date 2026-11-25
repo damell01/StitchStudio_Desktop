@@ -1761,7 +1761,13 @@ pub fn plan_cached(
                     let across =
                         opt.max_jump_no_trim
                             .max(if same_shape { 0.0 } else { opt.connect });
-                    if !force_trim && (gap <= across || inside) {
+                    // For automatic artwork, never use the short-gap shortcut
+                    // across an uncovered region. A tiny join on a running
+                    // outline is still allowed within the needle tolerance.
+                    let short_join = if opt.hat_order {
+                        gap <= across && (inside || gap <= 2.0)
+                    } else { gap <= across };
+                    if !force_trim && (short_join || inside) {
                         // Sew straight across: append to the previous run.
                         let n = (gap / 30.0).ceil() as usize;
                         for i in 1..n {
@@ -1776,7 +1782,7 @@ pub fn plan_cached(
                     // Within a fill: travel round the inside of its outline
                     // rather than cutting (Ink/Stitch's underpath).
                     if !force_trim
-                        && same_shape
+                        && (same_shape || opt.hat_order)
                         && opt.travel_route > 0.0
                         && let Some((rings, rule)) = sr.area.as_ref()
                         && let Some(route) = route_along(
