@@ -1673,7 +1673,8 @@ pub fn plan_cached(
                 if let (Some(prev), Some(run)) = (cursor, block.runs.last_mut()) {
                     let gap = prev.dist(start);
                     let inside = sr.area.as_ref().is_some_and(|(rings, rule)| {
-                        gap <= opt.travel_inside && segment_inside(rings, *rule, prev, start, 2.0)
+                        gap <= if opt.hat_order && same_shape { opt.travel_inside.max(100.0) } else { opt.travel_inside }
+                            && segment_inside(rings, *rule, prev, start, 1.0)
                     });
                     let across =
                         opt.max_jump_no_trim
