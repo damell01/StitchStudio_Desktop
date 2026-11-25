@@ -280,6 +280,7 @@ impl Studio {
             crate::theme::caption(ui, "Select objects to choose their thread.");
             return;
         };
+        caption(ui, format!("Editing {} selected object(s)", sel.len()));
         let mut c = self.doc.shapes[first].color;
         let before = c;
         let brand = self.view_tools.brand;
@@ -383,6 +384,7 @@ impl Studio {
     pub fn match_to_palette(&mut self, palette: &[[u8; 3]]) -> usize {
         let mut changed = 0;
         for s in &mut self.doc.shapes {
+            if s.params.kind == Some(Kind::Skip) { continue; }
             let Some(&c) = palette.iter().min_by(|a, b| {
                 zigzag::formats::perceptual_distance(s.color, **a)
                     .total_cmp(&zigzag::formats::perceptual_distance(s.color, **b))
@@ -417,8 +419,7 @@ impl Studio {
             let (rect, resp) =
                 ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), Sense::click());
             let on = !selected.is_empty()
-                && objects.iter().all(|i| selected.contains(i))
-                && selected.len() == objects.len();
+                && objects.iter().all(|i| selected.contains(i));
             if on {
                 ui.painter()
                     .rect_filled(rect, 5.0, p.accent.gamma_multiply(0.18));
@@ -480,12 +481,24 @@ impl Studio {
                 ));
             } else if resp
                 .on_hover_text(format!(
-                    "Select the {} object(s) sewn in this thread",
+                    "Select {} object(s) in this thread · Shift-click to add or remove",
                     objects.len()
                 ))
                 .clicked()
             {
-                select = Some(objects.clone());
+                if ui.input(|i| i.modifiers.shift || i.modifiers.command) {
+                    let mut next = selected.clone();
+                    if on {
+                        next.retain(|i| !objects.contains(i));
+                    } else {
+                        for &i in objects {
+                            if !next.contains(&i) { next.push(i); }
+                        }
+                    }
+                    select = Some(next);
+                } else {
+                    select = Some(objects.clone());
+                }
             }
         }
         if let Some(at) = open_picker {
