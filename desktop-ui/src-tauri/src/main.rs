@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod project_recovery;
 use std::sync::Mutex;
 #[derive(Default)]
 struct Workspace { digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)> }
@@ -297,7 +298,7 @@ impl Project {
         serde_json::from_slice(&bytes).map_err(|err| err.to_string())
     }
 
-    fn restore(self, state: &Mutex<Workspace>) -> Result<OpenedProject, String> {
+    fn validate(&self) -> Result<Option<zigzag::document::Document>, String> {
         if self.version != 1
             || !self.width.is_finite() || !self.height.is_finite()
             || self.width <= 0.0 || self.height <= 0.0
@@ -317,6 +318,11 @@ impl Project {
             Some([x, y]) => zigzag::document::Document::restore_svg(svg, &self.name, zigzag::geom::P::new(x, y)),
             None => zigzag::document::Document::from_svg(svg, &self.name, None),
         }).transpose().map_err(|err| err.to_string())?;
+        Ok(source)
+    }
+
+    fn restore(self, state: &Mutex<Workspace>) -> Result<OpenedProject, String> {
+        let source = self.validate()?;
         let design = Design {
             name: self.name,
             blocks: self.blocks.into_iter().map(|block| zigzag::design::Block {
@@ -556,31 +562,14 @@ fn recovery_save(app: tauri::AppHandle, width: f64, height: f64, format: String,
     };
     let Some(project) = project else { return Ok(()); };
     let dir = app.path().app_local_data_dir().map_err(|err| err.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    let target = dir.join("recovery.stitchstudio");
-    if let Ok(previous) = Project::load(&target) {
-        write_project(&dir.join("recovery.previous"), &previous)?;
-    }
-    write_project(&target, &project)
+    project_recovery::save(&dir, &project)
 }
 
 #[tauri::command]
 fn recovery_open(app: tauri::AppHandle, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Option<OpenedProject>, String> {
     use tauri::Manager;
     let dir = app.path().app_local_data_dir().map_err(|err| err.to_string())?;
-    let mut last_error = None;
-    for name in ["recovery.stitchstudio", "recovery.previous"] {
-        let path = dir.join(name);
-        if !path.exists() { continue; }
-        match open_project_path(&path, &state) {
-            Ok(project) => return Ok(Some(project)),
-            Err(err) => last_error = Some(err),
-        }
-    }
-    match last_error {
-        Some(err) => Err(format!("Unable to open the recovery copies: {err}")),
-        None => Ok(None),
-    }
+    project_recovery::open(&dir, &state)
 }
 #[tauri::command]
 fn lettering_fonts()->Vec<String>{zigzag::document::font_families()}
