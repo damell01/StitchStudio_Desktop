@@ -260,6 +260,10 @@ pub fn check(
     let mut worst = 0usize;
     let mut hotspots = 0usize;
     let mut max_penetrations = 0usize;
+    // Accumulate penetrations across runs and colors as well: overlap
+    // hotspots are invisible when each run is measured in isolation.
+    let mut cells = std::collections::HashMap::<(i64,i64),usize>::new();
+    let mut locations = std::collections::HashMap::<(i64,i64),usize>::new();
     for block in &design.blocks {
         for run in &block.runs {
             let mut edges = std::collections::HashMap::new();
@@ -267,6 +271,8 @@ pub fn check(
             for p in &run.pts {
                 if !p.x.is_finite() || !p.y.is_finite() { continue; }
                 let key = (p.x.round() as i64, p.y.round() as i64);
+                *locations.entry(key).or_default() += 1;
+                *cells.entry(((p.x/10.0).floor() as i64,(p.y/10.0).floor() as i64)).or_default() += 1;
                 let count = penetrations.entry(key).or_insert(0usize);
                 *count += 1;
                 max_penetrations = max_penetrations.max(*count);
@@ -297,6 +303,15 @@ pub fn check(
             && design.per_shape.get(i).copied().unwrap_or(0) == 0 {
             add(Some(i), Level::Warning, "Object generated no stitches. Inspect its geometry or stitch type.".into());
         }
+    }
+    let dense_cells=cells.values().filter(|&&n|n>=25).count();
+    let peak=cells.values().copied().max().unwrap_or(0);
+    if dense_cells>0 {
+        add(None,Level::Warning,format!("{dense_cells} one-square-millimeter cells contain at least 25 planned points (peak {peak}). Inspect layered fills and tight corners; this is a review threshold, not a universal fabric limit."));
+    }
+    let repeated_locations=locations.values().filter(|&&n|n>=10).count();
+    if repeated_locations>hotspots {
+        add(None,Level::Warning,format!("{repeated_locations} needle locations accumulate ten or more planned penetrations across the complete design. Inspect overlap and repeated travel."));
     }
     if hotspots > 0 {
         add(None, Level::Warning, format!("{hotspots} needle locations receive at least ten penetrations within a run (maximum {max_penetrations}). Inspect dense corners, tie stitches and repeated travel before sewing."));
