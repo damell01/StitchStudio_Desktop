@@ -36,6 +36,7 @@ async fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, app: taur
     if let Some(mut doc)=guard.source.clone(){
         let indices:Vec<usize>=(0..doc.shapes.len()).collect();
         doc.transform(&indices,[scale*c,scale*s,-scale*s,scale*c,dx*10.0,dy*10.0]).map_err(|e|e.to_string())?;
+        if scale!=1.0 {let uids:Vec<_>=doc.shapes.iter().map(|s|s.uid).collect();correct_resized_manual_paths(&mut doc,&uids,scale<1.0)?;}
         let design=doc.plan();if design.blocks.is_empty(){return Err("Transformation produced no stitches".into())}
         let p=preview(&design);guard.checkpoint_named("Transform design");guard.current=Some(design);guard.source=Some(doc);return Ok(p)
     }
@@ -79,6 +80,54 @@ async fn smart_resize_design(width_mm:f64,height_mm:f64,app:tauri::AppHandle)->R
     }).await.map_err(|e|e.to_string())?
 }
 
+// Fixed stitch files lack original fill/satin geometry. Keep their ordered
+// paths and run boundaries; correct overlong segments and redundant short
+// collinear penetrations without guessing at missing fill rows.
+fn resize_fixed_run(points:&[zigzag::geom::P],shrink:bool)->Vec<zigzag::geom::P>{
+    use zigzag::geom::P;
+    let mut kept:Vec<P>=Vec::with_capacity(points.len());
+    for (i,&p) in points.iter().enumerate(){
+        if shrink && i>2 && i+3<points.len() {
+            if let Some(&a)=kept.last(){
+                let b=points[i+1];let ab=b-a;let ap=p-a;
+                let len=ab.len();
+                // Do not remove ties, direction reversals, or sharp turns.
+                if a.dist(p)>0.001 && a.dist(p)<2.0 && p.dist(b)>0.001 && len>0.001 && len<=35.0 &&
+                    ap.dot(ab)>0.0 && ap.dot(ab)<len*len && ap.cross(ab).abs()/len<0.5 {continue}
+            }
+        }
+        kept.push(p);
+    }
+    let mut out:Vec<P>=Vec::with_capacity(kept.len());
+    for p in kept{
+        if let Some(&a)=out.last(){
+            let n=(a.dist(p)/100.0).ceil().max(1.0) as usize;
+            for j in 1..n{out.push(a.lerp(p,j as f64/n as f64));}
+        }
+        out.push(p);
+    }
+    out
+}
+fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize],shrink:bool)->Result<(),String>{
+    use zigzag::{bezier::{Anchor,SubPath},svg::Geometry,params::Kind};
+    let mut edits=Vec::new();let mut total=0usize;
+    for (i,s) in doc.shapes.iter().enumerate(){
+        if !uids.contains(&s.uid)||s.params.kind!=Some(Kind::Manual){continue}
+        if let Geometry::Stroke{lines,..}=&s.geometry{
+            let mut paths=Vec::new();
+            for (line,closed) in lines{
+                // Imported machine runs are open paths. Preserve closed paths
+                // without attempting to infer their stitch semantics.
+                let pts=if *closed{line.clone()}else{resize_fixed_run(line,shrink)};
+                total=total.saturating_add(pts.len());
+                if total>2_000_000{return Err("Resized stitch paths exceed the safety limit.".into())}
+                paths.push(SubPath{anchors:pts.into_iter().map(Anchor::corner).collect(),closed:*closed});
+            }
+            if !paths.is_empty(){edits.push((i,paths));}
+        }
+    }
+    doc.set_paths(&edits).map_err(|e|e.to_string())
+}
 #[tauri::command]
 async fn resize_artwork_selection(uids:Vec<usize>,sx:f64,sy:f64,x:f64,y:f64,app:tauri::AppHandle)->Result<Preview,String>{
     use tauri::Manager;
@@ -89,8 +138,9 @@ async fn resize_artwork_selection(uids:Vec<usize>,sx:f64,sy:f64,x:f64,y:f64,app:
         let mut doc=w.source.clone().ok_or("Open editable artwork to regenerate stitches.")?;
         let indices:Vec<_>=doc.shapes.iter().enumerate().filter(|(_,s)|uids.contains(&s.uid)).map(|(i,_)|i).collect();
         if indices.is_empty()||indices.len()!=uids.len(){return Err("Selection changed; select the artwork again.".into())}
-        if indices.iter().any(|&i|doc.shapes[i].params.kind==Some(zigzag::params::Kind::Manual)){return Err("Fixed stitch paths cannot be regenerated from source outlines.".into())}
+        let has_fixed=indices.iter().any(|&i|doc.shapes[i].params.kind==Some(zigzag::params::Kind::Manual));
         doc.transform(&indices,[sx,0.0,0.0,sy,x*10.0*(1.0-sx),y*10.0*(1.0-sy)]).map_err(|e|e.to_string())?;
+        if has_fixed {correct_resized_manual_paths(&mut doc,&uids,sx<1.0||sy<1.0)?;}
         let design=doc.plan_cached(&mut w.plan_cache);
         if design.stitch_count()==0||design.stitch_count()>2_000_000{return Err("Resize produced an invalid stitch plan.".into())}
         let result=preview(&design);w.checkpoint_named("Resize and regenerate stitches");w.source=Some(doc);w.current=Some(design);Ok(result)
@@ -1684,3 +1734,10 @@ async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
 fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+
+#[cfg(test)]
+mod fixed_resize_tests {
+ use super::*;use zigzag::geom::P;
+ #[test] fn long_moves_are_split_and_endpoints_preserved(){let a=P::new(0.,0.);let b=P::new(250.,0.);let r=resize_fixed_run(&[a,b],false);assert_eq!(r.first(),Some(&a));assert_eq!(r.last(),Some(&b));assert!(r.windows(2).all(|p|p[0].dist(p[1])<=100.001));}
+ #[test] fn direction_reversals_and_ties_survive(){let a=P::new(0.,0.);let b=P::new(1.,0.);let r=resize_fixed_run(&[a,a,b,a,b,a,b,a],true);assert_eq!(r,vec![a,a,b,a,b,a,b,a]);}
+}
