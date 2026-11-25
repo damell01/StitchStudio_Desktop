@@ -88,6 +88,31 @@ pub(super) fn replace_color(workspace:&mut Workspace,previous:[u8;3],color:[u8;3
    let result=preview(&design);workspace.checkpoint();workspace.source=Some(updated);workspace.current=Some(design);Ok(result)
  }else{let result=preview(&expected);workspace.checkpoint();workspace.current=Some(expected);Ok(result)}
 }
+pub(super) fn map_blocks(workspace:&mut Workspace,original:&[[u8;3]],colors:&[[u8;3]])->Result<Preview,String>{
+ let current=workspace.current.as_ref().ok_or("Open a design first")?;
+ if colors.len()!=current.blocks.len()||original.len()!=colors.len()||!current.blocks.iter().zip(original).all(|(b,c)|b.color==*c){return Err("The design changed. Refresh the mapping.".into())}
+ let mut expected=current.clone();
+ for (b,c) in expected.blocks.iter_mut().zip(colors){b.color=*c}
+ if let Some(source)=workspace.source.as_ref(){
+   let rebuilt=source.plan();
+   if !same_stitch_plan(current,&rebuilt){return Err("The editable artwork no longer matches the stitch stream.".into())}
+   if rebuilt.block_shapes.len()!=colors.len(){return Err("Missing thread ownership".into())}
+   let mut updated=source.clone();
+   let mut assignments=std::collections::HashMap::new();
+   for (i,owners) in rebuilt.block_shapes.iter().enumerate(){
+     if owners.is_empty(){return Err("Missing thread ownership".into())}
+     for &owner in owners{
+       let shape=updated.shapes.get(owner).ok_or("Missing artwork object")?;
+       if shape.color!=original[i]||shape.params.kind==Some(Kind::Tartan)||shape.params.colors.is_some(){return Err("A special stitch pattern needs individual editing.".into())}
+       if assignments.insert(owner,colors[i]).is_some_and(|old|old!=colors[i]){return Err("An object uses conflicting mapped colors.".into())}
+     }
+   }
+   for (i,color) in assignments{updated.shapes[i].color=color;}
+   let planned=updated.plan();
+   if !same_stitch_plan(&expected,&planned){return Err("Mapping would change sewing order or stitch geometry. Choose distinct colors for adjacent blocks or edit them individually.".into())}
+   let result=preview(&planned);workspace.checkpoint();workspace.source=Some(updated);workspace.current=Some(planned);Ok(result)
+ }else{let result=preview(&expected);workspace.checkpoint();workspace.current=Some(expected);Ok(result)}
+}
 #[cfg(test)]
 mod tests {
     use super::*;
