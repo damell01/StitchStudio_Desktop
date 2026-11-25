@@ -33,11 +33,126 @@ pub struct TraceUi {
     preview: Option<egui::TextureHandle>,
     original: Option<egui::TextureHandle>,
     show_original: bool,
+    ocr: Option<Receiver<Result<Vec<RecognizedLine>, String>>>,
+    recognized: Vec<RecognizedLine>,
+    ocr_status: String,
+    rebuilt: Option<Traced>,
     /// The options of the trace running now, and how far the request count is.
     running: Option<(u64, Receiver<Done>)>,
     asked: u64,
     shown: u64,
     traced: Option<(TraceOptions, bool)>,
+}
+
+
+#[derive(Clone, Debug)]
+struct RecognizedLine {
+    text: String,
+    confidence: f64,
+    rect: [f64; 4],
+    font: String,
+    enabled: bool,
+}
+
+// Tesseract runs locally, never uploads artwork. The executable and English
+// language data must be installed (or supplied by the application distributor).
+fn recognize(image: &Image) -> Result<Vec<RecognizedLine>, String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let (w, h) = image.size();
+    let mut command = Command::new(std::env::var_os("STITCHSTUDIO_TESSERACT")
+        .unwrap_or_else(|| "tesseract".into()));
+    command.args(["stdin", "stdout", "-l", "eng", "--psm", "11", "tsv"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    let mut child = command.spawn().map_err(|e| format!(
+        "Local OCR unavailable: {e}. Install Tesseract with English language data, or set STITCHSTUDIO_TESSERACT to its executable."
+    ))?;
+    let input_result = (|| -> std::io::Result<()> {
+        let mut input = std::io::BufWriter::new(child.stdin.take().unwrap());
+        write!(input, "P6\n{w} {h}\n255\n")?;
+        for px in image.rgba().chunks_exact(4) {
+            let a = u16::from(px[3]);
+            let blend = |v: u8| ((u16::from(v)*a + 255*(255-a))/255) as u8;
+            input.write_all(&[blend(px[0]), blend(px[1]), blend(px[2])])?;
+        }
+        input.flush()
+    })();
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!("Local OCR failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+    input_result.map_err(|e| e.to_string())?;
+    Ok(parse_ocr(&String::from_utf8_lossy(&output.stdout),
+        zigzag::document::default_font()))
+}
+
+fn parse_ocr(tsv: &str, font: String) -> Vec<RecognizedLine> {
+    let mut lines = std::collections::BTreeMap::<(u32,u32,u32,u32), (String, f64, usize, [f64;4])>::new();
+    for row in tsv.lines().skip(1) {
+        let p: Vec<_> = row.splitn(12, '\t').collect();
+        if p.len() != 12 || p[0] != "5" || p[11].trim().is_empty() { continue; }
+        let key = (|| Some((p[1].parse().ok()?, p[2].parse().ok()?,
+            p[3].parse().ok()?, p[4].parse().ok()?)))();
+        let coords = (|| Some([p[6].parse::<f64>().ok()?, p[7].parse().ok()?,
+            p[8].parse().ok()?, p[9].parse().ok()?]))();
+        let (Some(key), Some([x,y,w,h]), Ok(conf)) = (key, coords, p[10].parse::<f64>()) else { continue; };
+        if ![x,y,w,h,conf].iter().all(|n| n.is_finite()) || w <= 0.0 || h <= 0.0 || conf < 0.0 { continue; }
+        let entry = lines.entry(key).or_insert((String::new(),0.0,0,[x,y,x+w,y+h]));
+        if !entry.0.is_empty() { entry.0.push(' '); }
+        entry.0.push_str(p[11].trim());
+        entry.1 += conf;
+        entry.2 += 1;
+        entry.3 = [entry.3[0].min(x), entry.3[1].min(y), entry.3[2].max(x+w), entry.3[3].max(y+h)];
+    }
+    let mut result: Vec<_> = lines.into_values().map(|(text,sum,n,rect)| {
+        let confidence = sum/n as f64;
+        RecognizedLine { text, confidence, rect, font: font.clone(), enabled: false }
+    }).collect();
+    result.sort_by(|a,b| a.rect[1].total_cmp(&b.rect[1]).then(a.rect[0].total_cmp(&b.rect[0])));
+    result
+}
+
+fn reconstruct(r: &Traced, lines: &[RecognizedLine], mm_per_px: f64) -> anyhow::Result<Traced> {
+    use zigzag::{document::{Document, TextSpec}, svg::shapes_bounds};
+    let mut doc = Document::from_svg(&r.svg, "Recognized lettering", None)?;
+    for line in lines.iter().filter(|l| l.enabled && !l.text.trim().is_empty()) {
+        let [x0,y0,x1,y1] = line.rect.map(|v| v*mm_per_px*10.0);
+        let (x0,y0,x1,y1) = (x0-doc.offset.x,y0-doc.offset.y,x1-doc.offset.x,y1-doc.offset.y);
+        let pad = ((y1-y0)*0.08).max(1.0);
+        let indices: Vec<_> = doc.shapes.iter().enumerate().filter_map(|(i,s)| {
+            let b = shapes_bounds(std::slice::from_ref(s));
+            (!doc.records_text(i) && !b.is_empty() &&
+             b.min.x >= x0-pad && b.max.x <= x1+pad &&
+             b.min.y >= y0-pad && b.max.y <= y1+pad).then_some(i)
+        }).collect();
+        // Refuse to guess when the trace merged letters with surrounding artwork.
+        anyhow::ensure!(!indices.is_empty(), "No isolated traced shapes found for '{}'; leave it unchecked or adjust trace detail.", line.text);
+        let color = doc.shapes[indices[0]].color;
+        let center = ((x0+x1)/20.0,(y0+y1)/20.0);
+        let mut spec = TextSpec {
+            text: line.text.clone(), font: line.font.clone(), color,
+            size_mm: ((y1-y0)/10.0).max(0.5), spacing_mm: 0.0,
+            ..TextSpec::default()
+        };
+        doc.delete_many(&indices)?;
+        let i = doc.add_lettering(&spec, center)?;
+        let b = shapes_bounds(std::slice::from_ref(&doc.shapes[i]));
+        if b.width() > 0.0 && b.height() > 0.0 {
+            spec.h_scale = (100.0*(x1-x0)/b.width()).clamp(25.0,400.0);
+            spec.v_scale = (100.0*(y1-y0)/b.height()).clamp(25.0,400.0);
+            doc.set_lettering(i, &spec)?;
+        }
+    }
+    let mut result = r.clone();
+    result.svg = doc.to_svg()?;
+    result.shapes = doc.shapes.len();
+    result.lines = 0;
+    Ok(result)
 }
 
 const PREVIEW: Vec2 = Vec2::new(380.0, 300.0);
@@ -146,6 +261,10 @@ impl Studio {
             preview: None,
             original: None,
             show_original: false,
+            ocr: None,
+            recognized: Vec::new(),
+            ocr_status: String::new(),
+            rebuilt: None,
             running: None,
             asked: 0,
             shown: 0,
@@ -200,6 +319,7 @@ impl Studio {
         if t.traced.as_ref() == Some(&want) {
             return;
         }
+        t.rebuilt = None;
         t.traced = Some(want);
         t.asked += 1;
         let n = t.asked;
@@ -239,6 +359,14 @@ impl Studio {
                 thumbnail(&t.image, PREVIEW),
                 egui::TextureOptions::LINEAR,
             ));
+        }
+        if let Some(rx) = &t.ocr {
+            match rx.try_recv() {
+                Ok(Ok(lines)) => { t.ocr_status = format!("{} text regions. Select and review each before replacing.", lines.len()); t.recognized = lines; t.ocr = None; }
+                Ok(Err(e)) => { t.ocr_status = e; t.ocr = None; }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => { t.ocr_status = "OCR worker stopped.".into(); t.ocr = None; }
+                Err(std::sync::mpsc::TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(100)),
+            }
         }
         let mut open = true;
         let (mut ok, mut cancel) = (false, false);
@@ -361,13 +489,50 @@ impl Studio {
                         );
                     });
                 });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(t.ocr.is_none(), egui::Button::new("Recognize lettering (offline)")).clicked() {
+                        let image = t.image.clone();
+                        let (tx, rx) = channel();
+                        let repaint = ctx.clone();
+                        t.ocr = Some(rx); t.recognized.clear(); t.rebuilt = None;
+                        t.ocr_status = "Recognizing text locally…".into();
+                        std::thread::spawn(move || { let _ = tx.send(recognize(&image)); repaint.request_repaint(); });
+                    }
+                    ui.label(&t.ocr_status);
+                });
+                if !t.recognized.is_empty() {
+                    let mut changed = false;
+                    egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
+                        for (i, line) in t.recognized.iter_mut().enumerate() {
+                            ui.horizontal(|ui| {
+                                changed |= ui.checkbox(&mut line.enabled, format!("{:.0}%", line.confidence)).changed();
+                                changed |= ui.text_edit_singleline(&mut line.text).changed();
+                                egui::ComboBox::from_id_salt(("ocr-font", i)).selected_text(&line.font).show_ui(ui, |ui| {
+                                    for font in zigzag::document::font_families() {
+                                        changed |= ui.selectable_value(&mut line.font, font.clone(), font).changed();
+                                    }
+                                });
+                            });
+                        }
+                    });
+                    if changed { t.rebuilt = None; if let Some(Ok(r)) = &t.result { t.preview = rasterize(&r.svg, PREVIEW).map(|img| ctx.load_texture("trace-preview", img, egui::TextureOptions::LINEAR)); } }
+                    if ui.add_enabled(!busy && t.recognized.iter().any(|l| l.enabled), egui::Button::new("Preview editable lettering")).clicked() {
+                        if let Some(Ok(r)) = &t.result {
+                            match reconstruct(r, &t.recognized, t.opts.width_mm / f64::from(t.image.size().0.max(1))) {
+                                Ok(r) => { t.preview = rasterize(&r.svg, PREVIEW).map(|img| ctx.load_texture("ocr-preview", img, egui::TextureOptions::LINEAR)); t.rebuilt = Some(r); t.show_original = false; t.ocr_status = "Lettering preview ready. Toggle Original to compare.".into(); }
+                                Err(e) => { t.rebuilt = None; t.ocr_status = e.to_string(); }
+                            }
+                        }
+                    }
+                }
                 ui.add_space(space::M);
                 ui.allocate_ui_with_layout(
                     egui::vec2(ui.available_width(), 24.0),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
                         let accent = theme::pal_ui(ui).accent;
-                        let ready = matches!(t.result, Some(Ok(_))) && !busy;
+                        let ready = matches!(t.result, Some(Ok(_))) && !busy && t.traced.as_ref() == Some(&(t.opts.clone(), t.use_threads)) && (!t.recognized.iter().any(|l| l.enabled) || t.rebuilt.is_some());
                         let label = match t.target {
                             Target::Open => "Open",
                             Target::Place => "Place",
@@ -390,10 +555,11 @@ impl Studio {
                 path,
                 name,
                 target,
+                rebuilt,
                 ..
             }) = t
             {
-                self.finish_trace(&r, &path, &name, target);
+                self.finish_trace(&rebuilt.unwrap_or(r), &path, &name, target);
             }
         } else if cancel || !open {
             self.trace = None;
