@@ -200,9 +200,32 @@ pub fn remove_edge_background(r: &Raster, tolerance: u8) -> Raster {
 }
 
 // Shared preprocessing pipeline for tracing and future pixel preview.
+fn flat_palette(r: &Raster) -> bool {
+    let mut counts = [0usize; 4096];
+    let mut total = 0usize;
+    for p in r.rgba.chunks_exact(4) {
+        if p[3] < 128 { continue; }
+        let key = ((p[0] as usize >> 4) << 8) | ((p[1] as usize >> 4) << 4) | (p[2] as usize >> 4);
+        counts[key] += 1;
+        total += 1;
+    }
+    counts.sort_unstable_by(|a,b| b.cmp(a));
+    total > 0 && counts[..12].iter().sum::<usize>() as f64 / total as f64 >= 0.90
+}
+
+#[test]
+fn flat_art_cleanup_preserves_one_pixel_ink() {
+    let r = Raster::from_fn(100, 100, |x,_| if x == 50 {[20,20,20,255]} else {[230,140,50,255]});
+    assert!(flat_palette(&r));
+    let out = prepare_raster(&r,false,32,true);
+    assert_eq!(out.rgba,r.rgba);
+}
+
 fn prepare_raster(r:&Raster,remove_background:bool,tolerance:u8,cleanup:bool)->Raster{
     // Suppress fabric texture before edge flood fill, preserving the original alpha.
-    let cleaned=if cleanup {median_texture(&median_texture(r,false),false)}else{r.clone()};
+    // A predominantly flat palette is typical of logos and cartoons.
+    // Skip destructive median passes for such artwork, especially thin ink lines.
+    let cleaned=if cleanup && !flat_palette(r) {median_texture(&median_texture(r,false),false)}else{r.clone()};
     if remove_background {remove_edge_background(&cleaned,tolerance)}else{cleaned}
 }
 
@@ -266,7 +289,7 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     let image=Image::decode(bytes)?;
     let raster=prepare_raster(&image.raster,o.remove_background,tolerance,cleanup);
     let mut options=o.clone();options.remove_background=false;
-    if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); options.detail=options.detail.min(65.0);}
+    if flat_palette(&raster) { options.speckle_mm=options.speckle_mm.min(0.35); options.detail=options.detail.max(80.0); } else if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); options.detail=options.detail.min(65.0);}
     if !raster.rgba.chunks_exact(4).any(|p|p[3]>=32){return Err(anyhow!("No foreground remains after background removal. Disable removal or lower sensitivity."));}
     let raster=trim_transparent_margin(&raster);
     // Avoid global hue merging: it destroys intentional shading in character artwork.
