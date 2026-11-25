@@ -232,7 +232,10 @@ fn export_companions(design:&Design,format:&str,width:f64,height:f64,assignments
     (html,svg)
 }
 #[tauri::command]
-async fn export_design(format: String, width: f64, height: f64, companions: Option<bool>, assignments: Option<std::collections::HashMap<String,String>>, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool, String> {
+async fn export_design(format: String, width: f64, height: f64, companions: Option<bool>, assignments: Option<std::collections::HashMap<String,String>>, sheet_png: Option<Vec<u8>>, preview_png: Option<Vec<u8>>, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool, String> {
+    for png in [&sheet_png,&preview_png].into_iter().flatten() {
+        if png.len()>32_000_000 || !png.starts_with(b"\x89PNG\r\n\x1a\n") {return Err("Invalid or oversized companion PNG".into());}
+    }
     let design = state.lock().map_err(|err| err.to_string())?.current.clone().ok_or("Open artwork first")?;
     let companion_data=if companions.unwrap_or(false){Some(export_companions(&design,&format,width,height,&assignments.unwrap_or_default()))}else{None};
     let encode_format = format.clone();
@@ -251,8 +254,12 @@ async fn export_design(format: String, width: f64, height: f64, companions: Opti
     tauri::async_runtime::spawn_blocking(move || -> Result<(),String> {
         let sheet=path.with_extension(format!("{}.colors.html",format));
         let image=path.with_extension(format!("{}.preview.svg",format));
+        let sheet_image=path.with_extension(format!("{}.colors.png",format));
+        let preview_image=path.with_extension(format!("{}.preview.png",format));
+        if (sheet_png.is_some()&&sheet_image.exists())||(preview_png.is_some()&&preview_image.exists()){return Err("Companion PNG files already exist. Choose a new export name.".into());}
         if companion_data.is_some() && (sheet.exists()||image.exists()) {return Err("Companion files already exist. Choose a new export name to avoid overwriting them.".into());}
         std::fs::write(&path,bytes).map_err(|e|e.to_string())?;
+        for (target,data) in [(sheet_image,sheet_png),(preview_image,preview_png)] {if let Some(data)=data {use std::io::Write;let mut f=std::fs::OpenOptions::new().write(true).create_new(true).open(target).map_err(|e|format!("Embroidery saved; PNG failed: {e}"))?;f.write_all(&data).map_err(|e|format!("Embroidery saved; PNG failed: {e}"))?;}}
         if let Some((html,svg))=companion_data {
             use std::io::Write;
             let mut f=std::fs::OpenOptions::new().write(true).create_new(true).open(sheet).map_err(|e|format!("Embroidery saved; color sheet failed: {e}"))?;
