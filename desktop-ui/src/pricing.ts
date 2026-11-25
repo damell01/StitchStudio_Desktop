@@ -1,6 +1,6 @@
 export type PricingRates={garment:number;supplies:number;threadPerThousand:number;machineHourly:number;laborHourly:number;handlingMinutes:number;setupFee:number;digitizingFee:number;margin:number;minimum:number;shipping:number;tax:number;wastePercent:number};
 export type QuoteInput=PricingRates&{quantity:number;stitches:number;minutes:number;method?:'cost'|'stitch';stitchRate?:number;extraMaterial?:number;extraHandling?:number;priceOverride?:number;garmentMarkup?:number;specialtyMinimum?:number;customerProvided?:boolean;providedHandling?:number};
-export const defaultRates:PricingRates={garment:6,supplies:1,threadPerThousand:.15,machineHourly:8,laborHourly:20,handlingMinutes:4,setupFee:0,digitizingFee:0,margin:40,minimum:12,shipping:0,tax:0,wastePercent:5};
+export const defaultRates:PricingRates={garment:6,supplies:1,threadPerThousand:.15,machineHourly:8,laborHourly:20,handlingMinutes:4,setupFee:0,digitizingFee:0,margin:40,minimum:15,shipping:0,tax:0,wastePercent:5};
 export function calculateQuote(i:QuoteInput){
  const safe=(v:number)=>Number.isFinite(v)?Math.max(0,v):0;
  const q=Math.max(1,Math.min(100000,Math.floor(safe(i.quantity))));
@@ -27,10 +27,10 @@ export function calculateQuote(i:QuoteInput){
 }
 
 export const jobTypes={
- standard:{minimum:12,label:'Regular embroidery',material:0,handling:0,materialLabel:'Additional materials'},
+ standard:{minimum:15,label:'Regular embroidery',material:0,handling:0,materialLabel:'Additional materials'},
  applique:{minimum:18,label:'Appliqué',material:1.5,handling:5,materialLabel:'Appliqué fabric & adhesive'},
  puff:{minimum:18,label:'3D puff',material:1,handling:3,materialLabel:'Embroidery foam'},
- monogram:{minimum:12,label:'Monogramming',material:0,handling:2,materialLabel:'Personalization supplies'},
+ monogram:{minimum:15,label:'Monogramming',material:0,handling:2,materialLabel:'Personalization supplies'},
  patch:{minimum:15,label:'Patches',material:1.5,handling:5,materialLabel:'Patch backing & border supplies'},
  ith:{minimum:18,label:'In-the-hoop project',material:2,handling:8,materialLabel:'Assembly materials'},
  lace:{minimum:18,label:'Freestanding lace',material:1.5,handling:5,materialLabel:'Water-soluble stabilizer & finishing supplies'},
