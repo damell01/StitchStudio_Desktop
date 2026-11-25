@@ -160,14 +160,58 @@ async fn open_svg(width_mm: f64, colors: u32, remove_background: bool, detail: f
     *state.lock().map_err(|e| e.to_string())? = Workspace {source:Some(source),current:Some(design),..Default::default()};
     Ok(Some(preview))
 }
+fn validate_export(design: &Design, format: &str, width: f64, height: f64) -> Result<(), String> {
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return Err("Invalid hoop dimensions".into());
+    }
+    if !formats::MACHINE_FORMATS.iter().any(|(ext, _)| *ext == format) {
+        return Err("Choose a supported embroidery format".into());
+    }
+    if design.stitch_count() == 0 { return Err("There are no stitches to export".into()); }
+    if matches!(format, "pec" | "pes") && design.blocks.len() > 256 {
+        return Err("PES and PEC can store up to 256 color blocks".into());
+    }
+    if format == "dst" && design.blocks.len() > 1000 {
+        return Err("DST can store up to 999 color changes in its header".into());
+    }
+    let fits = |x: f64, y: f64| x.is_finite() && y.is_finite()
+        && x.abs() <= width * 5.0 && y.abs() <= height * 5.0;
+    let outside = design.blocks.iter().flat_map(|block| &block.runs).flat_map(|run| &run.pts)
+        .any(|point| !fits(point.x, point.y) || !fits(point.x.round(), point.y.round()));
+    if outside { return Err("Design exceeds the selected hoop after coordinate rounding".into()); }
+    if format == "dst" {
+        let trim_outside = formats::dst::stream(design).into_iter()
+            .filter(|command| command.op == formats::Op::Trim)
+            .any(|command| !fits(command.x + 2.0, command.y + 2.0)
+                || !fits(command.x - 2.0, command.y - 2.0));
+        if trim_outside {
+            return Err("A DST trim exceeds the selected hoop. Move the design away from the edge.".into());
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
-async fn export_design(format: String, width: f64, height: f64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool,String> {
-    if !width.is_finite() || !height.is_finite() || width<=0.0 || height<=0.0 {return Err("Invalid hoop dimensions".into());}
-    let bytes = { let guard = state.lock().map_err(|e| e.to_string())?; let d = guard.current.as_ref().ok_or("Open artwork first")?; if d.blocks.iter().flat_map(|b| &b.runs).flat_map(|r| &r.pts).any(|p| !p.x.is_finite() || !p.y.is_finite() || p.x.abs()>width*5.0 || p.y.abs()>height*5.0) {return Err("Design exceeds selected hoop".into());} formats::write_format(d,&format).map_err(|e|e.to_string())? };
-    let Some(path) = rfd::AsyncFileDialog::new().add_filter("Embroidery", &[format.as_str()]).set_file_name(format!("design.{format}")).save_file().await else {return Ok(false)};
-    std::fs::write(path.path(),bytes).map_err(|e|e.to_string())?;
+async fn export_design(format: String, width: f64, height: f64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool, String> {
+    let design = state.lock().map_err(|err| err.to_string())?.current.clone().ok_or("Open artwork first")?;
+    let encode_format = format.clone();
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        validate_export(&design, &encode_format, width, height)?;
+        formats::write_format(&design, &encode_format).map_err(|err| err.to_string())
+    }).await.map_err(|err| err.to_string())??;
+    let Some(path) = rfd::AsyncFileDialog::new().add_filter("Embroidery", &[format.as_str()])
+        .set_file_name(format!("design.{format}")).save_file().await else { return Ok(false); };
+    let mut path = path.path().to_owned();
+    match path.extension().and_then(|ext| ext.to_str()) {
+        None => { path.set_extension(&format); }
+        Some(ext) if ext.eq_ignore_ascii_case(&format) => {}
+        Some(_) => return Err(format!("Use a .{format} filename for this export")),
+    };
+    tauri::async_runtime::spawn_blocking(move || std::fs::write(path, bytes))
+        .await.map_err(|err| err.to_string())?.map_err(|err| err.to_string())?;
     Ok(true)
 }
+
 #[tauri::command]
 fn current_preview(state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<Preview>,String> {
  Ok(state.lock().map_err(|e|e.to_string())?.current.as_ref().map(preview))
@@ -797,6 +841,18 @@ async fn insert_character(bytes:Vec<u8>,name:String,width_mm:f64,x_mm:f64,y_mm:f
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_rejects_rounding_outside_hoop_and_excess_color_blocks() {
+        let run = zigzag::design::Run { pts: vec![zigzag::geom::P::new(100.6, 0.0)], trim_before: false };
+        let block = zigzag::design::Block { color: [20, 40, 60], runs: vec![run] };
+        let mut design = Design { blocks: vec![block.clone()], ..Default::default() };
+        assert!(validate_export(&design, "dst", 20.14, 20.0).is_err());
+        assert!(validate_export(&design, "dst", 22.0, 20.0).is_ok());
+        design.blocks = vec![block; 257];
+        assert!(validate_export(&design, "pes", 22.0, 20.0).is_err());
+        assert!(validate_export(&design, "pec", 22.0, 20.0).is_err());
+    }
 
     #[test]
     fn project_round_trip_preserves_hoop_position_and_source() {
