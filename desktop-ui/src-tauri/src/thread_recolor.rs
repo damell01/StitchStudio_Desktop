@@ -22,7 +22,7 @@ pub(super) fn apply(workspace: &mut Workspace, index: usize, color: [u8; 3]) -> 
         return Ok(preview(current));
     }
     let Some(source) = workspace.source.as_ref() else {
-        workspace.checkpoint();
+        workspace.checkpoint_named("Change thread color");
         let design = workspace.current.as_mut().ok_or("Open artwork first")?;
         design.blocks[index].color = color;
         return Ok(preview(design));
@@ -63,7 +63,7 @@ pub(super) fn apply(workspace: &mut Workspace, index: usize, color: [u8; 3]) -> 
         return Err("The new thread plan contains no stitches.".into());
     }
     let result = preview(&design);
-    workspace.checkpoint();
+    workspace.checkpoint_named("Change thread color");
     workspace.source = Some(updated);
     workspace.current = Some(design);
     Ok(result)
@@ -85,8 +85,8 @@ pub(super) fn replace_color(workspace:&mut Workspace,previous:[u8;3],color:[u8;3
    let design=updated.plan();
    let normalize=|d:&Design|{let mut blocks:Vec<([u8;3],Vec<(bool,Vec<(i64,i64)>)>)>=Vec::new();for b in &d.blocks{if blocks.last().is_none_or(|last|last.0!=b.color){blocks.push((b.color,Vec::new()))}blocks.last_mut().unwrap().1.extend(b.runs.iter().map(|r|(r.trim_before,r.pts.iter().map(|p|(p.x.round() as i64,p.y.round() as i64)).collect::<Vec<_>>())));}blocks};
    if normalize(&design)!=normalize(&expected){return Err("This color is controlled by a special stitch pattern or changing it would alter sewing order. Edit the specific object instead.".into())}
-   let result=preview(&design);workspace.checkpoint();workspace.source=Some(updated);workspace.current=Some(design);Ok(result)
- }else{let result=preview(&expected);workspace.checkpoint();workspace.current=Some(expected);Ok(result)}
+   let result=preview(&design);workspace.checkpoint_named("Replace design color");workspace.source=Some(updated);workspace.current=Some(design);Ok(result)
+ }else{let result=preview(&expected);workspace.checkpoint_named("Replace design color");workspace.current=Some(expected);Ok(result)}
 }
 pub(super) fn map_blocks(workspace:&mut Workspace,original:&[[u8;3]],colors:&[[u8;3]])->Result<Preview,String>{
  let current=workspace.current.as_ref().ok_or("Open a design first")?;
@@ -110,8 +110,8 @@ pub(super) fn map_blocks(workspace:&mut Workspace,original:&[[u8;3]],colors:&[[u
    for (i,color) in assignments{updated.shapes[i].color=color;}
    let planned=updated.plan();
    if !same_stitch_plan(&expected,&planned){return Err("Mapping would change sewing order or stitch geometry. Choose distinct colors for adjacent blocks or edit them individually.".into())}
-   let result=preview(&planned);workspace.checkpoint();workspace.source=Some(updated);workspace.current=Some(planned);Ok(result)
- }else{let result=preview(&expected);workspace.checkpoint();workspace.current=Some(expected);Ok(result)}
+   let result=preview(&planned);workspace.checkpoint_named("Map reference colors");workspace.source=Some(updated);workspace.current=Some(planned);Ok(result)
+ }else{let result=preview(&expected);workspace.checkpoint_named("Map reference colors");workspace.current=Some(expected);Ok(result)}
 }
 #[cfg(test)]
 mod tests {
