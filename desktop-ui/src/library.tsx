@@ -6,7 +6,16 @@ import { CharacterGallery, type Art } from './character-gallery';
 import { confirmAction } from './dialogs';
 import { importToLibrary, type LibraryImportSource } from './library-import';
 
-export type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number; thumbnail?: string };
+export type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number; created?: number; thumbnail?: string };
+function ProjectDates({project,compact=false}:{project:Project;compact?:boolean}){
+  const format=(value:number)=>new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value*1000));
+  const valid=(value:number|undefined):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>0&&Number.isFinite(new Date(value*1000).getTime());
+  return <div className="project-dates">
+    {valid(project.modified)?<time dateTime={new Date(project.modified*1000).toISOString()} title={'Last modified: '+format(project.modified)}><span>Modified</span> {format(project.modified)}</time>:<small>Modified date unavailable</small>}
+    {!compact&&valid(project.created)&&<time dateTime={new Date(project.created*1000).toISOString()}><span>Created</span> {format(project.created)}</time>}
+  </div>;
+}
+
 type ThumbnailPlan={stitches:number;blocks:{color:number[];runs:number[][][]}[]};
 export function rememberProject(project:Project){try{const previous:Project[]=JSON.parse(localStorage.getItem('studio-recent-projects')||'[]');localStorage.setItem('studio-recent-projects',JSON.stringify([project,...previous.filter(p=>p.file!==project.file)].slice(0,20)))}catch{/* Saving the actual project remains successful. */}}
 export function thumbnailOf(plan:ThumbnailPlan):string {const canvas=document.createElement('canvas');canvas.width=220;canvas.height=150;const ctx=canvas.getContext('2d');if(!ctx)return '';let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const b of plan.blocks)for(const run of b.runs)for(const [x,y] of run){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y)}if(!Number.isFinite(minX))return '';const scale=Math.min(196/Math.max(1,maxX-minX),126/Math.max(1,maxY-minY));ctx.translate(110-(minX+maxX)/2*scale,75-(minY+maxY)/2*scale);ctx.scale(scale,scale);ctx.lineWidth=Math.max(.15,1.2/scale);ctx.lineCap='round';ctx.lineJoin='round';for(const b of plan.blocks){ctx.strokeStyle=`rgb(${b.color.join(',')})`;ctx.beginPath();for(const run of b.runs){run.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y))}ctx.stroke()}return canvas.toDataURL('image/png')}
@@ -18,7 +27,7 @@ const projectThumbnailCache=new Map<string,string>();
 function ProjectThumbnail({project}:{project:Project}) {
   const cacheKey=project.file+'@'+project.modified;
   const [image,setImage]=useState(project.thumbnail||projectThumbnailCache.get(cacheKey)||'');
-  useEffect(()=>{let active=true;const cached=project.thumbnail||projectThumbnailCache.get(cacheKey)||'';setImage(cached);if(!cached)void invoke<ThumbnailPlan>('project_thumbnail',{file:project.file}).then(plan=>{if(active){const next=thumbnailOf(plan);if(projectThumbnailCache.size>=100)projectThumbnailCache.delete(projectThumbnailCache.keys().next().value!);projectThumbnailCache.set(cacheKey,next);setImage(next)}}).catch(()=>{});return()=>{active=false}},[project.file,cacheKey,project.thumbnail]);
+  useEffect(()=>{let active=true;const cached=projectThumbnailCache.get(cacheKey)||project.thumbnail||'';setImage(cached);if(!cached)void invoke<ThumbnailPlan>('project_thumbnail',{file:project.file}).then(plan=>{if(active){const next=thumbnailOf(plan);if(projectThumbnailCache.size>=100)projectThumbnailCache.delete(projectThumbnailCache.keys().next().value!);projectThumbnailCache.set(cacheKey,next);setImage(next)}}).catch(()=>{});return()=>{active=false}},[project.file,cacheKey,project.thumbnail]);
   return <div className="library-thumb">{image?<img src={image} alt="Project stitch preview"/>:<File size={25}/>}</div>;
 }
 function readProjectLibrary():Project[]{try{const saved:Project[]=JSON.parse(localStorage.getItem('studio-project-library')||'[]');const recent:Project[]=JSON.parse(localStorage.getItem('studio-recent-projects')||'[]');return Array.from(new Map([...saved,...recent].map(p=>[p.file,p])).values())}catch{return []}}
@@ -28,7 +37,7 @@ export function RecentProjects({onOpen}:{onOpen:()=>void}) {
   const [error,setError]=useState('');
   async function scan(){try{const result=await invoke<Project[]|null>('scan_projects');if(result){const recent=result.sort((a,b)=>b.modified-a.modified).slice(0,5);recent.slice().reverse().forEach(rememberProject);setProjects(JSON.parse(localStorage.getItem('studio-recent-projects')||'[]'))}}catch(e){setError(String(e))}}
   async function open(project:Project){try{if(!await confirmAction('Open this project? Save existing work first.'))return;const settings=await invoke<{width:number;height:number;format:string}>('library_open',{file:project.file});sessionStorage.setItem('studio-open-project-settings',JSON.stringify(settings));rememberProject(project);onOpen()}catch(e){setError(String(e))}}
-  return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><ProjectThumbnail project={p}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><small>{p.modified?new Date(p.modified*1000).toLocaleDateString():''}</small><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
+  return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><ProjectThumbnail project={p}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><ProjectDates project={p} compact/><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
 }
 
 export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;initialTab?:'embroidery'|'projects'|'artwork' }) {
@@ -137,11 +146,11 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
         </article>)}
       </div><ListNavigation {...filePage}/>
     </> : <>
-      <p>{visibleProjects.length} projects found</p>
+      <p>{visibleProjects.length} {visibleProjects.length===1?'project':'projects'} found</p>
       <div className="font-list">
         {projectPage.items.map(project => <article key={project.file}>
           <ProjectThumbnail project={project}/><div><strong>{project.name}</strong>
-            <small>{project.stitches.toLocaleString()} points · {project.colors} color blocks · {project.width} × {project.height} mm hoop</small>
+            <small className="project-metrics">{project.stitches.toLocaleString()} stitches · {project.colors} blocks</small><small className="project-metrics">{(project.width/25.4).toFixed(2)} × {(project.height/25.4).toFixed(2)} in hoop</small><ProjectDates project={project}/>
           </div>
           <button disabled={busy} onClick={() => open(project)}>Open project</button>
         </article>)}
