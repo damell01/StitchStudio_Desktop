@@ -343,6 +343,25 @@ impl Studio {
         s
     }
 
+    pub(crate) fn recent_projects() -> Vec<PathBuf> {
+        crate::dock::config_file("recent-projects.json")
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| serde_json::from_slice::<Vec<PathBuf>>(&b).ok())
+            .unwrap_or_default()
+    }
+
+    fn remember_project(path: &Path) {
+        let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let mut recent = Self::recent_projects();
+        recent.retain(|p| p != &path);
+        recent.insert(0, path);
+        recent.truncate(24);
+        if let Some(file) = crate::dock::config_file("recent-projects.json") {
+            if let Some(parent) = file.parent() { let _ = std::fs::create_dir_all(parent); }
+            if let Ok(bytes) = serde_json::to_vec(&recent) { let _ = std::fs::write(file, bytes); }
+        }
+    }
+
     pub fn load(&mut self, path: &Path) {
         if path
             .extension()
@@ -356,6 +375,7 @@ impl Studio {
             && i != self.active_tab()
         {
             self.switch_tab(i);
+            Self::remember_project(path);
             self.status = format!("{} is open in this tab.", path.display());
             return;
         }
@@ -369,6 +389,7 @@ impl Studio {
                     );
                     return;
                 }
+                Self::remember_project(path);
                 self.status = format!("Opened {} ({n} objects).", path.display());
                 // Artwork too big for the hoop is scaled down to fit (one
                 // undo step). Stitch files keep their size.
@@ -675,6 +696,7 @@ impl Studio {
     pub fn save(&mut self, path: Option<&Path>) {
         match self.doc.save(path) {
             Ok(p) => {
+                Self::remember_project(&p);
                 self.stable = self.doc.clone();
                 self.modified = false;
                 self.status = format!(
