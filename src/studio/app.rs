@@ -1061,21 +1061,24 @@ impl Studio {
         let home_id = egui::Id::new("studio-home-page");
         let mut home = ctx.data(|d| d.get_temp::<bool>(home_id))
             .unwrap_or(self.doc.shapes.is_empty());
+        let library_id = egui::Id::new("studio-library-page");
+        let mut library = home && ctx.data(|d| d.get_temp::<bool>(library_id).unwrap_or(false));
         egui::Panel::top("studio-navigation").exact_size(42.0).resizable(false)
             .frame(egui::Frame::new().fill(pal.toolbar).inner_margin(egui::Margin::symmetric(12, 4)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Stitch Studio").strong().color(pal.accent));
                     ui.separator();
-                    if ui.selectable_label(home, "Home").clicked() { home = true; }
-                    if ui.selectable_label(!home, "Studio").clicked() { home = false; }
+                    if ui.selectable_label(home && !library, "Home").clicked() { home = true; library = false; }
+                    if ui.selectable_label(library, "Design Library").clicked() { home = true; library = true; }
+                    if ui.selectable_label(!home, "Studio").clicked() { home = false; library = false; }
                 });
             });
-        ctx.data_mut(|d| d.insert_temp(home_id, home));
+        ctx.data_mut(|d| { d.insert_temp(home_id, home); d.insert_temp(library_id, library); });
         if home {
             egui::CentralPanel::no_frame().show(ui, |ui| {
                 egui::ScrollArea::vertical().id_salt("studio-home-scroll").show(ui, |ui| {
-                    self.welcome_panel(ui);
+                    if library { self.design_library_page(ui); } else { self.welcome_panel(ui); }
                 });
             });
         } else {
