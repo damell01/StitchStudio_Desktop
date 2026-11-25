@@ -619,9 +619,9 @@ impl Studio {
         caption(ui, format!("{} selected · Shift-click colors to combine", self.sel_indices().len()));
         let rec = self.tabs.list[self.active_tab()].rec;
         let name_id = ui.make_persistent_id(("colorway-name", rec));
-        let mut saved = self.doc.settings.colorways.clone();
         let mut name = ui.ctx().data(|d| d.get_temp::<String>(name_id).unwrap_or_else(|| "Original".into()));
         ui.collapsing("Colorway variations", |ui| {
+            let mut saved = self.doc.settings.colorways.clone();
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut name).desired_width(100.0).hint_text("Variation name"));
                 if ui.add_enabled(colors > 0 && !name.trim().is_empty(), egui::Button::new("Save")).clicked() {
@@ -632,7 +632,13 @@ impl Studio {
                     } else {
                         saved.push((label, snapshot));
                     }
-                    self.status = "Colorway saved in project.".into();
+                    if serde_json::to_vec(&saved).is_ok_and(|bytes| bytes.len() <= 1_000_000) {
+                        self.doc.settings.colorways = saved.clone();
+                        self.status = "Colorway saved in project.".into();
+                    } else {
+                        saved = self.doc.settings.colorways.clone();
+                        self.status = "Colorway storage limit reached; remove an existing variation first.".into();
+                    }
                 }
             });
             let mut remove = None;
@@ -652,10 +658,12 @@ impl Studio {
                     });
                 }
             });
-            if let Some(index) = remove { saved.remove(index); }
+            if let Some(index) = remove {
+                saved.remove(index);
+                self.doc.settings.colorways = saved;
+            }
             caption(ui, "Save the project to retain all variations.");
         });
-        self.doc.settings.colorways = saved;
         ui.ctx().data_mut(|d| d.insert_temp(name_id, name));
         ui.collapsing("Advanced color tools", |ui| {
             let selection = self.sel_indices();
