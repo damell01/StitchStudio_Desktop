@@ -459,11 +459,30 @@ fn fill_runs(
     let p = &shape.params;
     let f = &opt.fabric;
     let mut angle = p.fill_angle().to_radians();
-    // Compare row fragmentation at several orientations for automatic fills.
-    // Preserve explicitly authored angles and avoid repeated work on huge shapes.
+    // Sample the dominant outline orientation as well as fixed angles.
+    // Score disconnected row transitions separately from stitch count:
+    // fewer rows alone does not guarantee fewer cuts or hidden travel.
+    // Preserve authored angles and bound the extra planning cost.
     if opt.hat_order && p.angle.is_none() && rings.iter().map(Vec::len).sum::<usize>() < 4000 {
+        let mut candidates = vec![angle, 0.0, std::f64::consts::FRAC_PI_4,
+            std::f64::consts::FRAC_PI_2, 3.0*std::f64::consts::FRAC_PI_4];
+        let mut longest = 0.0_f64;
+        let mut dominant = angle;
+        for ring in rings {
+            if ring.len()<2 {continue}
+            for i in 0..ring.len() {
+                let v = ring[(i+1)%ring.len()] - ring[i];
+                let len = v.len();
+                if len>longest {longest=len;dominant=v.y.atan2(v.x);}
+            }
+        }
+        candidates.extend([dominant, dominant+std::f64::consts::FRAC_PI_2]);
+        let mut seen:Vec<f64>=Vec::new();
         let mut best = f64::INFINITY;
-        for candidate in [angle, 0.0, std::f64::consts::FRAC_PI_4, std::f64::consts::FRAC_PI_2, 3.0*std::f64::consts::FRAC_PI_4] {
+        for candidate in candidates {
+            let candidate=candidate.rem_euclid(std::f64::consts::PI);
+            if seen.iter().any(|a| (a-candidate).abs()<0.015){continue}
+            seen.push(candidate);
             let probe = FillParams {
                 angle: candidate, spacing: mm(p.fill_spacing(f)).max(6.0),
                 len: mm(p.fill_len(f)), inset: 0.0, pull: 0.0,
@@ -471,7 +490,18 @@ fn fill_runs(
             };
             let rows = tatami(rings, rule, &probe);
             if rows.is_empty() { continue; }
-            let cost = rows.len() as f64 * 8.0 + rows.iter().map(Vec::len).sum::<usize>() as f64;
+            let mut travel=0.0;
+            let mut exposed=0usize;
+            for pair in rows.windows(2) {
+                if let (Some(a),Some(b))=(pair[0].last(),pair[1].first()) {
+                    let gap=a.dist(*b);
+                    travel+=gap.min(500.0);
+                    if gap>opt.max_jump_no_trim && !segment_inside(rings,rule,*a,*b,2.0) {exposed+=1;}
+                }
+            }
+            let cost = rows.len() as f64 * 8.0
+                + rows.iter().map(Vec::len).sum::<usize>() as f64
+                + travel * 0.12 + exposed as f64 * 24.0;
             if cost < best { best = cost; angle = candidate; }
         }
     }
