@@ -617,26 +617,22 @@ impl Studio {
             }
         });
         caption(ui, format!("{} selected · Shift-click colors to combine", self.sel_indices().len()));
-        // Named, in-session colorways; use stable object identities.
-        type Colorway = (String, Vec<(u64, [u8; 3])>);
-        // Recovery IDs follow documents even when tabs are reordered or renamed.
         let rec = self.tabs.list[self.active_tab()].rec;
-        let baseline_id = ui.make_persistent_id(("named-colorways", rec));
         let name_id = ui.make_persistent_id(("colorway-name", rec));
-        let mut saved = ui.ctx().data(|d| d.get_temp::<Vec<Colorway>>(baseline_id).unwrap_or_default());
+        let mut saved = self.doc.settings.colorways.clone();
         let mut name = ui.ctx().data(|d| d.get_temp::<String>(name_id).unwrap_or_else(|| "Original".into()));
         ui.collapsing("Colorway variations", |ui| {
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut name).desired_width(100.0).hint_text("Variation name"));
                 if ui.add_enabled(colors > 0 && !name.trim().is_empty(), egui::Button::new("Save")).clicked() {
-                    let snapshot = self.doc.shapes.iter().map(|s| (s.uid as u64, s.color)).collect();
+                    let snapshot = self.doc.shapes.iter().map(|s| (s.id.clone(), matches!(s.part, zigzag::svg::Part::Stroke), s.color)).collect();
                     let label = name.trim().to_owned();
                     if let Some(entry) = saved.iter_mut().find(|e| e.0 == label) {
                         entry.1 = snapshot;
                     } else {
                         saved.push((label, snapshot));
                     }
-                    self.status = "Colorway saved for this session.".into();
+                    self.status = "Colorway saved in project.".into();
                 }
             });
             let mut remove = None;
@@ -644,9 +640,9 @@ impl Studio {
                 for (index, (label, snapshot)) in saved.iter().enumerate() {
                     ui.horizontal(|ui| {
                         if ui.button(label.as_str()).on_hover_text("Restore this colorway").clicked() {
-                            let colors: std::collections::HashMap<_, _> = snapshot.iter().copied().collect();
+                            let colors: std::collections::HashMap<_, _> = snapshot.iter().map(|(id, stroke, color)| ((id.as_str(), *stroke), *color)).collect();
                             for s in &mut self.doc.shapes {
-                                if let Some(color) = colors.get(&(s.uid as u64)) {
+                                if let Some(color) = colors.get(&(s.id.as_str(), matches!(s.part, zigzag::svg::Part::Stroke))) {
                                     s.color = *color;
                                 }
                             }
@@ -657,12 +653,10 @@ impl Studio {
                 }
             });
             if let Some(index) = remove { saved.remove(index); }
-            caption(ui, "Session only · save the project to retain its current colors.");
+            caption(ui, "Save the project to retain all variations.");
         });
-        ui.ctx().data_mut(|d| {
-            d.insert_temp(baseline_id, saved);
-            d.insert_temp(name_id, name);
-        });
+        self.doc.settings.colorways = saved;
+        ui.ctx().data_mut(|d| d.insert_temp(name_id, name));
         ui.collapsing("Advanced color tools", |ui| {
             let selection = self.sel_indices();
             ui.collapsing("Batch stitch settings", |ui| {
