@@ -885,12 +885,45 @@ async fn digitize_artwork(
             zigzag::trace::digitize_raster(&bytes, &name, &options, tolerance, cleanup)
                 .map_err(|err| err.to_string())?
         };
-        document.settings.fabric = fabric;
+        document.settings.fabric = fabric.clone();
         let artwork_bounds = zigzag::svg::shapes_bounds(&document.shapes);
         if artwork_bounds.width() > 10_000.0 || artwork_bounds.height() > 10_000.0 {
             return Err("Artwork is larger than 1 meter. Reduce the artwork dimensions before digitizing.".into());
         }
-        let design = document.plan();
+        let mut design = document.plan();
+        // Compare a second automatic trace only for raster imports with
+        // automatic colors. Keep the original unless the alternate retains
+        // the palette and approximate extent while reducing sewing complexity.
+        if mime != "image/svg+xml" && colors == 0 && !thin_lines && design.stitch_count() <= 100_000 {
+            let mut alternate_options = options.clone();
+            alternate_options.lines = true;
+            if let Ok(mut alternate) = zigzag::trace::digitize_raster(&bytes, &name, &alternate_options, tolerance, cleanup) {
+                alternate.settings.fabric = fabric.clone();
+                let bounds = zigzag::svg::shapes_bounds(&alternate.shapes);
+                let similar_extent = (bounds.width() - artwork_bounds.width()).abs() <= 10.0
+                    && (bounds.height() - artwork_bounds.height()).abs() <= 10.0;
+                if similar_extent {
+                    let candidate = alternate.plan();
+                    let palette = |d: &Design| d.blocks.iter().map(|b| b.color).collect::<std::collections::HashSet<_>>();
+                    let score = |d: &Design| {
+                        let audit = measure_stitches(d);
+                        let commands = formats::dst::stream(d);
+                        let changes = commands.iter().filter(|c| matches!(c.op, formats::Op::ColorChange)).count();
+                        let jumps = commands.iter().filter(|c| matches!(c.op, formats::Op::Jump)).count();
+                        d.stitch_count() as f64 + changes as f64 * 180.0 + jumps as f64 * 12.0
+                            + audit.long as f64 * 100.0 + audit.zero as f64 * 4.0
+                    };
+                    let n = candidate.stitch_count();
+                    let base = design.stitch_count();
+                    if n > 0 && n <= 100_000 && n >= base / 2
+                        && palette(&candidate) == palette(&design)
+                        && score(&candidate) < score(&design) * 0.90 {
+                        document = alternate;
+                        design = candidate;
+                    }
+                }
+            }
+        }
         let count = design.stitch_count();
         if count == 0 { return Err("No stitchable artwork found".into()); }
         if count > 2_000_000 { return Err("Design exceeds the two million stitch limit".into()); }
