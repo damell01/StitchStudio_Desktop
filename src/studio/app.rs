@@ -1037,7 +1037,7 @@ impl Studio {
             )
             .show(ui, |ui| self.titlebar(ui));
         egui::Panel::top("workspace-toolbar")
-            .exact_size(42.0)
+            .exact_size(if ui.available_width() < 1500.0 { 84.0 } else { 48.0 })
             .resizable(false)
             .frame(egui::Frame::new().fill(pal.toolbar).inner_margin(egui::Margin::symmetric(10, 0)))
             .show(ui, |ui| self.workspace_toolbar(ui));
