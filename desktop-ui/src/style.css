@@ -1558,3 +1558,19 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .digitizer-layout .digitizer-stitch-image{padding:12px;box-sizing:border-box}
 .digitizer-layout .digitizer-thread-view{filter:drop-shadow(.5px .6px .35px #35243f44)}
 @media(max-height:780px){.lettering-preview .lettering-sample{min-height:180px;height:34vh}.lettering-inspector{gap:4px}.lettering-metrics>div{padding:6px}}
+
+/* Contextual text editing, without covering the design canvas. */
+.editor-workspace .workspace-inspector .workspace-segments{grid-template-columns:repeat(5,minmax(0,1fr))}
+.inline-lettering{display:flex;flex-direction:column;gap:7px;min-width:0}
+.inline-lettering h3,.inline-lettering h4,.inline-lettering p{margin:0}
+.inline-lettering label{display:grid;gap:3px;margin:0}
+.inline-lettering textarea,.inline-lettering select,.inline-lettering input:not([type=color]){width:100%;min-width:0}
+.inline-lettering textarea{resize:vertical;min-height:48px;font:inherit;padding:6px;border:1px solid var(--workspace-border);border-radius:7px;background:var(--workspace-surface);color:var(--workspace-text)}
+.inline-text-sample{display:grid;place-items:center;text-align:center;overflow-wrap:anywhere;min-height:48px;padding:8px;background:var(--workspace-soft);border-radius:8px;font-size:20px}
+.inline-lettering-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.inline-lettering-style,.inline-lettering-layout{display:flex;gap:5px;align-items:center}
+.inline-lettering-style>label{display:flex;flex:1;justify-content:space-between;align-items:center}
+.inline-lettering-style button,.inline-lettering-layout button{min-height:28px;padding:5px 8px;font-size:11px;justify-content:center}
+.inline-lettering-layout button{flex:1}
+.inline-lettering button[aria-pressed=true]{background:var(--brand-soft);border-color:var(--brand-accent);color:var(--brand)}
+.inline-lettering>.primary{justify-content:center;margin-top:4px}
