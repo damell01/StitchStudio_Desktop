@@ -619,8 +619,10 @@ impl Studio {
         caption(ui, format!("{} selected · Shift-click colors to combine", self.sel_indices().len()));
         // Named, in-session colorways; use stable object identities.
         type Colorway = (String, Vec<(u64, [u8; 3])>);
-        let baseline_id = ui.make_persistent_id(("named-colorways", self.active_tab(), &self.doc.path, &self.doc.name));
-        let name_id = ui.make_persistent_id("colorway-name");
+        // Recovery IDs follow documents even when tabs are reordered or renamed.
+        let rec = self.tabs.list[self.active_tab()].rec;
+        let baseline_id = ui.make_persistent_id(("named-colorways", rec));
+        let name_id = ui.make_persistent_id(("colorway-name", rec));
         let mut saved = ui.ctx().data(|d| d.get_temp::<Vec<Colorway>>(baseline_id).unwrap_or_default());
         let mut name = ui.ctx().data(|d| d.get_temp::<String>(name_id).unwrap_or_else(|| "Original".into()));
         ui.collapsing("Colorway variations", |ui| {
