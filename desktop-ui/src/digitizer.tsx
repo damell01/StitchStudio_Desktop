@@ -1,3 +1,4 @@
+import {FabricPicker} from './fabric-picker';
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowRight, ChartNoAxesColumn, Columns2, Image as ArtworkIcon, ImagePlus, Layers2 } from 'lucide-react';
@@ -228,12 +229,7 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
             value={Number((settings.widthMm / 25.4).toFixed(3))}
             onChange={event => update('widthMm', Number(event.target.value) * 25.4)} />
         </label>}
-        <label>Fabric<select value={settings.fabric} disabled={busy} onChange={event => update('fabric', event.target.value)}>
-          <option value="standard">Stable woven / twill</option>
-          <option value="knit">Stretch knit</option>
-          <option value="thin-cap">Unstructured cap</option>
-          <option value="structured-cap">Structured cap</option>
-        </select></label>
+        <FabricPicker value={settings.fabric} disabled={busy} onChange={fabric => update('fabric', fabric)}/>
         {!vector && <details className="digitizer-options">
           <summary>Advanced artwork options</summary>
           <fieldset disabled={busy}>

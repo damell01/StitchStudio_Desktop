@@ -1,8 +1,9 @@
 import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { File, FilePlus, FolderOpen, Search } from 'lucide-react';
+import { File, FileArchive, FilePlus, FolderOpen, Search } from 'lucide-react';
 import { confirmAction } from './dialogs';
+import { importToLibrary, type LibraryImportSource } from './library-import';
 
 type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number };
 
@@ -34,11 +35,12 @@ export function Library({ onDone }: { onDone: () => void }) {
     finally { setBusy(false); }
   }
 
-  function importDesigns(folder: boolean) {
+  function importDesigns(source: LibraryImportSource) {
     void run(async () => {
-      const count = await invoke<number>('import_personal_designs', { folder });
+      const result = await importToLibrary(source);
+      if (result === null) return;
       setFiles(await invoke<string[]>('personal_designs'));
-      setMessage(count ? `Imported ${count} ${count === 1 ? 'design' : 'designs'}.` : 'No new embroidery files imported.');
+      setMessage(result);
     });
   }
 
@@ -78,8 +80,9 @@ export function Library({ onDone }: { onDone: () => void }) {
     <div className="library-filters">
       <label className="library-search"><Search size={16} /><input aria-label="Search designs" placeholder="Search designs" value={query} onChange={event => setQuery(event.target.value)} /></label>
       {tab === 'embroidery' ? <>
-        <button className="primary" disabled={busy} onClick={() => importDesigns(false)}><FilePlus size={16} /> Import files</button>
-        <button disabled={busy} onClick={() => importDesigns(true)}><FolderOpen size={16} /> Import folder</button>
+        <button className="primary" disabled={busy} onClick={() => importDesigns('files')}><FilePlus size={16} /> Import files</button>
+        <button disabled={busy} onClick={() => importDesigns('folder')}><FolderOpen size={16} /> Import folder</button>
+        <button disabled={busy} onClick={() => importDesigns('zip')}><FileArchive size={16} /> Import ZIP</button>
       </> : <>
         <button className="primary" disabled={busy} onClick={scan}><FolderOpen size={16} /> Scan project folder</button>
         <select aria-label="Sort projects" value={sort} onChange={event => setSort(event.target.value)}>

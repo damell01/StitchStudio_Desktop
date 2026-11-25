@@ -1,0 +1,12 @@
+.fabric-picker { display: grid; gap: 4px; margin: 6px 0 10px; }
+.fabric-label { font-size: .82rem; font-weight: 600; }
+.fabric-picker .fabric-trigger, .fabric-results button { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fabric-guide { font-size: .78rem; }
+.fabric-guide summary { cursor: pointer; }
+.fabric-guide p { margin: 6px 0; }
+.fabric-dialog { width: min(420px, calc(100vw - 32px)); }
+.fabric-search { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.fabric-search input { flex: 1; min-width: 0; }
+.fabric-results { display: grid; gap: 4px; }
+.fabric-results button[aria-pressed="true"] { background: var(--brand-soft, #eee6fb); }
+.fabric-results button small { font-weight: normal; }

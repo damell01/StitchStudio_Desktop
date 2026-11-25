@@ -4,6 +4,7 @@ import { Crosshair, FileInput, FolderOpen, Image, LayoutGrid, Plus, Search, X } 
 import { CharacterGallery } from './character-gallery';
 import { compareNames, ListNavigation, matchesName, usePagedList } from './list-navigation';
 import { TemplateAttribution, TemplateLibrary, type Template } from './templates';
+import { importToLibrary, type LibraryImportSource } from './library-import';
 import './insert-design-dialog.css';
 
 type Artwork = { name: string; mime: string; bytes: number[] };
@@ -116,11 +117,12 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
     if (next === 'personal') void run(loadFiles);
   }
 
-  function importFiles(folder: boolean) {
+  function importFiles(source: LibraryImportSource) {
     void run(async () => {
-      const count = await invoke<number>('import_personal_designs', { folder });
+      const result = await importToLibrary(source);
+      if (result === null) return;
       await loadFiles();
-      setMessage(count ? `Imported ${count} ${count === 1 ? 'design' : 'designs'}.` : 'No new designs imported.');
+      setMessage(result);
     });
   }
 
@@ -164,8 +166,9 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
             <button disabled={!offsetValid} onClick={() => insert({ source, file: null })}>
               <FileInput size={17}/> Choose file from disk
             </button>
-            <button onClick={() => importFiles(false)}>Import files to library</button>
-            <button onClick={() => importFiles(true)}>Import folder</button>
+            <button onClick={() => importFiles('files')}>Import files to library</button>
+            <button onClick={() => importFiles('folder')}>Import folder</button>
+            <button onClick={() => importFiles('zip')}>Import ZIP</button>
           </div>
           <label className="studio-insert-search"><Search size={16}/><input placeholder="Find a saved design" aria-label="Search personal designs"
             value={query} onChange={event => setQuery(event.target.value)}/></label>

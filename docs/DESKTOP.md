@@ -54,14 +54,14 @@ For installation, open the DMG and copy the app into Applications. Local packagi
 2. Review the stitch paths alongside the source. For raster artwork, use **Processed** to inspect the cleanup result. **Density** shows up to 512 one-square-millimeter cells with the highest needle penetration counts in the DST stream.
 3. Adjust fabric or open **Advanced artwork options**. The draft updates automatically after a short pause. Choose **Open in design studio** to apply it.
 4. Set the machine's verified embroidery field and preferred format in **Machine Manager**. Select the intended hoop in the editor. Hoops measure the usable sewing field.
-5. Use the canvas zoom and pan to inspect stitches. Use the design transformation controls to change physical dimensions or placement. Save an editable `.stitchstudio` project before exporting.
+5. Use the canvas zoom and pan to inspect stitches. In Select mode, click or drag an editable object. Use **Insert design** to preview and place templates or saved designs. Use the design transformation controls to change physical dimensions or placement. Save an editable `.stitchstudio` project before exporting.
 6. Review the machine format, dimensions and thread sequence, then save the machine file. Keep a separate project file for edits. Use the [sew-out worksheet](SEW_OUT.md) for the first machine test.
 
 ## Browse and reuse designs
 
-- **Template Library** includes built-in bow, sports, botanical, animal, monogram and patch artwork. Filter by category, favorites or recent designs. **Preview design** generates a stitch preview before you open the template.
+- **Template Library** includes built-in bow, sports, botanical, animal, monogram and patch artwork. Filter by category, favorites or recent designs. Licensed character and seasonal templates carry source credits in the preview. **Preview design** generates a stitch preview before you open the template.
 - **Design Library** imports compatible embroidery files or scans a folder for editable Stitch Studio projects. Search for a machine file and choose **Insert design** to add its stitch paths to the workspace.
-- Choose disk files or a folder that you have permission to use. Keep original machine files for reference. Current machine-file insertion creates a stitch-based combined design.
+- Choose disk files or a folder that you have permission to use. Keep original machine files for reference. Imported needle paths stay as manual stitches and editable artwork remains in the project. Use **Import ZIP** to add supported machine files from a single-volume archive.
 - In the editor, open **Workspace options** to adjust the Layers and Inspector widths. The workspace remembers both widths. Use the top toolbar to toggle either panel. Press **F11** or choose **Focus canvas** to enter full-screen editing. Press **Esc** to return. In the Inspector, choose **Hoop**, **Stitches**, or **Size** for the task at hand.
 
 ## Find commands and fonts

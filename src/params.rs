@@ -173,6 +173,9 @@ pub struct Fabric {
     pub id: &'static str,
     pub name: &'static str,
     pub about: &'static str,
+    pub group: &'static str,
+    pub stabilizer: &'static str,
+    pub needle: &'static str,
     pub fill_spacing: f64,
     pub fill_len: f64,
     pub fill_pull: f64,
@@ -185,58 +188,148 @@ pub struct Fabric {
     pub run_len: f64,
 }
 
-pub const FABRICS: [Fabric; 4] = [
+// Keep the original four sets of stitch defaults and IDs for saved projects.
+const WOVEN: Fabric = Fabric {
+    id: "standard",
+    name: "Stable woven",
+    group: "Wovens",
+    about: "General starting point for closely woven cloth.",
+    stabilizer: "Try a medium tear-away on stable cloth, or cut-away for dense artwork.",
+    needle: "Try a 75/11 embroidery needle.",
+    fill_spacing: 0.25, fill_len: 3.0, fill_pull: 0.0,
+    fill_edge_walk: false, fill_underlay_spacing: 1.5,
+    satin_spacing: 0.4, satin_pull: 0.15, run_len: 2.5,
+};
+const KNIT: Fabric = Fabric {
+    id: "knit",
+    name: "General knit",
+    group: "Knits and stretch",
+    about: "Foundation stitching and pull compensation support flexible loops.",
+    stabilizer: "Hoop the fabric relaxed with a cut-away backing.",
+    needle: "Try a 75/11 light ballpoint embroidery needle.",
+    fill_spacing: 0.3, fill_len: 2.8, fill_pull: 0.3,
+    fill_edge_walk: true, fill_underlay_spacing: 1.2,
+    satin_spacing: 0.38, satin_pull: 0.3, run_len: 2.0,
+};
+const SOFT_CAP: Fabric = Fabric {
+    id: "thin-cap",
+    name: "Unstructured cap",
+    group: "Headwear",
+    about: "Open fill and an edge walk support a flexible crown.",
+    stabilizer: "Support the crown with cap backing and check the design against the cap frame.",
+    needle: "Try a 75/11 embroidery needle suited to the crown material.",
+    fill_spacing: 0.35, fill_len: 3.0, fill_pull: 0.2,
+    fill_edge_walk: true, fill_underlay_spacing: 2.0,
+    satin_spacing: 0.42, satin_pull: 0.2, run_len: 2.2,
+};
+const HARD_CAP: Fabric = Fabric {
+    id: "structured-cap",
+    name: "Structured cap",
+    about: "Moderate fill on a stiff, backed crown. Check clearance over the center seam.",
+    stabilizer: "Try cap backing with the frame recommended for the machine.",
+    needle: "Try an 80/12 embroidery needle compatible with the cap frame and machine.",
+    fill_spacing: 0.3, fill_len: 3.5, fill_pull: 0.15,
+    fill_underlay_spacing: 1.8, satin_spacing: 0.4, run_len: 2.5,
+    ..SOFT_CAP
+};
+
+/// Additional materials use starting values for sample sew-outs. Construction,
+/// fabric weight, thread and machine can all change the final settings.
+pub const FABRICS: [Fabric; 17] = [
+    WOVEN, SOFT_CAP, HARD_CAP, KNIT,
     Fabric {
-        id: "standard",
-        name: "Standard (twill, denim, patches)",
-        about: "Stable woven fabric. Classic densities.",
-        fill_spacing: 0.25,
-        fill_len: 3.0,
-        fill_pull: 0.0,
-        fill_edge_walk: false,
-        fill_underlay_spacing: 1.5,
-        satin_spacing: 0.4,
-        satin_pull: 0.15,
-        run_len: 2.5,
+        id: "cotton", name: "Quilting cotton",
+        about: "Slightly more open fill helps a lightweight woven stay flat.",
+        fill_spacing: 0.36, fill_pull: 0.1, fill_underlay_spacing: 2.0,
+        ..WOVEN
     },
     Fabric {
-        id: "thin-cap",
-        name: "Thin cotton cap (unstructured)",
-        about: "Light, flexible crown. Lighter fill, more pull compensation, edge walk to keep shapes flat.",
-        fill_spacing: 0.35,
-        fill_len: 3.0,
-        fill_pull: 0.2,
-        fill_edge_walk: true,
-        fill_underlay_spacing: 2.0,
-        satin_spacing: 0.42,
-        satin_pull: 0.2,
-        run_len: 2.2,
+        id: "twill", name: "Twill",
+        about: "Firmly woven diagonal ribs support moderate fill and satin columns.",
+        fill_spacing: 0.32, fill_pull: 0.1, satin_pull: 0.18,
+        ..WOVEN
     },
     Fabric {
-        id: "structured-cap",
-        name: "Structured cap (buckram front)",
-        about: "Stiff front panel. Medium density.",
-        fill_spacing: 0.3,
-        fill_len: 3.5,
-        fill_pull: 0.15,
-        fill_edge_walk: true,
-        fill_underlay_spacing: 1.8,
-        satin_spacing: 0.4,
-        satin_pull: 0.2,
-        run_len: 2.5,
+        id: "denim", name: "Denim",
+        about: "Moderate spacing and an edge walk follow the heavy twill weave.",
+        stabilizer: "Try tear-away on stable denim and cut-away on denim with stretch.",
+        needle: "Try an 80/12 sharp embroidery needle. Check thick seams before sewing.",
+        fill_spacing: 0.34, fill_pull: 0.15, fill_edge_walk: true, run_len: 2.8,
+        ..WOVEN
     },
     Fabric {
-        id: "knit",
-        name: "Knit (beanie, jersey)",
-        about: "Stretchy. Strong underlay and pull compensation so stitches don't sink.",
-        fill_spacing: 0.3,
-        fill_len: 2.8,
-        fill_pull: 0.3,
-        fill_edge_walk: true,
-        fill_underlay_spacing: 1.2,
-        satin_spacing: 0.38,
-        satin_pull: 0.3,
-        run_len: 2.0,
+        id: "canvas", name: "Canvas",
+        about: "Longer fill stitches and an edge walk support a coarse weave.",
+        needle: "Try an 80/12 sharp embroidery needle compatible with the cloth weight.",
+        fill_spacing: 0.33, fill_len: 3.5, fill_pull: 0.12, fill_edge_walk: true,
+        ..WOVEN
+    },
+    Fabric {
+        id: "polyester", name: "Woven polyester",
+        about: "Lighter coverage for smooth or slippery polyester. Use a knit preset for a stretchy garment.",
+        stabilizer: "Try lightweight cut-away backing. Check the hooped sample for marks.",
+        needle: "Try a 70/10 or 75/11 embroidery needle on a scrap.",
+        fill_spacing: 0.4, fill_pull: 0.12, satin_spacing: 0.43,
+        ..WOVEN
+    },
+    Fabric {
+        id: "t-shirt", name: "T-shirt",
+        about: "Open rows and an edge walk support lightweight shirt fabric.",
+        stabilizer: "Try soft no-show mesh cut-away and hoop the garment without stretching it.",
+        fill_spacing: 0.4, fill_pull: 0.25, satin_spacing: 0.42,
+        ..KNIT
+    },
+    Fabric {
+        id: "jersey", name: "Jersey",
+        about: "Open fill and shorter running stitches follow fine single-knit fabric.",
+        fill_spacing: 0.39, fill_len: 2.6, fill_underlay_spacing: 1.6, satin_spacing: 0.42,
+        ..KNIT
+    },
+    Fabric {
+        id: "sweatshirt", name: "Sweatshirt",
+        about: "An edge walk and extra pull compensation support fleece-backed knits.",
+        stabilizer: "Try medium cut-away. Add water-soluble topping if stitches sink into the face.",
+        fill_spacing: 0.36, fill_len: 3.0, fill_pull: 0.35, satin_pull: 0.35,
+        ..KNIT
+    },
+    Fabric {
+        id: "stretch", name: "Stretch performance fabric",
+        about: "More open rows reduce coverage on highly elastic garments.",
+        stabilizer: "Try soft cut-away backing. Hoop the fabric in its relaxed state.",
+        needle: "Try a machine-compatible stretch or light ballpoint embroidery needle.",
+        fill_spacing: 0.45, fill_pull: 0.35, fill_underlay_spacing: 1.8, satin_spacing: 0.45,
+        ..KNIT
+    },
+    Fabric {
+        id: "fleece", name: "Fleece", group: "Fleece and pile",
+        about: "An edge walk and closer foundation rows lift stitches above the pile.",
+        stabilizer: "Try cut-away backing and water-soluble topping on the pile.",
+        fill_spacing: 0.35, fill_len: 3.2, fill_pull: 0.35, satin_pull: 0.35,
+        ..KNIT
+    },
+    Fabric {
+        id: "towel", name: "Terry towel", group: "Fleece and pile",
+        about: "An edge walk and a supporting foundation help keep stitches above the loops.",
+        stabilizer: "Try backing appropriate to the towel weight and water-soluble topping over the loops.",
+        needle: "Try an 80/12 embroidery needle on medium-weight terry.",
+        fill_spacing: 0.32, fill_len: 3.2, fill_pull: 0.35, fill_edge_walk: true,
+        fill_underlay_spacing: 1.15, satin_pull: 0.35,
+        ..WOVEN
+    },
+    Fabric {
+        id: "hat", name: "Soft woven hat",
+        about: "For a soft, woven hat panel. Select the cap-specific profile when using a cap frame.",
+        fill_spacing: 0.38, fill_pull: 0.18, fill_underlay_spacing: 1.9,
+        ..SOFT_CAP
+    },
+    Fabric {
+        id: "leather", name: "Smooth leather", group: "Specialty",
+        about: "Wider spacing and longer running stitches reduce the number of permanent perforations.",
+        stabilizer: "Use a scrap of the same leather. Try supporting it without marking the surface.",
+        needle: "Choose a needle approved for the machine and the specific leather or imitation leather.",
+        fill_spacing: 0.55, fill_len: 3.8, fill_pull: 0.05, fill_underlay_spacing: 2.8,
+        satin_spacing: 0.52, satin_pull: 0.05, run_len: 3.2,
+        ..WOVEN
     },
 ];
 

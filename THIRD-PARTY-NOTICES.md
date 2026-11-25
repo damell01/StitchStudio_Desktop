@@ -6237,3 +6237,37 @@ the following restrictions:
 ```
 
 <!-- Cargo.lock: 93c90f369fd40bcea224126d3ee8d258898f394ea97437c08fa525ae2f065e66 -->
+
+## ZIP collection import
+
+The desktop library importer uses zip 9.8.2, copyright (c) 2014 Mathijs van de Nes. The following additional dependencies are distributed under their MIT license option.
+
+- typed-path 0.13.0, https://github.com/chipsenkbeil/typed-path
+- nix 0.32.0, copyright (c) 2015 Carl Lerche + nix-rust Authors
+- cfg_aliases 0.2.2, copyright (c) 2020 Katharos Technology
+- zeroize 1.9.2, copyright (c) 2018-2026 The RustCrypto Project Developers
+- zeroize_derive 1.5.0, copyright (c) 2019-2026 The RustCrypto Project Developers
+
+The MIT terms for the above components are reproduced below.
+
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+constant_time_eq 0.6.2 is used under its Apache License 2.0 option. The Apache License is reproduced above.

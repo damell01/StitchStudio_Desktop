@@ -1,7 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod machine_preview;
+mod lettering_edit;
 mod project_recovery;
+mod design_archive;
+mod fabric_profiles;
 mod specialty;
+mod thread_recolor;
 use std::sync::Mutex;
 #[derive(Default)]
 struct Workspace { digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)> }
@@ -124,16 +128,13 @@ fn mirror_design(horizontal: bool, state: tauri::State<'_, Mutex<Workspace>>) ->
     place_design(&mut workspace, [x, 0.0, 0.0, y, 0.0, 0.0])
 }
 #[tauri::command]
-fn recolor_block(index: usize, color: [u8;3], state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview,String> {
-    let mut guard=state.lock().map_err(|e|e.to_string())?;
-    if guard.current.as_ref().ok_or("Open artwork first")?.blocks.get(index).is_none() {
-        return Err("Invalid thread block".into());
-    }
-    guard.checkpoint();
-    guard.source=None;
-    let d=guard.current.as_mut().ok_or("Open artwork first")?;
-    d.blocks[index].color=color;
-    Ok(preview(d))
+async fn recolor_block(index: usize, color: [u8; 3], app: tauri::AppHandle) -> Result<Preview, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|err| err.to_string())?;
+        thread_recolor::apply(&mut workspace, index, color)
+    }).await.map_err(|err| err.to_string())?
 }
 fn load_design_document(
     path: &std::path::Path,
@@ -429,6 +430,16 @@ fn personal_designs(app:tauri::AppHandle)->Result<Vec<String>,String>{
  let mut names=Vec::new();for entry in std::fs::read_dir(personal_design_dir(&app)?).map_err(|e|e.to_string())?.flatten(){if entry.file_type().map(|t|t.is_file()).unwrap_or(false){names.push(entry.file_name().to_string_lossy().into_owned());}}names.sort();Ok(names)
 }
 #[tauri::command]
+async fn import_design_archive(app: tauri::AppHandle) -> Result<Option<design_archive::Report>, String> {
+    let Some(file) = rfd::AsyncFileDialog::new().add_filter("ZIP collection", &["zip"]).pick_file().await else {
+        return Ok(None);
+    };
+    let path = file.path().to_owned();
+    let directory = personal_design_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || design_archive::import(&path, &directory))
+        .await.map_err(|error| error.to_string())?.map(Some)
+}
+#[tauri::command]
 async fn import_personal_designs(folder:bool,app:tauri::AppHandle)->Result<usize,String>{
  let paths=if folder{let Some(p)=rfd::AsyncFileDialog::new().pick_folder().await else{return Ok(0)};vec![p.path().to_owned()]}else{let Some(p)=rfd::AsyncFileDialog::new().add_filter("Embroidery",&["dst","pes","pec","exp","jef"]).pick_files().await else{return Ok(0)};p.into_iter().map(|p|p.path().to_owned()).collect()};
  let dir=personal_design_dir(&app)?;
@@ -679,14 +690,18 @@ fn recovery_open(app: tauri::AppHandle, state: tauri::State<'_, Mutex<Workspace>
 #[tauri::command]
 fn lettering_fonts()->Vec<String>{zigzag::document::font_families()}
 #[tauri::command]
-fn create_lettering(text:String,font:String,size:f64,spacing:f64,arc:f64,bold:bool,italic:bool,color:[u8;3],align:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
- if text.trim().is_empty()||text.chars().count()>120||![size,spacing,arc].iter().all(|v|v.is_finite())||!(3.0..=80.0).contains(&size)||!(0.0..=5.0).contains(&spacing)||arc.abs()>300.0{return Err("Invalid lettering settings".into())}
- if !zigzag::document::font_families().contains(&font){return Err("Select an installed font".into())}
- let spec=zigzag::document::TextSpec{text,font,size_mm:size,spacing_mm:spacing,arc_mm:arc,bold,italic,color,align:zigzag::document::Align::parse(&align).unwrap_or_default(),..Default::default()};
- let mut doc=zigzag::document::Document::empty();
- doc.add_lettering(&spec,(0.0,0.0)).map_err(|e|e.to_string())?;
- let d=doc.plan();if d.blocks.is_empty(){return Err("Font produced no stitches".into())}
- let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+async fn create_lettering(
+    text: String, font: String, size: f64, spacing: f64, arc: f64, bold: bool,
+    italic: bool, color: [u8; 3], align: String, placement: Option<[f64; 2]>, app: tauri::AppHandle,
+) -> Result<Preview, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let settings = lettering_edit::LetteringSettings { text, font, size, spacing, arc, bold, italic, color, align };
+        let spec = settings.spec()?;
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|err| err.to_string())?;
+        lettering_edit::apply(&mut workspace, &spec, placement)
+    }).await.map_err(|err| err.to_string())?
 }
 #[derive(serde::Serialize)]
 struct FontAsset {name:String,file:String,format:String,bytes:u64}
@@ -1063,4 +1078,4 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
     window.set_fullscreen(fullscreen).map_err(|error| error.to_string())
 }
 
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
