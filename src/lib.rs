@@ -26,3 +26,6 @@ use std::path::Path;
 pub fn design_from_svg(path: &Path) -> Result<design::Design> {
     Ok(document::Document::open(path)?.plan())
 }
+
+#[cfg(feature = "ocr")]
+pub mod ocr;
