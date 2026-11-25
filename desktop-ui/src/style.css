@@ -1464,3 +1464,45 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .font-overview>div,.thread-overview>div{padding:7px 10px}
 .font-overview strong,.thread-overview strong{font-size:20px}
 @media(max-width:950px){.home-workspace .home-actions{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}.home-welcome{grid-template-columns:1fr}.editor-workspace .studio-document{min-width:100px}.editor-workspace .studio-edit-bar{overflow-x:auto}}
+
+/* Management pages and single-scroll collection layouts. */
+.page-workspace .profile-gallery{display:grid;gap:10px;margin:0}
+.profile-summary{display:grid;grid-template-columns:minmax(160px,1fr) minmax(200px,2fr);gap:10px}
+.profile-summary>div{display:flex;align-items:center;gap:10px;padding:12px;background:var(--lav-panel,var(--studio-panel));border:1px solid var(--lav-border,var(--studio-line));border-radius:10px}
+.profile-summary svg{color:var(--brand);flex:none}.profile-summary strong{font-size:24px;color:var(--brand)}
+.profile-summary span{font-size:12px}
+.profile-gallery .profile-list{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.profile-gallery .profile-card{display:grid;grid-template-columns:1fr;gap:9px;padding:12px;align-items:start}
+.profile-gallery .profile-illustration{width:100%;height:105px}
+.profile-gallery .profile-card>div{min-width:0}
+.profile-card-actions{display:flex;gap:6px}
+.profile-card-actions button{flex:1;justify-content:center;font-size:12px;padding:6px}
+.profile-card-actions button:last-child{color:inherit}
+.profile-gallery .profile-empty{padding:20px!important}
+.profile-gallery .profile-search{margin:0}
+.help-dashboard{display:grid;gap:12px}
+.help-lesson-layout{display:grid;grid-template-columns:minmax(180px,250px) minmax(0,1fr);gap:10px}
+.help-lesson-nav{display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--lav-panel,var(--studio-panel));border:1px solid var(--lav-border,var(--studio-line));border-radius:10px}
+.help-lesson-nav h2{margin:0 0 5px}
+.help-lesson-nav button{text-align:left;font-size:12px;padding:8px;gap:8px}
+.help-lesson-nav button span{color:var(--brand);font-weight:600}
+.help-lesson-nav button[aria-pressed=true]{background:var(--brand-soft);border-color:var(--brand-accent);color:var(--brand)}
+.help-lesson-card{padding:14px}
+.help-lesson-card>small{color:var(--brand);font-size:10px;letter-spacing:.06em}
+.help-lesson-card h2{margin:6px 0}
+.help-lesson-card ol{padding-left:24px;margin:8px 0}
+.help-lesson-card li{padding:5px 0;font-size:13px}
+.help-reference-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.help-reference-heading h2{margin:0}
+.help-reference-heading input{width:min(280px,40%)}
+.help-dashboard .help-stitch-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.help-stitch-preview{display:grid;place-items:center;height:65px;background:var(--brand-soft);border-radius:7px;color:var(--brand)}
+.help-dashboard .help-stitch-grid article h2{font-size:13px;margin:3px 0}
+.help-dashboard .help-stitch-grid article p,.help-dashboard .help-stitch-grid details{font-size:11px;line-height:1.35}
+.help-dashboard .help-stitch-grid details summary{cursor:pointer;color:var(--brand)}
+.app>main.page-workspace{overflow-y:auto;overflow-x:hidden;min-height:0;scrollbar-width:thin}
+.page-workspace :is(.font-list,.thread-catalog,.template-grid){max-height:none;overflow:visible}
+.app>main.editor-workspace>.studio-canvas-layout{flex:1 1 0;min-height:0}
+.editor-workspace .studio-canvas-layout>.canvas-panel{display:flex;flex-direction:column;min-height:0;height:100%}
+.editor-workspace .studio-canvas-layout>.canvas-panel>.workspace-canvas{flex:1 1 0;min-height:0;height:100%}
+@media(max-width:750px){.profile-summary,.help-lesson-layout{grid-template-columns:1fr}}
