@@ -446,7 +446,23 @@ impl Studio {
             ui.painter()
                 .hline(r.x_range(), r.center().y, Stroke::new(1.0, p.separator));
             ui.add_space(6.0);
-            if icon_button(ui, Icon::ZoomFit, "Zoom to Fit", false, 30.0).clicked() {
+            if ui.small_button("−").on_hover_text("Zoom out (view only)").clicked() {
+                self.run_action(Action::ZoomOut);
+            }
+            ui.menu_button(format!("{:.0}%", self.view.scale / (96.0 / 25.4) * 100.0), |ui| {
+                caption(ui, "Canvas magnification · stitches unchanged");
+                for percent in [25.0_f32, 50.0, 100.0, 150.0, 200.0, 400.0, 800.0] {
+                    if ui.button(format!("{percent:.0}%")).clicked() {
+                        self.view.scale = (percent / 100.0 * (96.0 / 25.4)).clamp(1.0, 120.0);
+                        ui.close();
+                    }
+                }
+                if ui.button("Fit design").clicked() { self.request_fit(); ui.close(); }
+            });
+            if ui.small_button("+").on_hover_text("Zoom in (view only)").clicked() {
+                self.run_action(Action::ZoomIn);
+            }
+            if icon_button(ui, Icon::ZoomFit, "Fit design in view (does not resize stitches)", false, 30.0).clicked() {
                 self.request_fit();
             }
             // The selection's thread, like Illustrator's fill swatch: click
