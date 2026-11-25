@@ -111,22 +111,26 @@ pub fn check(
         }
     }
 
+    // Index planner notes once rather than scanning all notes for every object.
+    let mut notes_by_shape = vec![Vec::new(); shapes.len()];
+    for (si, note) in &design.notes {
+        if let Some(notes) = notes_by_shape.get_mut(*si) {
+            notes.push(note);
+        }
+    }
     for (i, s) in shapes.iter().enumerate() {
         let kind = s.params.kind.unwrap_or(Kind::Fill);
         if kind == Kind::Skip {
             continue;
         }
         // Planner notes say what it did instead (e.g. filled part of a satin): informational.
-        for (si, note) in &design.notes {
-            if *si == i {
-                // An object the planner had to leave out is a warning.
-                let level = if note.starts_with("Couldn't") {
-                    Level::Warning
-                } else {
-                    Level::Info
-                };
-                add(Some(i), level, note.clone());
-            }
+        for &note in &notes_by_shape[i] {
+            let level = if note.starts_with("Couldn't") {
+                Level::Warning
+            } else {
+                Level::Info
+            };
+            add(Some(i), level, note.clone());
         }
         match (&s.geometry, kind) {
             (Geometry::Fill { rings, rule }, Kind::Fill) => {
