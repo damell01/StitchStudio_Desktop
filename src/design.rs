@@ -7,7 +7,7 @@
 //! sewing short gaps straight across and trimming long ones.
 
 use crate::boolean;
-use crate::geom::{Bounds, FillRule, P, Polyline, dedupe, segment_inside};
+use crate::geom::{Bounds, FillRule, P, Polyline, segment_inside};
 use crate::params::{Fabric, Kind, defaults, underlay};
 use crate::stitch::fill::{FillParams, tatami};
 use crate::stitch::satin::{self, Rails, SatinParams};
@@ -1718,7 +1718,7 @@ pub fn plan_cached(
                 } else {
                     piece.pts
                 };
-                dedupe(&mut pts, opt.min_stitch);
+                crate::geom::dedupe_stitches(&mut pts, opt.min_stitch);
                 if pts.is_empty() {
                     continue;
                 }
