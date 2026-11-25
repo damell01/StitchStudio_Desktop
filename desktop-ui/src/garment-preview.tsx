@@ -1,5 +1,6 @@
 import {lazy, Suspense, useEffect, useMemo, useRef, useState} from 'react';
-import {Shirt, X} from 'lucide-react';
+import {Download, Shirt, X} from 'lucide-react';
+import type {HoodieCapture} from './hoodie-view';
 import './garment-preview.css';
 
 const HoodieView=lazy(()=>import('./hoodie-view'));
@@ -157,8 +158,11 @@ function paintMockup(
 export function GarmentPreview({blocks}: {blocks:Block[]}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const hoodieCapture=useRef<HoodieCapture>(null);
   const [open,setOpen] = useState(false);
   const [query,setQuery]=useState(''),[category,setCategory]=useState('All');
+  const [saving,setSaving]=useState(false);
+  const [saveError,setSaveError]=useState('');
   const [garmentName,setGarment] = useState<GarmentName>('shirt');
   const [sizeName,setSizeName] = useState<SizeName>('adult');
   const [angle,setAngle]=useState(0);
@@ -208,13 +212,51 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
     return ()=>cancelAnimationFrame(frame);
   },[open,garment,placement,blocks,color,xOffset,yOffset,scale,is3d]);
 
+  async function saveProof() {
+    setSaveError('');
+    setSaving(true);
+    try {
+      const proof=document.createElement('canvas');
+      proof.width=size.width*2;
+      proof.height=size.height*2;
+      const context=proof.getContext('2d');
+      if(!context)throw new Error('Image export is unavailable.');
+      if(is3d){
+        if(!hoodieCapture.current?.drawOnto(context))throw new Error('Wait for the 3D hoodie to load, then try again.');
+      }else{
+        paintMockup(proof,garment,placement,blocks,color,xOffset,yOffset,scale);
+      }
+      context.setTransform(1,0,0,1,0,0);
+      context.globalCompositeOperation='destination-over';
+      const background=context.createLinearGradient(0,0,0,proof.height);
+      background.addColorStop(0,'#fbf9ff');
+      background.addColorStop(1,'#efebf6');
+      context.fillStyle=background;
+      context.fillRect(0,0,proof.width,proof.height);
+      const image=await new Promise<Blob>((resolve,reject)=>proof.toBlob(blob=>{
+        if(blob)resolve(blob);
+        else reject(new Error('Could not create the PNG.'));
+      },'image/png'));
+      const url=URL.createObjectURL(image);
+      const anchor=document.createElement('a');
+      anchor.href=url;
+      anchor.download=`stitch-studio-${garmentName}-${sizeName}-mockup.png`;
+      anchor.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(error){
+      setSaveError(error instanceof Error?error.message:'Could not save the mockup.');
+    }finally{
+      setSaving(false);
+    }
+  }
+
   return <>
     <button className="studio-tool-icon" aria-label="Garment mockup" title="Preview on a garment" disabled={!blocks.length}
-      onClick={()=>{dialog.current?.showModal();setOpen(true);}}><Shirt size={18}/></button>
+      onClick={()=>{setSaveError('');dialog.current?.showModal();setOpen(true);}}><Shirt size={18}/></button>
     <dialog ref={dialog} className="studio-modal garment-preview" aria-label="Garment mockup" onClose={()=>setOpen(false)}>
       {open&&<>
         <div className="studio-modal-heading"><h2>Garment Preview Studio</h2>
-          <button disabled={is3d} title={is3d?"Switch to flat view to export":"Export garment preview as PNG"} onClick={()=>{if(!canvas.current)return;const a=document.createElement("a");a.download=garmentName+"-mockup.png";a.href=canvas.current.toDataURL("image/png");a.click()}}>Export PNG</button><button onClick={()=>dialog.current?.close()} aria-label="Close garment mockup"><X size={17} aria-hidden="true"/></button>
+          <button onClick={()=>dialog.current?.close()} aria-label="Close garment mockup"><X size={17} aria-hidden="true"/></button>
         </div>
         <div className="garment-preview-layout"><aside className="garment-catalog"><h3>Garment catalog</h3><input type="search" aria-label="Search garments" placeholder="Search garments…" value={query} onChange={e=>setQuery(e.target.value)}/><div className="garment-categories">{["All","Infant","Kids","Adult","Accessories"].map(g=><button key={g} aria-pressed={category===g} onClick={()=>setCategory(g)}>{g}</button>)}</div><div className="garment-card-grid">{catalog.filter(g=>(category==="All"||category===g.group)&&g.label.toLowerCase().includes(query.toLowerCase())).map(g=><button key={g.label} aria-pressed={garmentName===g.id&&sizeName===g.size} onClick={()=>{setGarment(g.id);setSizeName(g.size);setColor(g.color);setPlacement(0);setX("");setY("");setAngle(0);setZoom(1)}}><svg viewBox="65 0 470 440" aria-hidden="true"><path d={garments[g.id].outline} fill={g.color} stroke="#6a587e" strokeWidth="2"/><path d={garments[g.id].seams} fill="none" stroke="#6a587e" strokeOpacity=".55" strokeWidth="2"/></svg><strong>{g.label}</strong></button>)}</div></aside>
           <div className="garment-preview-display"><div className="garment-stage-heading"><strong>{garment.label} · {garmentSize.label}</strong><small>{is3d?'3D fabric preview':'Stitched garment preview'}</small></div><div className="garment-preview-stage" data-rotatable={is3d}
@@ -235,7 +277,7 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
             }}
             onLostPointerCapture={()=>{turn.current=null;drag.current=null;setDragging(false);}}>
             {is3d?<Suspense fallback={<p role="status">Loading hoodie…</p>}>
-              <HoodieView angle={angle} color={color} blocks={blocks} placement={placementIndex}
+              <HoodieView ref={hoodieCapture} angle={angle} color={color} blocks={blocks} placement={placementIndex}
                 xMm={xOffset} yMm={yOffset} sizeRatio={garmentSize.ratio} zoom={zoom} onUnavailable={()=>setUnavailable(true)}/>
             </Suspense>:<canvas ref={canvas} width={size.width*2} height={size.height*2} role="img" tabIndex={0} style={{cursor:dragging?'grabbing':'grab',touchAction:'none'}}
               onPointerDown={event=>{
@@ -296,6 +338,10 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
             </fieldset></details>
             {!insideZone&&<p role="status">This design extends beyond the suggested area for this placement.</p>}
             <p className="muted">Garment scale is approximate. Mockup adjustments affect only this preview.</p>
+            <button type="button" className="primary" disabled={saving} onClick={()=>void saveProof()}>
+              <Download size={16} aria-hidden="true"/>{saving?'Saving mockup…':'Save mockup PNG'}
+            </button>
+            {saveError&&<p role="alert">{saveError}</p>}
           </div>
         </div>
       </>}

@@ -1,10 +1,11 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useImperativeHandle, useRef, useState, type Ref} from 'react';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import hoodieUrl from './assets/garments/hoodie.glb?url';
 
 type Block = {color:number[];runs:number[][][]};
-type Props = {angle:number;color:string;blocks:Block[];placement:number;xMm:number;yMm:number;sizeRatio:number;zoom:number;onUnavailable:()=>void};
+export type HoodieCapture = {drawOnto:(target:CanvasRenderingContext2D)=>boolean};
+type Props = {angle:number;color:string;blocks:Block[];placement:number;xMm:number;yMm:number;sizeRatio:number;zoom:number;onUnavailable:()=>void;ref?:Ref<HoodieCapture>};
 
 const textureBounds = {left:-.30,bottom:.67,width:.60,height:.78};
 
@@ -106,7 +107,9 @@ export default function HoodieView(props:Props) {
   const latest=useRef(props);
   latest.current=props;
   const draw=useRef<((props:Props)=>void)|null>(null);
+  const capture=useRef<HoodieCapture['drawOnto']|null>(null);
   const [loaded,setLoaded]=useState(false);
+  useImperativeHandle(props.ref,()=>({drawOnto:target=>capture.current?.(target)??false}),[]);
 
   useEffect(()=>{
     const element=host.current;
@@ -152,13 +155,19 @@ export default function HoodieView(props:Props) {
     let previous:Props|undefined;
     let fabric:THREE.MeshStandardMaterial|undefined;
 
-    function render() {
-      const {clientWidth,clientHeight}=element!;
-      if(clientWidth<1||clientHeight<1)return;
-      if(lastWidth!==clientWidth||lastHeight!==clientHeight){renderer.setSize(clientWidth,clientHeight,false);camera.aspect=clientWidth/clientHeight;camera.updateProjectionMatrix();lastWidth=clientWidth;lastHeight=clientHeight;}
+    function render(width:number,height:number) {
+      if(width<1||height<1)return;
+      if(lastWidth!==width||lastHeight!==height){
+        renderer.setSize(width,height,false);
+        camera.aspect=width/height;
+        camera.updateProjectionMatrix();
+        lastWidth=width;
+        lastHeight=height;
+      }
       renderer.render(scene,camera);
     }
-    const observer=new ResizeObserver(render);
+    const renderPreview=()=>render(element.clientWidth,element.clientHeight);
+    const observer=new ResizeObserver(renderPreview);
     observer.observe(element);
     const contextLost=(event:Event)=>{event.preventDefault();if(active)latest.current.onUnavailable();};
     renderer.domElement.addEventListener('webglcontextlost',contextLost);
@@ -184,7 +193,26 @@ export default function HoodieView(props:Props) {
         camera.zoom=next.zoom;camera.updateProjectionMatrix();
         fabric!.color.set(next.color);
         pivot.rotation.y=THREE.MathUtils.degToRad(next.angle);
-        cancelAnimationFrame(frame);frame=requestAnimationFrame(render);
+        cancelAnimationFrame(frame);
+        frame=requestAnimationFrame(renderPreview);
+      };
+      capture.current=target=>{
+        if(renderer.getContext().isContextLost())return false;
+        draw.current?.(latest.current);
+        const pixelRatio=renderer.getPixelRatio();
+        try {
+          const {width,height}=target.canvas;
+          renderer.setPixelRatio(1);
+          lastWidth=lastHeight=0;
+          render(width,height);
+          // Copy during the render call while the WebGL drawing buffer is valid.
+          target.drawImage(renderer.domElement,0,0);
+          return true;
+        } finally {
+          renderer.setPixelRatio(pixelRatio);
+          lastWidth=lastHeight=0;
+          renderPreview();
+        }
       };
       draw.current(latest.current);
       setLoaded(true);
@@ -194,6 +222,7 @@ export default function HoodieView(props:Props) {
       active=false;
       cancelAnimationFrame(frame);
       draw.current=null;
+      capture.current=null;
       observer.disconnect();
       renderer.domElement.removeEventListener('webglcontextlost',contextLost);
       disposeModel(scene);
