@@ -605,26 +605,48 @@ impl Studio {
             }
         });
         caption(ui, format!("{} selected · Shift-click colors to combine", self.sel_indices().len()));
-        // Keep an in-session colorway baseline, keyed by object identity.
-        let baseline_id = ui.make_persistent_id("colorway-baseline");
-        let baseline = ui.ctx().data(|d| d.get_temp::<Vec<(u64, [u8; 3])>>(baseline_id));
-        ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(colors > 0, egui::Button::new("Save colorway")).clicked() {
-                let snapshot: Vec<(u64, [u8; 3])> = self.doc.shapes.iter()
-                    .map(|s| (s.uid as u64, s.color)).collect();
-                ui.ctx().data_mut(|d| d.insert_temp(baseline_id, snapshot));
-                self.status = "Colorway saved for this session.".into();
-            }
-            if ui.add_enabled(baseline.is_some(), egui::Button::new("Restore colorway")).clicked() {
-                if let Some(saved) = &baseline {
-                    for s in &mut self.doc.shapes {
-                        if let Some((_, color)) = saved.iter().find(|(uid, _)| *uid == s.uid as u64) {
-                            s.color = *color;
-                        }
+        // Named, in-session colorways; use stable object identities.
+        type Colorway = (String, Vec<(u64, [u8; 3])>);
+        let baseline_id = ui.make_persistent_id("named-colorways");
+        let name_id = ui.make_persistent_id("colorway-name");
+        let mut saved = ui.ctx().data(|d| d.get_temp::<Vec<Colorway>>(baseline_id).unwrap_or_default());
+        let mut name = ui.ctx().data(|d| d.get_temp::<String>(name_id).unwrap_or_else(|| "Original".into()));
+        ui.collapsing("Colorway variations", |ui| {
+            ui.horizontal(|ui| {
+                ui.add(egui::TextEdit::singleline(&mut name).desired_width(100.0).hint_text("Variation name"));
+                if ui.add_enabled(colors > 0 && !name.trim().is_empty(), egui::Button::new("Save")).clicked() {
+                    let snapshot = self.doc.shapes.iter().map(|s| (s.uid as u64, s.color)).collect();
+                    let label = name.trim().to_owned();
+                    if let Some(entry) = saved.iter_mut().find(|e| e.0 == label) {
+                        entry.1 = snapshot;
+                    } else {
+                        saved.push((label, snapshot));
                     }
-                    self.status = "Saved colorway restored.".into();
+                    self.status = "Colorway saved for this session.".into();
                 }
-            }
+            });
+            let mut remove = None;
+            egui::ScrollArea::vertical().max_height(120.0).show(ui, |ui| {
+                for (index, (label, snapshot)) in saved.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        if ui.button(label.as_str()).on_hover_text("Restore this colorway").clicked() {
+                            for s in &mut self.doc.shapes {
+                                if let Some((_, color)) = snapshot.iter().find(|(uid, _)| *uid == s.uid as u64) {
+                                    s.color = *color;
+                                }
+                            }
+                            self.status = format!("Restored colorway: {label}");
+                        }
+                        if ui.small_button("Remove").clicked() { remove = Some(index); }
+                    });
+                }
+            });
+            if let Some(index) = remove { saved.remove(index); }
+            caption(ui, "Session only · save the project to retain its current colors.");
+        });
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(baseline_id, saved);
+            d.insert_temp(name_id, name);
         });
         let merge_id = ui.make_persistent_id("similar-thread-merge");
         let mut merge_open = ui.ctx().data(|d| d.get_temp::<bool>(merge_id).unwrap_or(false));
