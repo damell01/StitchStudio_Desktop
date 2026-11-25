@@ -453,9 +453,27 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
         stroke_width: px(o.line_width_mm).max(1.0),
         ..TraceParams::default()
     };
+    // Estimate meaningful hue diversity independently of shading. Complex
+    // illustrations need more thread colors than simple two-tone logos.
+    let mut hue_bins = [0usize; 12];
+    let mut opaque = 0usize;
+    for p in r.rgba.chunks_exact(4) {
+        if p[3] < 128 { continue; }
+        opaque += 1;
+        let (r,g,b) = (p[0] as f64,p[1] as f64,p[2] as f64);
+        let max = r.max(g).max(b);
+        let min = r.min(g).min(b);
+        let delta = max-min;
+        if delta < 35.0 || max < 45.0 { continue; }
+        let h = if max == r { ((g-b)/delta).rem_euclid(6.0) }
+            else if max == g { (b-r)/delta+2.0 } else { (r-g)/delta+4.0 };
+        hue_bins[((h*2.0).floor() as usize).min(11)] += 1;
+    }
+    let diverse = hue_bins.iter().filter(|&&n| n > opaque / 100).count() >= 4;
+    let auto_colors = if diverse { 10 } else { 8 };
     let logo_params = TraceParams {
         mode: Mode::Logo,
-        colors: colors.unwrap_or(8),
+        colors: colors.unwrap_or(auto_colors),
         paths: detail,
         corners: 50.0,
         // Logo mode drops areas under noise/10 px².
@@ -468,11 +486,11 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
     // Flat Logo first (it has no centre lines); anything that isn't flat art
     // is posterized instead.
     let (result, method) = if o.lines {
-        (run(r, &color_params(colors.or(Some(8))))?, "posterized")
+        (run(r, &color_params(colors.or(Some(auto_colors))))?, "posterized")
     } else {
         match vectorcraft_trace::trace_within(r, &logo_params, MAX_ANCHORS) {
             Ok(t) => (t, "flat logo"),
-            Err(TraceError::NotFlat { .. }) | Err(TraceError::TooComplex { .. }) => (run(r, &color_params(colors.or(Some(8))))?, "posterized"),
+            Err(TraceError::NotFlat { .. }) | Err(TraceError::TooComplex { .. }) => (run(r, &color_params(colors.or(Some(auto_colors))))?, "posterized"),
             Err(e) => return Err(explain(e)),
         }
     };
