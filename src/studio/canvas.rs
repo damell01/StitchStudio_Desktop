@@ -770,6 +770,30 @@ pub fn draw_hoop(
     };
     painter.add(shadow.as_shape(r, radius));
     painter.rect_filled(r, radius, cloth);
+    // Subtle warp and weft, anchored to the hoop rather than the screen.
+    // Fade in only when the weave is resolvable; cap line count on large displays.
+    let pitch = view.scale * 0.32;
+    if pitch >= 2.5 && pitch.is_finite() {
+        let visible = r.shrink(radius).intersect(painter.clip_rect());
+        if visible.is_positive() {
+            let pitch = pitch.max(visible.width().max(visible.height()) / 220.0);
+            let alpha = ((pitch - 2.5) * 4.0).clamp(0.0, 15.0) as u8;
+            let dark = Stroke::new(0.65, Color32::from_black_alpha(alpha));
+            let light = Stroke::new(0.65, Color32::from_white_alpha(alpha));
+            let mut x = r.left() + ((visible.left() - r.left()) / pitch).ceil() * pitch;
+            for _ in 0..221 {
+                if x > visible.right() { break; }
+                painter.line_segment([Pos2::new(x, visible.top()), Pos2::new(x, visible.bottom())], dark);
+                x += pitch;
+            }
+            let mut y = r.top() + ((visible.top() - r.top()) / pitch).ceil() * pitch;
+            for _ in 0..221 {
+                if y > visible.bottom() { break; }
+                painter.line_segment([Pos2::new(visible.left(), y), Pos2::new(visible.right(), y)], light);
+                y += pitch;
+            }
+        }
+    }
     let edge = if over {
         p.error
     } else {
