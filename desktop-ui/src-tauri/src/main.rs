@@ -24,32 +24,57 @@ struct Preview { name: String, blocks: Vec<PreviewBlock>, stitches: usize, trims
 struct PreviewBlock { color: [u8;3], runs: Vec<Vec<[f64;2]>> }
 fn preview(design: &Design) -> Preview { Preview { name: design.name.clone(), stitches: design.blocks.iter().flat_map(|b| &b.runs).map(|r| r.pts.len()).sum(), trims: design.blocks.iter().flat_map(|b| &b.runs).filter(|r| r.trim_before).count(), blocks: design.blocks.iter().map(|b| PreviewBlock { color:b.color, runs:b.runs.iter().map(|r| r.pts.iter().map(|p| [p.x/10.0,p.y/10.0]).collect()).collect() }).collect() } }
 #[tauri::command]
-async fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, app: tauri::AppHandle) -> Result<Preview,String> {
-    if ![scale,rotation,dx,dy].iter().all(|v| v.is_finite()) || !(0.1..=10.0).contains(&scale) || dx.abs()>500.0 || dy.abs()>500.0 { return Err("Invalid transformation".into()); }
+async fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, app: tauri::AppHandle) -> Result<Preview, String> {
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move || {
-    let state=app.state::<Mutex<Workspace>>();
-    let mut guard=state.lock().map_err(|e|e.to_string())?;
-    // Translation preserves the stitch geometry and sequence; no replanning needed.
-    if scale==1.0 && rotation==0.0 {return place_design(&mut guard,[1.0,0.0,0.0,1.0,dx*10.0,dy*10.0]);}
-    let (s,c)=rotation.to_radians().sin_cos();
-    if let Some(mut doc)=guard.source.clone(){
-        let indices:Vec<usize>=(0..doc.shapes.len()).collect();
-        doc.transform(&indices,[scale*c,scale*s,-scale*s,scale*c,dx*10.0,dy*10.0]).map_err(|e|e.to_string())?;
-        if scale!=1.0 {let uids:Vec<_>=doc.shapes.iter().map(|s|s.uid).collect();correct_resized_manual_paths(&mut doc,&uids,scale,scale)?;}
-        let design=doc.plan();if design.blocks.is_empty(){return Err("Transformation produced no stitches".into())}
-        let p=preview(&design);guard.checkpoint_named("Transform design");guard.current=Some(design);guard.source=Some(doc);return Ok(p)
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|error| error.to_string())?;
+        apply_design_transform(&mut workspace, scale, rotation, dx, dy)
+    }).await.map_err(|error| error.to_string())?
+}
+
+fn apply_design_transform(workspace: &mut Workspace, scale: f64, rotation: f64, dx: f64, dy: f64) -> Result<Preview, String> {
+    if ![scale, rotation, dx, dy].iter().all(|v| v.is_finite())
+        || !(0.1..=10.0).contains(&scale) || dx.abs() > 500.0 || dy.abs() > 500.0
+    {
+        return Err("Invalid transformation".into());
     }
-    if guard.current.is_none(){return Err("Open artwork first".into())}
-    guard.checkpoint_named("Transform design");
-    let d=guard.current.as_mut().ok_or("Open artwork first")?;
-    for p in d.blocks.iter_mut().flat_map(|b| &mut b.runs).flat_map(|r| &mut r.pts) {
-        let (x,y)=(p.x,p.y);
-        p.x=scale*(x*c-y*s)+dx*10.0;
-        p.y=scale*(x*s+y*c)+dy*10.0;
+    let (s, c) = rotation.to_radians().sin_cos();
+    let matrix = [scale * c, scale * s, -scale * s, scale * c, dx * 10.0, dy * 10.0];
+    if matrix == zigzag::geom::IDENTITY {
+        return workspace.current.as_ref().map(preview).ok_or_else(|| "Open a design first".into());
     }
-    Ok(preview(d))
-    }).await.map_err(|e|e.to_string())?
+    let fixed_only = workspace.source.as_ref().is_none_or(|document| {
+        document.shapes.iter().all(|shape| shape.params.kind == Some(zigzag::params::Kind::Manual))
+    });
+    // Rigid placement of fixed paths preserves every penetration and command.
+    if scale == 1.0 && (rotation == 0.0 || fixed_only) {
+        return place_design(workspace, matrix);
+    }
+    let source = workspace.source.clone();
+    let (design, source) = if let Some(mut document) = source {
+        let indices: Vec<_> = (0..document.shapes.len()).collect();
+        transform_for_resize(&mut document, &indices, matrix, scale, scale)?;
+        let design = document.plan_cached(&mut workspace.plan_cache);
+        (design, Some(document))
+    } else {
+        let mut design = workspace.current.clone().ok_or("Open a design first")?;
+        let mut remaining = MAX_RESIZED_STITCHES;
+        for run in design.blocks.iter_mut().flat_map(|block| &mut block.runs) {
+            for point in &mut run.pts {
+                *point = zigzag::geom::affine_apply(matrix, *point);
+            }
+            let rebuilt = regenerate_mixed_run(&run.pts, scale, scale);
+            run.pts = resize_fixed_run(&rebuilt, scale < 1.0, &mut remaining)?;
+        }
+        (design, None)
+    };
+    validate_resized_design(&design)?;
+    let result = preview(&design);
+    workspace.checkpoint_named("Transform design");
+    workspace.current = Some(design);
+    workspace.source = source;
+    Ok(result)
 }
 // Resize editable outlines rather than stretching the old needle positions.
 // Fixed stitch artwork is deliberately excluded from this regeneration path.
@@ -83,8 +108,13 @@ async fn smart_resize_design(width_mm:f64,height_mm:f64,app:tauri::AppHandle)->R
 // Fixed stitch files lack original fill/satin geometry. Keep their ordered
 // paths and run boundaries; correct overlong segments and redundant short
 // collinear penetrations without guessing at missing fill rows.
-fn resize_fixed_run(points:&[zigzag::geom::P],shrink:bool)->Vec<zigzag::geom::P>{
+const MAX_RESIZED_STITCHES: usize = 2_000_000;
+
+fn resize_fixed_run(points: &[zigzag::geom::P], shrink: bool, remaining: &mut usize) -> Result<Vec<zigzag::geom::P>, String> {
     use zigzag::geom::P;
+    if !points.iter().all(|p| p.x.is_finite() && p.y.is_finite()) {
+        return Err("Invalid stitch coordinates".into());
+    }
     let mut kept:Vec<P>=Vec::with_capacity(points.len());
     for (i,&p) in points.iter().enumerate(){
         if shrink && i>2 && i+3<points.len() {
@@ -93,20 +123,23 @@ fn resize_fixed_run(points:&[zigzag::geom::P],shrink:bool)->Vec<zigzag::geom::P>
                 let len=ab.len();
                 // Do not remove ties, direction reversals, or sharp turns.
                 if a.dist(p)>0.001 && a.dist(p)<2.0 && p.dist(b)>0.001 && len>0.001 && len<=35.0 &&
-                    ap.dot(ab)>0.0 && ap.dot(ab)<len*len && zigzag::geom::cross(ap,ab).abs()/len<0.5 {continue}
+                    ap.dot(b-p)>0.96*ap.len()*p.dist(b) && zigzag::geom::cross(ap,ab).abs()/len<0.5 {continue}
             }
         }
         kept.push(p);
     }
-    let mut out:Vec<P>=Vec::with_capacity(kept.len());
-    for p in kept{
-        if let Some(&a)=out.last(){
-            let n=(a.dist(p)/100.0).ceil().max(1.0) as usize;
-            for j in 1..n{out.push(a.lerp(p,j as f64/n as f64));}
+    let mut out:Vec<P>=Vec::with_capacity(kept.len().min(*remaining));
+    for p in kept {
+        let pieces = out.last().map_or(1, |a| (a.dist(p) / 100.0).ceil().max(1.0) as usize);
+        *remaining = remaining.checked_sub(pieces).ok_or("Resized stitch paths exceed the safety limit.")?;
+        if let Some(&a) = out.last() {
+            for j in 1..pieces {
+                out.push(a.lerp(p, j as f64 / pieces as f64));
+            }
         }
         out.push(p);
     }
-    out
+    Ok(out)
 }
 // Rebuild a confidently identified alternating satin section using the
 // original along-column pitch. Coordinates here are already transformed.
@@ -325,25 +358,55 @@ fn regenerate_mixed_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Vec<zigzag::geom::P
     }
     if reconstruction_ok(p,&out){out}else{p.to_vec()}
 }
-fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize],sx:f64,sy:f64)->Result<(),String>{
-    use zigzag::{bezier::{Anchor,SubPath},svg::Geometry,params::Kind};
-    let mut edits=Vec::new();let mut total=0usize;
-    for (i,s) in doc.shapes.iter().enumerate(){
-        if !uids.contains(&s.uid)||s.params.kind!=Some(Kind::Manual){continue}
-        if let Geometry::Stroke{lines,..}=&s.geometry{
-            let mut paths=Vec::new();
-            for (line,closed) in lines{
-                // Imported machine runs are open paths. Preserve closed paths
-                // without attempting to infer their stitch semantics.
-                let pts=if *closed{line.clone()}else{let rebuilt=regenerate_mixed_run(line,sx,sy);resize_fixed_run(&rebuilt,sx<1.0||sy<1.0)};
-                total=total.saturating_add(pts.len());
-                if total>2_000_000{return Err("Resized stitch paths exceed the safety limit.".into())}
-                paths.push(SubPath{anchors:pts.into_iter().map(Anchor::corner).collect(),closed:*closed});
+fn transform_for_resize(
+    document: &mut zigzag::document::Document,
+    indices: &[usize],
+    matrix: zigzag::geom::Affine,
+    sx: f64,
+    sy: f64,
+) -> Result<(), String> {
+    use std::collections::HashSet;
+    use zigzag::{bezier::{Anchor, SubPath}, params::Kind, svg::Geometry};
+
+    let fixed: HashSet<_> = indices.iter().filter_map(|&index| {
+        let shape = &document.shapes[index];
+        (shape.params.kind == Some(Kind::Manual)).then_some(shape.uid)
+    }).collect();
+    document.transform(indices, matrix).map_err(|error| error.to_string())?;
+    if fixed.is_empty() || (sx == 1.0 && sy == 1.0) {
+        return Ok(());
+    }
+
+    let mut edits = Vec::new();
+    let mut remaining = MAX_RESIZED_STITCHES;
+    for (index, shape) in document.shapes.iter().enumerate() {
+        if !fixed.contains(&shape.uid) { continue; }
+        if let Geometry::Stroke { lines, .. } = &shape.geometry {
+            let mut paths = Vec::new();
+            let mut changed = false;
+            for (line, closed) in lines {
+                // Closed artwork can contain a deliberate closure stitch.
+                let points = if *closed {
+                    remaining = remaining.checked_sub(line.len()).ok_or("Resized stitch paths exceed the safety limit.")?;
+                    line.clone()
+                } else {
+                    let rebuilt = regenerate_mixed_run(line, sx, sy);
+                    resize_fixed_run(&rebuilt, sx < 1.0 || sy < 1.0, &mut remaining)?
+                };
+                changed |= points != *line;
+                paths.push(SubPath { anchors: points.into_iter().map(Anchor::corner).collect(), closed: *closed });
             }
-            if !paths.is_empty(){edits.push((i,paths));}
+            if changed { edits.push((index, paths)); }
         }
     }
-    doc.set_paths(&edits).map_err(|e|e.to_string())
+    document.set_paths(&edits).map_err(|error| error.to_string())
+}
+
+fn validate_resized_design(design: &Design) -> Result<(), String> {
+    if !(1..=MAX_RESIZED_STITCHES).contains(&design.stitch_count()) {
+        return Err("Resize produced an empty or excessively large stitch plan.".into());
+    }
+    Ok(())
 }
 #[tauri::command]
 async fn resize_artwork_selection(uids:Vec<usize>,sx:f64,sy:f64,x:f64,y:f64,app:tauri::AppHandle)->Result<Preview,String>{
@@ -355,11 +418,9 @@ async fn resize_artwork_selection(uids:Vec<usize>,sx:f64,sy:f64,x:f64,y:f64,app:
         let mut doc=w.source.clone().ok_or("Open editable artwork to regenerate stitches.")?;
         let indices:Vec<_>=doc.shapes.iter().enumerate().filter(|(_,s)|uids.contains(&s.uid)).map(|(i,_)|i).collect();
         if indices.is_empty()||indices.len()!=uids.len(){return Err("Selection changed; select the artwork again.".into())}
-        let has_fixed=indices.iter().any(|&i|doc.shapes[i].params.kind==Some(zigzag::params::Kind::Manual));
-        doc.transform(&indices,[sx,0.0,0.0,sy,x*10.0*(1.0-sx),y*10.0*(1.0-sy)]).map_err(|e|e.to_string())?;
-        if has_fixed {correct_resized_manual_paths(&mut doc,&uids,sx,sy)?;}
+        transform_for_resize(&mut doc, &indices, [sx, 0.0, 0.0, sy, x * 10.0 * (1.0 - sx), y * 10.0 * (1.0 - sy)], sx, sy)?;
         let design=doc.plan_cached(&mut w.plan_cache);
-        if design.stitch_count()==0||design.stitch_count()>2_000_000{return Err("Resize produced an invalid stitch plan.".into())}
+        validate_resized_design(&design)?;
         let result=preview(&design);w.checkpoint_named("Resize and regenerate stitches");w.source=Some(doc);w.current=Some(design);Ok(result)
     }).await.map_err(|e|e.to_string())?
 }
@@ -381,9 +442,8 @@ async fn maximize_in_hoop(width_mm:f64,height_mm:f64,margin_mm:f64,stretch:bool,
         if ![sx,sy].iter().all(|v|(0.1..=10.0).contains(v)){return Err("Fit requires a resize outside the supported 10–1000% range.".into())}
         let c=b.center();
         let mut doc=editable_base(&w,"Hoop fit")?;
-        let ids:Vec<_>=(0..doc.shapes.len()).collect();let uids:Vec<_>=doc.shapes.iter().map(|s|s.uid).collect();
-        doc.transform(&ids,[sx,0.0,0.0,sy,-c.x*sx,-c.y*sy]).map_err(|e|e.to_string())?;
-        correct_resized_manual_paths(&mut doc,&uids,sx,sy)?;
+        let ids:Vec<_>=(0..doc.shapes.len()).collect();
+        transform_for_resize(&mut doc, &ids, [sx, 0.0, 0.0, sy, -c.x * sx, -c.y * sy], sx, sy)?;
         let mut design=doc.plan_cached(&mut w.plan_cache);
         // Regeneration can change the sewn extents. Center again and shrink
         // if necessary, preserving density by replanning rather than scaling stitches.
@@ -391,8 +451,7 @@ async fn maximize_in_hoop(width_mm:f64,height_mm:f64,margin_mm:f64,stretch:bool,
             let b=design.bounds();if b.is_empty()||design.stitch_count()>2_000_000{return Err("Invalid regenerated design".into())}
             let c=b.center();let correction=(tw/b.width().max(0.01)).min(th/b.height().max(0.01)).min(1.0);
             if correction>=0.99999&&c.len()<0.05{break}
-            doc.transform(&ids,[correction,0.0,0.0,correction,-c.x*correction,-c.y*correction]).map_err(|e|e.to_string())?;
-            if correction<0.99999{correct_resized_manual_paths(&mut doc,&uids,correction,correction)?;}
+            transform_for_resize(&mut doc, &ids, [correction, 0.0, 0.0, correction, -c.x * correction, -c.y * correction], correction, correction)?;
             design=doc.plan_cached(&mut w.plan_cache);
         }
         let b=design.bounds();
@@ -1739,7 +1798,8 @@ fn apply_object_edit(workspace: &mut Workspace, uid: usize, operation: ObjectEdi
         }
         ObjectEdit::Scale { factor } => {
             if !(0.1..=10.0).contains(&factor) { return Err("Scale must be from 10% to 1000%".into()); }
-            document.transform(&[index], [factor, 0.0, 0.0, factor, center.x * (1.0 - factor), center.y * (1.0 - factor)])
+            transform_for_resize(&mut document, &[index], [factor, 0.0, 0.0, factor, center.x * (1.0 - factor), center.y * (1.0 - factor)], factor, factor)?;
+            Ok(())
         }
         ObjectEdit::Resize { sx, sy, x, y } => {
             if ![sx, sy].iter().all(|factor| (0.1..=10.0).contains(factor))
@@ -1747,10 +1807,8 @@ fn apply_object_edit(workspace: &mut Workspace, uid: usize, operation: ObjectEdi
             {
                 return Err("Invalid object resize".into());
             }
-            if document.shapes[index].params.kind == Some(zigzag::params::Kind::Manual) {
-                return Err("Resize editable artwork with the handles. Use the Size inspector for fixed stitch paths.".into());
-            }
-            document.transform(&[index], [sx, 0.0, 0.0, sy, x * 10.0 * (1.0 - sx), y * 10.0 * (1.0 - sy)])
+            transform_for_resize(&mut document, &[index], [sx, 0.0, 0.0, sy, x * 10.0 * (1.0 - sx), y * 10.0 * (1.0 - sy)], sx, sy)?;
+            Ok(())
         }
         ObjectEdit::Rotate => document.transform(&[index], [0.0, 1.0, -1.0, 0.0, center.x + center.y, center.y - center.x]),
         ObjectEdit::Duplicate => document.duplicate(&[index], zigzag::geom::P::new(50.0, 50.0)).map(|_| ()),
@@ -1761,7 +1819,7 @@ fn apply_object_edit(workspace: &mut Workspace, uid: usize, operation: ObjectEdi
     };
     result.map_err(|error| error.to_string())?;
     let design = document.plan_cached(&mut workspace.plan_cache);
-    if design.stitch_count() == 0 { return Err("The edit would leave no stitchable objects".into()); }
+    validate_resized_design(&design)?;
     let result = preview(&design);
     workspace.checkpoint_named("Edit object");
     workspace.current = Some(design);
@@ -1834,11 +1892,18 @@ async fn transform_artwork_group(uids:Vec<usize>,scale:f64,rotation:f64,app:taur
  let mut doc=w.source.clone().ok_or("No editable artwork")?;
  let indices:Vec<_>=doc.shapes.iter().enumerate().filter(|(_,s)|uids.contains(&s.uid)).map(|(i,_)|i).collect();
  if indices.is_empty()||indices.len()!=uids.len(){return Err("Selection changed. Select the design again.".into())}
- let shapes:Vec<_>=indices.iter().map(|&i|doc.shapes[i].clone()).collect();
- let center=zigzag::svg::shapes_bounds(&shapes).center();
+ let mut bounds = zigzag::geom::Bounds::empty();
+ for &index in &indices {
+     let shape = &doc.shapes[index];
+     let shape_bounds = zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
+     if !shape_bounds.is_empty() { bounds.add(shape_bounds.min); bounds.add(shape_bounds.max); }
+ }
+ if bounds.is_empty() { return Err("No artwork to transform".into()); }
+ let center = bounds.center();
  let (s,c)=rotation.to_radians().sin_cos();let a=scale*c;let b=scale*s;
- doc.transform(&indices,[a,b,-b,a,center.x-a*center.x+b*center.y,center.y-b*center.x-a*center.y]).map_err(|e|e.to_string())?;
- let design=doc.plan_cached(&mut w.plan_cache);if design.stitch_count()==0{return Err("Transformation produced no stitches".into())}
+ transform_for_resize(&mut doc, &indices, [a, b, -b, a, center.x-a*center.x+b*center.y, center.y-b*center.x-a*center.y], scale, scale)?;
+ let design=doc.plan_cached(&mut w.plan_cache);
+ validate_resized_design(&design)?;
  let result=preview(&design);w.checkpoint_named("Transform selection");w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
@@ -2612,6 +2677,154 @@ mod fixed_resize_tests {
  #[test] fn mixed_run_keeps_leading_and_trailing_ties(){let mut p=vec![P::new(-20.,0.),P::new(-20.,0.)];for i in 0..32{p.push(P::new(0.,i as f64*8.));p.push(P::new(30.,i as f64*8.+4.));}p.extend([P::new(40.,260.),P::new(40.,260.)]);let q=regenerate_mixed_run(&p,1.,2.);assert_eq!(&q[..2],&p[..2]);assert_eq!(&q[q.len()-2..],&p[p.len()-2..]);}
  #[test] fn regular_fill_adds_rows_when_enlarged(){let mut p=Vec::new();for row in 0..8{for i in 0..5{let x=if row%2==0{i}else{4-i};p.push(P::new(x as f64*20.,row as f64*8.));}}let rebuilt=regenerate_fill_run(&p,1.,2.).unwrap();assert!(rebuilt.len()>p.len());assert_eq!(rebuilt.first(),p.first());assert_eq!(rebuilt.last(),p.last());}
  #[test] fn satin_density_is_rebuilt_when_column_length_doubles(){let mut p=Vec::new();for i in 0..10{p.push(P::new(0.,i as f64*8.));p.push(P::new(30.,i as f64*8.+4.));}let result=regenerate_satin_run(&p,1.,2.).unwrap();assert!(result.len()>p.len());assert_eq!(result.first(),p.first());assert_eq!(result.last(),p.last());}
- #[test] fn long_moves_are_split_and_endpoints_preserved(){let a=P::new(0.,0.);let b=P::new(250.,0.);let r=resize_fixed_run(&[a,b],false);assert_eq!(r.first(),Some(&a));assert_eq!(r.last(),Some(&b));assert!(r.windows(2).all(|p|p[0].dist(p[1])<=100.001));}
- #[test] fn direction_reversals_and_ties_survive(){let a=P::new(0.,0.);let b=P::new(1.,0.);let r=resize_fixed_run(&[a,a,b,a,b,a,b,a],true);assert_eq!(r,vec![a,a,b,a,b,a,b,a]);}
+    #[test]
+    fn long_moves_are_split_and_endpoints_preserved() {
+        let a = P::new(0.0, 0.0);
+        let b = P::new(250.0, 0.0);
+        let r = resize_fixed_run(&[a, b], false, &mut 4).unwrap();
+        assert_eq!(r.first(), Some(&a));
+        assert_eq!(r.last(), Some(&b));
+        assert!(r.windows(2).all(|p| p[0].dist(p[1]) <= 100.001));
+    }
+
+    #[test]
+    fn directional_changes_and_ties_survive_reduction() {
+        let a = P::new(0.0, 0.0);
+        let b = P::new(1.0, 0.0);
+        let corner = P::new(1.0, 0.1);
+        let points = [a, a, b, a, b, corner, b, a];
+        assert_eq!(resize_fixed_run(&points, true, &mut 8).unwrap(), points);
+    }
+
+    #[test]
+    fn subdivision_checks_budget_before_allocating() {
+        let points = [P::new(0.0, 0.0), P::new(1e12, 0.0)];
+        let mut budget = 4;
+        assert!(resize_fixed_run(&points, false, &mut budget).is_err());
+        assert_eq!(budget, 3);
+    }
+
+    fn machine_boundaries(design: &Design) -> Vec<([u8; 3], Vec<bool>)> {
+        design.blocks.iter().map(|block| {
+            (block.color, block.runs.iter().map(|run| run.trim_before).collect())
+        }).collect()
+    }
+
+    #[test]
+    fn six_independent_formats_keep_run_boundaries_during_resize() {
+        use zigzag::document::Document;
+        let fixtures: [(&str, &[u8]); 6] = [
+            ("dst", include_bytes!("../../../tests/fixtures/machine-import/two-color-path.dst")),
+            ("pes", include_bytes!("../../../tests/fixtures/machine-import/two-color-path.pes")),
+            ("pec", include_bytes!("../../../tests/fixtures/machine-import/two-color-path.pec")),
+            ("exp", include_bytes!("../../../tests/fixtures/machine-import/two-color-path.exp")),
+            ("jef", include_bytes!("../../../tests/fixtures/machine-import/two-color-path.jef")),
+            ("vp3", include_bytes!("../../../tests/fixtures/machine-import/two-color-path.vp3")),
+        ];
+        for (extension, bytes) in fixtures {
+            let imported = formats::read::read_stitch_file(bytes, extension).unwrap();
+            let original = Document::from_svg(&formats::read::to_svg(&imported), "Fixture", None).unwrap();
+            let before = original.plan();
+            let indices: Vec<_> = (0..original.shapes.len()).collect();
+            for (sx, sy) in [(1.0, 1.0), (4.0, 2.5), (0.5, 0.7)] {
+                let mut document = original.clone();
+                transform_for_resize(&mut document, &indices, [sx, 0.0, 0.0, sy, 0.0, 0.0], sx, sy).unwrap();
+                let after = document.plan();
+                validate_resized_design(&after).unwrap();
+                assert_eq!(machine_boundaries(&after), machine_boundaries(&before), "{extension}");
+                assert!((after.bounds().width() - before.bounds().width() * sx).abs() < 0.1, "{extension}");
+                assert!((after.bounds().height() - before.bounds().height() * sy).abs() < 0.1, "{extension}");
+                for (before, after) in before.blocks.iter().flat_map(|b| &b.runs).zip(after.blocks.iter().flat_map(|b| &b.runs)) {
+                    for (a, b) in [(before.pts.first(), after.pts.first()), (before.pts.last(), after.pts.last())] {
+                        let a = a.unwrap();
+                        assert!(b.unwrap().dist(P::new(a.x * sx, a.y * sy)) < 0.1, "{extension}");
+                    }
+                    assert!(after.pts.windows(2).all(|pair| pair[0].dist(pair[1]) <= 100.01), "{extension}");
+                }
+                let reopened = Document::restore_svg(&document.to_svg().unwrap(), &document.name, document.offset)
+                    .unwrap().plan();
+                assert_eq!(formats::dst::stream(&reopened), formats::dst::stream(&after), "{extension}");
+                for format in ["dst", "pes"] {
+                    let encoded = formats::write_format(&after, format).unwrap();
+                    let read_back = formats::read::read_stitch_file(&encoded, format).unwrap();
+                    assert_eq!(read_back.blocks.len(), imported.blocks.len(), "{extension} to {format}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn resize_preserves_same_thread_stop_and_other_run_boundaries() {
+        use zigzag::{document::Document, formats::read::{StitchBlock, StitchFile}};
+        let file = StitchFile {
+            name: "Stops and trims".into(),
+            blocks: vec![
+                StitchBlock { color: [20, 50, 100], runs: vec![
+                    vec![P::new(0.0, 0.0), P::new(75.0, 0.0)],
+                    vec![P::new(80.0, 0.0), P::new(90.0, 0.0)],
+                ] },
+                StitchBlock { color: [20, 50, 100], runs: vec![
+                    vec![P::new(95.0, 0.0), P::new(150.0, 30.0)],
+                ] },
+            ],
+        };
+        let mut document = Document::from_svg(&formats::read::to_svg(&file), &file.name, None).unwrap();
+        let before = document.plan();
+        let boundary = machine_boundaries(&before);
+        assert_eq!(boundary.len(), 2);
+        assert_eq!(boundary[0].0, boundary[1].0);
+        assert!(boundary[0].1[1]);
+        let indices: Vec<_> = (0..document.shapes.len()).collect();
+        transform_for_resize(&mut document, &indices, [2.0, 0.0, 0.0, 0.7, 0.0, 0.0], 2.0, 0.7).unwrap();
+        let after = document.plan();
+        assert_eq!(machine_boundaries(&after), boundary);
+        let commands = formats::dst::stream(&after);
+        assert_eq!(commands.iter().filter(|cmd| cmd.op == formats::Op::ColorChange).count(), 1);
+    }
+
+    #[test]
+    fn numeric_object_scale_corrects_only_the_selected_stitch_path() {
+        use zigzag::{document::Document, formats::read::{StitchBlock, StitchFile}};
+        let file = StitchFile {
+            name: "Two runs".into(),
+            blocks: vec![StitchBlock { color: [20, 50, 100], runs: vec![
+                vec![P::new(0.0, 0.0), P::new(80.0, 10.0)],
+                vec![P::new(90.0, 40.0), P::new(100.0, 50.0)],
+            ] }],
+        };
+        let document = Document::from_svg(&formats::read::to_svg(&file), &file.name, None).unwrap();
+        let selected = document.shapes[0].uid;
+        let before = document.plan();
+        let mut workspace = Workspace { current: Some(before.clone()), source: Some(document), ..Default::default() };
+        apply_object_edit(&mut workspace, selected, ObjectEdit::Scale { factor: 2.0 }).unwrap();
+        let after = workspace.current.as_ref().unwrap();
+        assert_eq!(machine_boundaries(after), machine_boundaries(&before));
+        assert!(after.blocks[0].runs[0].pts.len() > before.blocks[0].runs[0].pts.len());
+        assert_eq!(after.blocks[0].runs[1].pts, before.blocks[0].runs[1].pts);
+        assert!(workspace.source.is_some());
+        assert_eq!(workspace.undo.len(), 1);
+    }
+
+    #[test]
+    fn resizing_a_stitch_only_project_retains_commands_and_undo() {
+        use zigzag::design::{Block, Run};
+        let original = Design {
+            name: "Legacy stitch project".into(),
+            blocks: vec![Block { color: [1, 2, 3], runs: vec![
+                Run { pts: vec![P::new(0.0, 0.0), P::new(90.0, 0.0)], trim_before: false },
+                Run { pts: vec![P::new(100.0, 60.0), P::new(100.0, 120.0)], trim_before: true },
+            ] }],
+            ..Default::default()
+        };
+        let mut workspace = Workspace { current: Some(original.clone()), ..Default::default() };
+        apply_design_transform(&mut workspace, 1.0, 0.0, 0.0, 0.0).unwrap();
+        assert!(workspace.undo.is_empty());
+        apply_design_transform(&mut workspace, 2.0, 0.0, 0.0, 0.0).unwrap();
+        let after = workspace.current.as_ref().unwrap();
+        assert_eq!(machine_boundaries(after), machine_boundaries(&original));
+        assert!(after.stitch_count() > original.stitch_count());
+        assert_eq!(after.bounds().width(), original.bounds().width() * 2.0);
+        assert_eq!(formats::dst::write_dst(&workspace.undo[0].0), formats::dst::write_dst(&original));
+        assert!(workspace.source.is_none());
+    }
 }
