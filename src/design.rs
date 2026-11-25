@@ -487,7 +487,15 @@ fn fill_runs(
             - comp.iter().skip(1).map(|r| boolean::ring_area(r).abs()).sum::<f64>();
         area < 600.0
     });
-    let light_underlay = opt.hat_order && f.id == "standard" && p.underlay.is_none() && small_detail;
+    // Do not omit cross-hatch support for long thin outlines merely
+    // because their net filled area is small.
+    let compact_detail = components.iter().all(|comp| {
+        let mut bounds = Bounds::empty();
+        comp.iter().flatten().for_each(|&point| bounds.add(point));
+        bounds.width().max(bounds.height()) <= mm(4.0)
+    });
+    let light_underlay = opt.hat_order && f.id == "standard"
+        && p.underlay.is_none() && small_detail && compact_detail && f.fill_edge_walk;
     // Avoid a second fill layer on tiny stable-woven automatic details.
     if p.underlay_on() && !(opt.hat_order && f.id == "standard" && p.underlay.is_none() && narrow) {
         if f.fill_edge_walk {
