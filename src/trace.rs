@@ -133,7 +133,34 @@ pub fn remove_edge_background(r: &Raster, tolerance: u8) -> Raster {
     if transparent > 0 && transparent * 4 >= opaque {
         return r.clone();
     }
-    let Some((count, sums)) = bins.into_values().max_by_key(|(count, _)| *count) else {
+    // Neighboring shades can land in different bins even when they are part of
+    // one textured background. Score the local color cluster before selecting
+    // a seed, so a solid foreground touching the frame cannot win just because
+    // its color is concentrated in one bin.
+    let radius = tolerance.min(16);
+    let candidates: std::collections::BTreeMap<_, _> = bins
+        .into_iter()
+        .map(|(key, (count, sums))| (key, (count, sums, sums.map(|total| (total / count) as u8))))
+        .collect();
+    let Some((count, sums)) = candidates.iter().map(|(&[r, g, b], &(_, _, color))| {
+        let mut count = 0;
+        let mut sums = [0; 3];
+        for red in r.saturating_sub(1)..=(r + 1).min(15) {
+            for green in g.saturating_sub(1)..=(g + 1).min(15) {
+                for blue in b.saturating_sub(1)..=(b + 1).min(15) {
+                    if let Some(&(n, totals, nearby)) = candidates.get(&[red, green, blue])
+                        && (0..3).all(|channel| color[channel].abs_diff(nearby[channel]) <= radius)
+                    {
+                        count += n;
+                        for channel in 0..3 {
+                            sums[channel] += totals[channel];
+                        }
+                    }
+                }
+            }
+        }
+        (count, sums)
+    }).max_by_key(|(count, _)| *count) else {
         return r.clone();
     };
     if count * 5 < opaque {
@@ -210,6 +237,22 @@ fn edge_removal_respects_transparent_artwork_touching_the_frame() {
         if x <= 9 || y <= 3 { [25, 25, 25, 255] } else { [0, 0, 0, 0] }
     });
     assert_eq!(remove_edge_background(&raster, 32).rgba, raster.rgba);
+}
+
+#[test]
+fn edge_removal_prefers_textured_background_over_solid_foreground() {
+    let raster = Raster::from_fn(40, 40, |x, y| {
+        if y < 6 {
+            [22, 36, 90, 255]
+        } else {
+            let shade = [105, 121, 137][((x + y) % 3) as usize];
+            [shade, shade, shade, 255]
+        }
+    });
+
+    let result = remove_edge_background(&raster, 32);
+    assert_eq!(&result.rgba[..4], &[22, 36, 90, 255]);
+    assert_eq!(result.rgba.chunks_exact(4).filter(|pixel| pixel[3] == 0).count(), 40 * 34);
 }
 
 /// Return the same preprocessed pixels used by automatic tracing, before cropping.

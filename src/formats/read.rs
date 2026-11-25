@@ -333,9 +333,18 @@ pub fn to_svg(f: &StitchFile) -> String {
                     q.y / 10.0
                 );
             }
+            // Keep decoded run breaks separate even when the planner could
+            // connect two nearby points. Repeated colors can encode a stop.
+            let boundary = if ri + 1 < blk.runs.len() {
+                "_trim"
+            } else if f.blocks.get(bi + 1).is_some_and(|next| next.color == blk.color) {
+                "_stop"
+            } else {
+                ""
+            };
             let _ = writeln!(
                 s,
-                r#"    <path id="stitches_{}_{}_manual" d="{}" fill="none" stroke="{col}" stroke-width="0.4"/>"#,
+                r#"    <path id="stitches_{}_{}_manual{boundary}" d="{}" fill="none" stroke="{col}" stroke-width="0.4"/>"#,
                 bi + 1,
                 ri + 1,
                 d.trim_end()
