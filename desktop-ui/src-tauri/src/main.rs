@@ -781,6 +781,35 @@ fn apply_object_edit(workspace: &mut Workspace, uid: usize, operation: ObjectEdi
     Ok(result)
 }
 
+// Batch alignment is one undoable transaction; indices are resolved from stable UIDs.
+fn align_objects(workspace:&mut Workspace,uids:&[usize],mode:&str)->Result<Preview,String>{
+ let mut doc=workspace.source.clone().ok_or("No editable artwork")?;
+ let mut indices:Vec<usize>=doc.shapes.iter().enumerate().filter(|(_,s)|uids.contains(&s.uid)).map(|(i,_)|i).collect();
+ if indices.len()<2{return Err("Select at least two objects".into())}
+ let bounds:Vec<_>=indices.iter().map(|&i|zigzag::svg::shapes_bounds(&doc.shapes[i..=i])).collect();
+ if bounds.iter().any(|b|b.is_empty()){return Err("Selection contains empty geometry".into())}
+ let horizontal=matches!(mode,"center_x"|"distribute_x");let vertical=matches!(mode,"center_y"|"distribute_y");
+ if !horizontal&&!vertical{return Err("Unknown alignment".into())}
+ let coordinate=|i:usize|{let b=zigzag::svg::shapes_bounds(&doc.shapes[i..=i]);if horizontal{b.center().x}else{b.center().y}};
+ indices.sort_by(|&a,&b|coordinate(a).total_cmp(&coordinate(b)));
+ let values:Vec<_>=indices.iter().map(|&i|coordinate(i)).collect();
+ let first=values[0];let last=*values.last().unwrap();
+ let distribute=mode.starts_with("distribute");
+ if distribute&&indices.len()<3{return Err("Select at least three objects to distribute".into())}
+ let count=indices.len();
+ for (n,(&i,&value)) in indices.iter().zip(&values).enumerate(){
+ let target=if distribute{first+(last-first)*n as f64/(count-1) as f64}else{(first+last)*0.5};
+ let delta=target-value;
+ doc.transform(&[i],[1.0,0.0,0.0,1.0,if horizontal{delta}else{0.0},if vertical{delta}else{0.0}]).map_err(|e|e.to_string())?;
+ }
+ let design=doc.plan();if design.stitch_count()==0{return Err("Alignment produced no stitches".into())}
+ let result=preview(&design);workspace.checkpoint();workspace.source=Some(doc);workspace.current=Some(design);Ok(result)
+}
+#[tauri::command]
+async fn align_artwork_objects(uids:Vec<usize>,mode:String,app:tauri::AppHandle)->Result<Preview,String>{
+ use tauri::Manager;
+ tauri::async_runtime::spawn_blocking(move||{let state=app.state::<Mutex<Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;align_objects(&mut w,&uids,&mode)}).await.map_err(|e|e.to_string())?
+}
 #[tauri::command]
 async fn edit_artwork_object(uid: usize, operation: ObjectEdit, app: tauri::AppHandle) -> Result<Preview, String> {
     use tauri::Manager;
@@ -1360,4 +1389,4 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
     window.set_fullscreen(fullscreen).map_err(|error| error.to_string())
 }
 
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
