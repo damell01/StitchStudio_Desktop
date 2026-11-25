@@ -243,12 +243,19 @@ impl Studio {
         let mut open = true;
         let (mut ok, mut cancel) = (false, false);
         let busy = t.running.is_some();
+        // Fit the preview to shorter laptop screens while keeping the
+        // controls and confirmation buttons in the same window.
+        let viewport = ctx.content_rect().size();
+        let preview_size = Vec2::new(
+            (viewport.x - 380.0).clamp(240.0, PREVIEW.x),
+            (viewport.y - 340.0).clamp(160.0, PREVIEW.y),
+        );
         egui::Window::new("Auto Digitizer")
             .title_frame(crate::theme::title_frame(ctx))
             .open(&mut open)
             .resizable(false)
             .collapsible(false)
-            .anchor(egui::Align2::CENTER_TOP, Vec2::new(0.0, 80.0))
+            .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
             .show(ctx, |ui| {
                 let p = theme::pal_ui(ui);
                 ui.label(egui::RichText::new("Turn artwork into embroidery").size(22.0).strong().color(p.text));
@@ -272,14 +279,14 @@ impl Studio {
                             &[(false, "Traced artwork"), (true, "Original")],
                         );
                         ui.add_space(space::S);
-                        let (r, _) = ui.allocate_exact_size(PREVIEW, egui::Sense::hover());
+                        let (r, _) = ui.allocate_exact_size(preview_size, egui::Sense::hover());
                         let p = theme::pal_ui(ui);
                         // On the hat's color (Document › Preview on), as it will sew.
                         ui.painter().rect_filled(r, 12.0, Color32::from_rgb(cloth[0], cloth[1], cloth[2]));
                         let tex = if t.show_original { t.original.as_ref() } else { t.preview.as_ref() };
                         if let Some(tex) = tex {
                             let size = tex.size_vec2();
-                            let s = (PREVIEW.x / size.x).min(PREVIEW.y / size.y);
+                            let s = (preview_size.x / size.x).min(preview_size.y / size.y);
                             let img = egui::Rect::from_center_size(r.center(), size * s);
                             ui.painter().image(
                                 tex.id(),
@@ -309,7 +316,7 @@ impl Studio {
                         };
                         theme::caption(ui, line);
                         // The thread colors (a row kept even while tracing, so nothing moves).
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.set_min_height(theme::LIST_SWATCH);
                             ui.spacing_mut().item_spacing.x = space::XS;
                             if let Some(Ok(r)) = &t.result {
@@ -335,7 +342,7 @@ impl Studio {
                                     .width(80.0)
                                     .selected_text(label(o.colors))
                                     .show_ui(ui, |ui| {
-                                        for n in [0, 2, 3, 4, 5, 6, 7, 8, 10] {
+                                        for n in [0, 2, 3, 4, 5, 6, 7, 8, 9, 10] {
                                             ui.selectable_value(&mut o.colors, n, label(n));
                                         }
                                     })
@@ -390,8 +397,8 @@ impl Studio {
                         let accent = theme::pal_ui(ui).accent;
                         let ready = matches!(t.result, Some(Ok(_))) && !busy && t.traced.as_ref() == Some(&(t.opts.clone(), t.use_threads)) && t.shown == t.asked;
                         let label = match t.target {
-                            Target::Open => "Open",
-                            Target::Place => "Place",
+                            Target::Open => "Create design",
+                            Target::Place => "Add to design",
                         };
                         ok = ui
                             .add_enabled(
