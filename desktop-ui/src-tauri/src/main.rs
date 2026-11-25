@@ -224,6 +224,60 @@ fn regenerate_fill_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::g
     }
     Some(result)
 }
+// Check inferred reconstruction against its transformed original footprint.
+ // A spatial grid avoids quadratic comparisons on large embroidery runs.
+fn reconstruction_ok(original:&[zigzag::geom::P],candidate:&[zigzag::geom::P])->bool{
+    use zigzag::geom::{Bounds,P};
+    use std::collections::HashSet;
+    if original.len()<2||candidate.len()<2||candidate.len()>original.len().saturating_mul(12)||candidate.len()>200_000{return false}
+    if original[0].dist(candidate[0])>0.1||original.last().unwrap().dist(*candidate.last().unwrap())>0.1{return false}
+    let bounds=|p:&[P]|{let mut b=Bounds::empty();for &q in p{b.add(q)}b};
+    let a=bounds(original);let b=bounds(candidate);
+    if a.min.dist(b.min)>10.0||a.max.dist(b.max)>10.0{return false}
+    // Rasterize actual sewn segments (not just needle points). The tolerance
+    // accommodates changed row spacing while rejecting large uncovered excursions.
+    let grid=|p:&[P]|->Option<HashSet<(i32,i32)>>{
+        let mut cells=HashSet::new();let mut samples=0usize;
+        for q in p.windows(2){
+            let count=(q[0].dist(q[1])/5.0).ceil().max(1.0) as usize;
+            samples=samples.saturating_add(count+1);if samples>1_000_000{return None}
+            for k in 0..=count{let v=q[0].lerp(q[1],k as f64/count as f64);cells.insert(((v.x/10.0).floor() as i32,(v.y/10.0).floor() as i32));}
+        }Some(cells)
+    };
+    let Some(a)=grid(original)else{return false};let Some(b)=grid(candidate)else{return false};
+    let covered=|from:&HashSet<(i32,i32)>,to:&HashSet<(i32,i32)>|->bool{
+        if from.is_empty(){return false}
+        let missed=from.iter().filter(|&&(x,y)|!( -1..=1).any(|dx|(-1..=1).any(|dy|to.contains(&(x+dx,y+dy))))).count();
+        missed*100<=from.len()*3
+    };
+    covered(&a,&b)&&covered(&b,&a)
+}
+fn regenerate_recognized_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::geom::P>>{
+    regenerate_satin_run(p,sx,sy).or_else(||regenerate_fill_run(p,sx,sy)).filter(|q|reconstruction_ok(p,q))
+}
+// Preserve ambiguous portions (ties, travel, underlay and irregular fills).
+// Search bounded windows for coherent top-stitch sections inside mixed runs.
+fn regenerate_mixed_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Vec<zigzag::geom::P>{
+    if let Some(q)=regenerate_recognized_run(p,sx,sy){return q}
+    if p.len()<32||p.len()>100_000{return p.to_vec()}
+    let mut out=Vec::with_capacity(p.len());let mut i=0;let mut attempts=0;
+    while i<p.len(){
+        let remaining=p.len()-i;
+        let mut matched=None;
+        if remaining>=16&&attempts<2048{
+            for n in [256,128,64,32,16]{
+                if n>remaining{continue}
+                attempts+=1;
+                if let Some(q)=regenerate_recognized_run(&p[i..i+n],sx,sy){matched=Some((n,q));break}
+                if attempts>=2048{break}
+            }
+        }
+        if let Some((n,q))=matched{out.extend(q);i+=n;}
+        else{out.push(p[i]);i+=1;}
+        if out.len()>200_000{return p.to_vec()}
+    }
+    if reconstruction_ok(p,&out){out}else{p.to_vec()}
+}
 fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize],sx:f64,sy:f64)->Result<(),String>{
     use zigzag::{bezier::{Anchor,SubPath},svg::Geometry,params::Kind};
     let mut edits=Vec::new();let mut total=0usize;
@@ -234,7 +288,7 @@ fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize
             for (line,closed) in lines{
                 // Imported machine runs are open paths. Preserve closed paths
                 // without attempting to infer their stitch semantics.
-                let pts=if *closed{line.clone()}else{let rebuilt=regenerate_satin_run(line,sx,sy).or_else(||regenerate_fill_run(line,sx,sy));resize_fixed_run(rebuilt.as_deref().unwrap_or(line),sx<1.0||sy<1.0)};
+                let pts=if *closed{line.clone()}else{let rebuilt=regenerate_mixed_run(line,sx,sy);resize_fixed_run(&rebuilt,sx<1.0||sy<1.0)};
                 total=total.saturating_add(pts.len());
                 if total>2_000_000{return Err("Resized stitch paths exceed the safety limit.".into())}
                 paths.push(SubPath{anchors:pts.into_iter().map(Anchor::corner).collect(),closed:*closed});
@@ -1854,6 +1908,8 @@ fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).inv
 #[cfg(test)]
 mod fixed_resize_tests {
  use super::*;use zigzag::geom::P;
+ #[test] fn rejects_reconstruction_outside_original(){let a=vec![P::new(0.,0.),P::new(100.,0.)];let b=vec![a[0],P::new(50.,100.),a[1]];assert!(!reconstruction_ok(&a,&b));}
+ #[test] fn mixed_run_keeps_leading_and_trailing_ties(){let mut p=vec![P::new(-20.,0.),P::new(-20.,0.)];for i in 0..32{p.push(P::new(0.,i as f64*8.));p.push(P::new(30.,i as f64*8.+4.));}p.extend([P::new(40.,260.),P::new(40.,260.)]);let q=regenerate_mixed_run(&p,1.,2.);assert_eq!(&q[..2],&p[..2]);assert_eq!(&q[q.len()-2..],&p[p.len()-2..]);}
  #[test] fn regular_fill_adds_rows_when_enlarged(){let mut p=Vec::new();for row in 0..8{for i in 0..5{let x=if row%2==0{i}else{4-i};p.push(P::new(x as f64*20.,row as f64*8.));}}let rebuilt=regenerate_fill_run(&p,1.,2.).unwrap();assert!(rebuilt.len()>p.len());assert_eq!(rebuilt.first(),p.first());assert_eq!(rebuilt.last(),p.last());}
  #[test] fn satin_density_is_rebuilt_when_column_length_doubles(){let mut p=Vec::new();for i in 0..10{p.push(P::new(0.,i as f64*8.));p.push(P::new(30.,i as f64*8.+4.));}let result=regenerate_satin_run(&p,1.,2.).unwrap();assert!(result.len()>p.len());assert_eq!(result.first(),p.first());assert_eq!(result.last(),p.last());}
  #[test] fn long_moves_are_split_and_endpoints_preserved(){let a=P::new(0.,0.);let b=P::new(250.,0.);let r=resize_fixed_run(&[a,b],false);assert_eq!(r.first(),Some(&a));assert_eq!(r.last(),Some(&b));assert!(r.windows(2).all(|p|p[0].dist(p[1])<=100.001));}
