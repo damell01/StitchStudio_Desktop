@@ -1153,6 +1153,23 @@ impl Studio {
                         Vec2::new(ui.available_width(), inner_h),
                         Sense::hover(),
                     );
+                    if !a.inference_enabled {
+                        let mut child = ui.new_child(
+                            egui::UiBuilder::new().max_rect(r)
+                                .layout(egui::Layout::top_down(egui::Align::Center)),
+                        );
+                        child.add_space(12.0);
+                        child.label(egui::RichText::new("Instant commands").strong());
+                        caption(&mut child, "Offline · no AI model needed");
+                        for idea in ["Center my design", "Fit to hoop", "Group thread colors", "Check design"] {
+                            if child.button(idea).clicked() {
+                                a.prompt = idea.to_string();
+                                send = true;
+                            }
+                        }
+                        caption(&mut child, "Enable AI inference for more complex requests.");
+                        return;
+                    }
                     // Its program isn't on this Mac: how to install it instead.
                     let kind = a.kind;
                     if a.inference_enabled && a.installed(kind, &ui.ctx().clone()) == Some(false) {
@@ -1343,7 +1360,10 @@ impl Studio {
             return;
         }
         if !self.agent.inference_enabled {
-            self.agent.log.push(Entry::Error("AI inference is disabled. Try a native quick command or enable AI in the assistant panel.".into()));
+            let prompt = std::mem::take(&mut self.agent.prompt);
+            self.agent.log.push(Entry::You(prompt));
+            self.agent.log.push(Entry::Error("Command not recognized locally. Try Quick actions or enable AI inference.".into()));
+            ctx.request_repaint();
             return;
         }
         let addr = self.mcp.as_ref().map(|m| m.addr);
