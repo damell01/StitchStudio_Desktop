@@ -52,6 +52,8 @@ const groupResizeGesture=useRef<{pointer:number;uids:number[];cx:number;cy:numbe
 const [groupScalePreview,setGroupScalePreview]=useState(1);
 const rotationGesture=useRef<{pointer:number;uids:number[];cx:number;cy:number;start:number}|null>(null);
 const [rotationPreview,setRotationPreview]=useState(0);
+const [showDirections,setShowDirections]=useState(false);
+
 function rotationAt(position:DOMPoint,shift:boolean){const g=rotationGesture.current;if(!g)return 0;let degrees=(Math.atan2(position.y-g.cy,position.x-g.cx)-g.start)*180/Math.PI;degrees=((degrees+540)%360)-180;return shift?Math.round(degrees/15)*15:degrees}
 
 function groupScaleAt(position:DOMPoint){const g=groupResizeGesture.current;if(!g)return 1;const x=g.x-g.cx,y=g.y-g.cy;return Math.max(.1,Math.min(10,((position.x-g.cx)*x+(position.y-g.cy)*y)/Math.max(.0001,x*x+y*y)))}
@@ -208,6 +210,13 @@ const designBounds=useMemo(()=>{
 },[points]);
 const selectedMachine=machines.find(m=>m.id===machine);const machineExceeded=!!selectedMachine&&(width>selectedMachine.width+.001||height>selectedMachine.height+.001);const incompatibleHoop=!!selectedMachine&&!!hoop&&!hoops.some(h=>h.id===hoop&&hoopFits(h,selectedMachine));const invalidField=!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0;const compatibleHoops=hoops.filter(h=>hoopFits(h,selectedMachine));const outside=!!designBounds&&(designBounds.left < -width/2||designBounds.left+designBounds.width>width/2||designBounds.top < -height/2||designBounds.top+designBounds.height>height/2);
 const stitchIndex=Math.min(points.length,playhead??points.length);
+const directionSamples=useMemo(()=>{
+ if(!showDirections||!plan)return [];
+ const stride=Math.max(1,Math.ceil(plan.stitches/350));let index=0;
+ const marks:{x:number;y:number;angle:number;index:number;block:number}[]=[];
+ plan.blocks.forEach((b,block)=>b.runs.forEach(run=>{for(let j=0;j<run.length;j++,index++){if(j===0||index%stride!==0)continue;const p=run[j-1],q=run[j];if(Math.hypot(q[0]-p[0],q[1]-p[1])<.3)continue;marks.push({x:(p[0]+q[0])/2,y:(p[1]+q[1])/2,angle:Math.atan2(q[1]-p[1],q[0]-p[0])*180/Math.PI,index,block})}}));return marks;
+},[plan,showDirections]);
+
 const fullRenderedRuns=useMemo(()=>(plan?.blocks??[]).map(block=>block.runs.map(run=>run.length>1?run.map(p=>p.join(',')).join(' '):'')),[plan]);
 const renderedRuns=useMemo(()=>{
   if(stitchIndex>=points.length)return fullRenderedRuns;
@@ -569,6 +578,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button title="Fit hoop view" aria-label="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}><SquareDashed size={16}/><span className="camera-label">Hoop</span></button>
   <button className="studio-tool-icon" title="Hoop grid" aria-label="Hoop grid" aria-pressed={grid} onClick={()=>setGrid(value=>!value)}><Grid size={16}/></button>
   <button title="Thread view" aria-label="Thread view" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}><Eye size={16}/><span className="camera-label">Thread</span></button>
+<button title="Show sampled stitch directions" aria-label="Show stitch directions" aria-pressed={showDirections} onClick={()=>setShowDirections(v=>!v)}><Waypoints size={16}/><span className="camera-label">Direction</span></button>
 </div>
 <div className="workspace-canvas">
 <svg aria-label="Stitch preview; drag the background to pan" data-mode={canvasMode}
@@ -577,7 +587,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
  onPointerCancel={event=>finishCanvasGesture(event,false)}
  onLostPointerCapture={event=>finishCanvasGesture(event,false)} viewBox={[pan[0]-width*.56*100/zoom,pan[1]-height*.56*100/zoom,width*1.12*100/zoom,height*1.12*100/zoom].join(' ')} className="design-canvas" onWheel={e=>{const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const anchor=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());const next=Math.max(25,Math.min(400,zoom*(e.deltaY<0?1.1:1/1.1)));if(next===zoom)return;const ratio=zoom/next;setPan([anchor.x+(pan[0]-anchor.x)*ratio,anchor.y+(pan[1]-anchor.y)*ratio]);setZoom(next)}} style={{width:'100%',background:'var(--lav-bg,var(--canvas,#edf1ed))'}}><defs><pattern id="hoop-fabric" width="1.4" height="1.4" patternUnits="userSpaceOnUse"><path d="M0 .2H1.4 M.2 0V1.4" fill="none" stroke="#967a68" strokeWidth=".075" opacity=".18"/></pattern><pattern id="hoop-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#d8cce6" strokeWidth=".75" vectorEffect="non-scaling-stroke"/></pattern></defs><rect x={-width/2} y={-height/2} width={width} height={height} fill="#fffdf5" stroke="#ad8cd1" strokeWidth="1.6" rx={4} vectorEffect="non-scaling-stroke" className="studio-hoop"/><rect x={-width/2} y={-height/2} width={width} height={height} fill="url(#hoop-fabric)" rx={2}/><rect x={-width/2} y={-height/2} width={width} height={height} fill={grid?"url(#hoop-grid)":"none"}/>{grid&&<g stroke="#896d98" opacity=".6" pointerEvents="none">
 <path d={`M ${-width/2} 0 H ${width/2} M 0 ${-height/2} V ${height/2}`} strokeDasharray="4 5" strokeWidth=".6" vectorEffect="non-scaling-stroke"/>
-</g>}<g transform={`translate(${designOffset.join(' ')})`}>{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=renderedRuns[i]?.[j];return visible?<polyline key={j} points={visible} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .42 : 1} className={realistic?'studio-thread-path':undefined}/>:null})}</g>)}{canvasMode==='design'&&!independentGroups&&designBounds&&<rect
+</g>}<g transform={`translate(${designOffset.join(' ')})`}>{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} fill="none" strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((_r,j)=>{const visible=renderedRuns[i]?.[j];if(!visible)return null;const color='rgb('+b.color.join(',')+')';return realistic?<g key={j} pointerEvents="none"><polyline points={visible} stroke={color} strokeWidth=".46"/><polyline points={visible} stroke="#ffffff" opacity=".17" strokeWidth=".12" transform="translate(-.06 -.07)"/></g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}</g>)}{showDirections&&<g pointerEvents="none" fill="none" stroke="#663399" strokeWidth="1.2">{directionSamples.filter(d=>d.index<stitchIndex&&!hidden.includes(d.block)).map(d=><path key={d.index} d="M-1.1 0H1.1M.4 -.65L1.1 0L.4 .65" transform={`translate(${d.x} ${d.y}) rotate(${d.angle}) scale(${100/zoom})`} vectorEffect="non-scaling-stroke"/>)}</g>}{canvasMode==='design'&&!independentGroups&&designBounds&&<rect
   data-design-group x={designBounds.left-2} y={designBounds.top-2}
   width={designBounds.width+4} height={designBounds.height+4} rx={1}
   fill="transparent" pointerEvents="all" stroke="#8543aa" strokeWidth="1.5"
