@@ -61,7 +61,7 @@ function LetteringPreview({settings,valid}:{settings:Settings;valid:boolean}) {
   const plan=current?.plan;
   const bounds=useMemo(()=>plan ? previewBounds(plan) : null,[plan]);
   return <article className="lettering-preview">
-    <h2>Stitch preview</h2>
+    <div className="lettering-preview-heading"><h2>Live stitch preview</h2><small>Generated from your lettering settings</small></div>
     <div className="lettering-sample" aria-busy={valid && !current}>
       {plan && bounds ? <svg role="img" aria-label="Planned lettering stitches" viewBox={bounds.join(' ')}>
         {plan.blocks.map((block,i)=><g key={i} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth=".3" strokeLinecap="round">
@@ -113,7 +113,7 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
 
   return <section className="lower lettering-workspace">
     <article>
-      <h2>{monogram?'Your initials':'Your lettering'}</h2>
+      <h2>{monogram?'Your initials':'Your lettering'}</h2><p className="muted">Choose your text, font and stitch size.</p>
       {monogram
         ? <label>Initials<input value={text} maxLength={3} onChange={e=>setText(e.target.value.toUpperCase())}/></label>
         : <label>Text<textarea rows={2} value={text} maxLength={120} onChange={e=>setText(e.target.value)}/></label>}
@@ -124,7 +124,7 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
         <label><input type="checkbox" checked={italic} onChange={e=>setItalic(e.target.checked)}/> Italic</label>
         <label>Thread color<input type="color" value={color} onChange={e=>setColor(e.target.value)}/></label>
       </div>
-      <details className="lettering-controls"><summary>Spacing and layout</summary>
+      <details className="lettering-controls" open><summary>Spacing and layout</summary>
         <label>Letter spacing (mm)<input type="number" min="0" max="5" step=".1" value={spacing} onChange={e=>setSpacing(Number(e.target.value))}/></label>
         <label>Arc radius (mm)<input type="number" min="-300" max="300" value={arc} onChange={e=>setArc(Number(e.target.value))}/><small>Use zero for a straight line and a negative radius for a lower arc.</small></label>
         <label>Alignment<select value={align} onChange={e=>setAlign(e.target.value)}>
