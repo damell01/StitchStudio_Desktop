@@ -60,16 +60,18 @@ function LetteringPreview({settings,valid}:{settings:Settings;valid:boolean}) {
   const current=valid && result?.settings===settings ? result : null;
   const plan=current?.plan;
   const bounds=useMemo(()=>plan ? previewBounds(plan) : null,[plan]);
+  const [threadView,setThreadView]=useState(true);
+  const paths=useMemo(()=>plan?.blocks.map(b=>b.runs.map(run=>run.map(p=>p.join(',')).join(' ')))??[],[plan]);
   return <article className="lettering-preview">
-    <div className="lettering-preview-heading"><h2>Live stitch preview</h2><small>Generated from your lettering settings</small></div>
-    <div className="lettering-sample" aria-busy={valid && !current}>
+    <div className="lettering-preview-heading"><h2>Live stitch preview</h2><div className="lettering-preview-switch" role="group" aria-label="Preview mode"><button aria-pressed={threadView} onClick={()=>setThreadView(true)}>Thread</button><button aria-pressed={!threadView} onClick={()=>setThreadView(false)}>Paths</button></div></div>
+    <div className={`lettering-sample ${threadView?"lettering-thread-view":""}`} aria-busy={valid && !current}>
       {plan && bounds ? <svg role="img" aria-label="Planned lettering stitches" viewBox={bounds.join(' ')}>
-        {plan.blocks.map((block,i)=><g key={i} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth=".3" strokeLinecap="round">
-          {block.runs.map((run,j)=><polyline key={j} points={run.map(point=>point.join(',')).join(' ')}/>)}
+        {plan.blocks.map((block,i)=><g key={i} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth={threadView?".43":".23"} strokeLinecap="round">
+          {block.runs.map((_,j)=><polyline key={j} points={paths[i]?.[j]}/>)}
         </g>)}
       </svg> : <span role="status">{current?.error || (valid?'Planning stitches…':'Choose a font and enter your text.')}</span>}
     </div>
-    {plan && bounds && <p aria-live="polite">{plan.stitches.toLocaleString()} planned points · {((bounds[2]-4)/25.4).toFixed(2)} × {((bounds[3]-4)/25.4).toFixed(2)} in ({(bounds[2]-4).toFixed(1)} × {(bounds[3]-4).toFixed(1)} mm)</p>}
+    {plan && bounds && <div className="lettering-metrics" aria-live="polite"><div><small>Stitch points</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Width</small><strong>{(bounds[2]-4).toFixed(1)} mm</strong></div><div><small>Height</small><strong>{(bounds[3]-4).toFixed(1)} mm</strong></div></div>}
     <p className="muted">The preview uses the selected font and stitch settings. Inspect small openings in the letters before sewing.</p>
   </article>;
 }
@@ -112,19 +114,19 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
   }
 
   return <section className="lower lettering-workspace">
-    <article>
+    <article className="lettering-inspector">
       <h2>{monogram?'Your initials':'Your lettering'}</h2><p className="muted">Choose your text, font and stitch size.</p>
       {monogram
         ? <label>Initials<input value={text} maxLength={3} onChange={e=>setText(e.target.value.toUpperCase())}/></label>
         : <label>Text<textarea rows={2} value={text} maxLength={120} onChange={e=>setText(e.target.value)}/></label>}
       <FontPicker fonts={fonts} selected={font} choose={setFont}/>
-      <label>Capital height (mm)<input type="number" min="3" max="80" value={size} onChange={e=>setSize(Number(e.target.value))}/></label>
+      <div className="lettering-size-presets" role="group" aria-label="Letter height presets">{[8,12,20,30,50].map(n=><button key={n} aria-pressed={size===n} onClick={()=>setSize(n)}>{n} mm</button>)}</div><label>Capital height (mm)<input type="number" min="3" max="80" value={size} onChange={e=>setSize(Number(e.target.value))}/></label>
       <div className="lettering-style">
         <label><input type="checkbox" checked={bold} onChange={e=>setBold(e.target.checked)}/> Bold</label>
         <label><input type="checkbox" checked={italic} onChange={e=>setItalic(e.target.checked)}/> Italic</label>
         <label>Thread color<input type="color" value={color} onChange={e=>setColor(e.target.value)}/></label>
       </div>
-      <details className="lettering-controls" open><summary>Spacing and layout</summary>
+      <details className="lettering-controls"><summary>Spacing and layout</summary>
         <label>Letter spacing (mm)<input type="number" min="0" max="5" step=".1" value={spacing} onChange={e=>setSpacing(Number(e.target.value))}/></label>
         <label>Arc radius (mm)<input type="number" min="-300" max="300" value={arc} onChange={e=>setArc(Number(e.target.value))}/><small>Use zero for a straight line and a negative radius for a lower arc.</small></label>
         <label>Alignment<select value={align} onChange={e=>setAlign(e.target.value)}>
