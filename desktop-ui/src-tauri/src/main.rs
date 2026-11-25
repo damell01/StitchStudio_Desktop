@@ -290,6 +290,8 @@ const MAX_PROJECT_BYTES: u64 = 100_000_000;
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Project {
     #[serde(default)]
+    thread_assignments: std::collections::HashMap<String,String>,
+    #[serde(default)]
     source_svg: Option<String>,
     #[serde(default)]
     source_offset: Option<[f64; 2]>,
@@ -314,13 +316,14 @@ struct ProjectRun {
 }
 
 #[derive(serde::Serialize)]
-struct OpenedProject { plan: Preview, width: f64, height: f64, format: String }
+struct OpenedProject { plan: Preview, width: f64, height: f64, format: String, thread_assignments: std::collections::HashMap<String,String> }
 
 impl Project {
     fn capture(workspace: &Workspace, width: f64, height: f64, format: String) -> Result<Option<Self>, String> {
         let Some(design) = &workspace.current else { return Ok(None); };
         let source = workspace.source.as_ref();
         Ok(Some(Self {
+            thread_assignments: Default::default(),
             source_svg: source.map(|document| document.to_svg()).transpose().map_err(|err| err.to_string())?,
             source_offset: source.map(|document| [document.offset.x, document.offset.y]),
             version: 1,
@@ -383,7 +386,7 @@ impl Project {
             }).collect(),
             ..Default::default()
         };
-        let result = OpenedProject { plan: preview(&design), width: self.width, height: self.height, format: self.format };
+        let result = OpenedProject { plan: preview(&design), width: self.width, height: self.height, format: self.format, thread_assignments: self.thread_assignments };
         *state.lock().map_err(|err| err.to_string())? = Workspace { source, current: Some(design), ..Default::default() };
         Ok(result)
     }
@@ -402,17 +405,18 @@ fn write_project(path: &std::path::Path, project: &Project) -> Result<(), String
 }
 
 #[tauri::command]
-async fn save_project(width: f64, height: f64, format: String, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Option<LibraryEntry>, String> {
+async fn save_project(width: f64, height: f64, format: String, thread_assignments: Option<std::collections::HashMap<String,String>>, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Option<LibraryEntry>, String> {
     let Some(path) = rfd::AsyncFileDialog::new().add_filter("Stitch Studio project", &["stitchstudio"])
         .set_file_name("design.stitchstudio").save_file().await else { return Ok(None); };
     let path = path.path().to_owned();
     if !path.extension().and_then(|value| value.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("stitchstudio")) {
         return Err("Save the project with the .stitchstudio extension".into());
     }
-    let project = {
+    let mut project = {
         let workspace = state.lock().map_err(|err| err.to_string())?;
         Project::capture(&workspace, width, height, format)?.ok_or("No design")?
     };
+    project.thread_assignments = thread_assignments.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
         write_project(&path, &project)?;
         Ok(Some(LibraryEntry { file:path.to_string_lossy().into_owned(), name:project.name, stitches:project.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(), colors:project.blocks.len(), width:project.width,height:project.height,modified:std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() }))
@@ -784,7 +788,7 @@ fn create_specialty(shape:String,style:String,width:f64,state:tauri::State<'_,Mu
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
 #[tauri::command]
-fn recovery_save(app: tauri::AppHandle, width: f64, height: f64, format: String, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
+fn recovery_save(app: tauri::AppHandle, width: f64, height: f64, format: String, thread_assignments: Option<std::collections::HashMap<String,String>>, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
     use tauri::Manager;
     // Keep recovery writes in order if more than one caller requests a snapshot.
     static RECOVERY_WRITE: Mutex<()> = Mutex::new(());
@@ -793,7 +797,8 @@ fn recovery_save(app: tauri::AppHandle, width: f64, height: f64, format: String,
         let workspace = state.lock().map_err(|err| err.to_string())?;
         Project::capture(&workspace, width, height, format)?
     };
-    let Some(project) = project else { return Ok(()); };
+    let Some(mut project) = project else { return Ok(()); };
+    project.thread_assignments = thread_assignments.unwrap_or_default();
     let dir = app.path().app_local_data_dir().map_err(|err| err.to_string())?;
     project_recovery::save(&dir, &project)
 }
