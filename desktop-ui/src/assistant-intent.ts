@@ -4,6 +4,13 @@ export function assistantIntent(input:string):{kind:string;value?:number;fabric?
  const lettering=input.trim().match(/^(?:please )?(?:add|insert) (?:text|lettering) "([^"\r\n]+)"(?: (?:at|size) (\d+(?:\.\d+)?)\s*mm)?[.!]?$/i);
  if(lettering){const size=Number(lettering[2]??12);if(lettering[1].trim()&&Array.from(lettering[1]).length<=120&&size>=3&&size<=80)return {kind:'lettering',text:lettering[1],size};return null}
  const s=input.trim().toLowerCase().replace(/[.!?]+$/,'').replace(/\s+/g,' ');
+ const selectedColor=s.match(/^(?:please )?select (?:all )?(?:objects (?:with color|colored) |color )?(#[0-9a-f]{6})(?: objects)?$/);
+ if(selectedColor)return {kind:'selectColor',color:[1,3,5].map(i=>parseInt(selectedColor[1].slice(i,i+2),16))};
+ const selectedLabel=s.match(/^(?:please )?select (?:all )?objects (?:named|matching) "([^"]+)"$/);
+ if(selectedLabel)return {kind:'selectLabel',text:selectedLabel[1]};
+ const selectedKind=s.match(/^(?:please )?select (?:all )?(fill|satin|run|manual) (?:objects|stitches)$/);
+ if(selectedKind)return {kind:'selectKind',text:selectedKind[1]};
+ if(/^(?:please )?(?:clear (?:the )?selection|deselect all)$/.test(s))return {kind:'clearSelection'};
  if(/^(?:please )?(?:(?:optimize|optimise) (?:this |the )?design|reduce (?:the )?(?:stitch count|stitch density|unnecessary stitches)(?: without losing detail)?)$/.test(s))return {kind:'optimize'};
  if(/^(?:please )?(?:review|analyze|analyse|evaluate)(?: (?:this |the )?design)?$/.test(s))return {kind:'review'};
  if(/^(?:please )?(?:recommend|suggest|choose|find)(?: (?:the |a |best )?)(?: compatible)?hoop(?: for (?:this |the |my )?design)?$/.test(s))return {kind:'recommendHoop'};
