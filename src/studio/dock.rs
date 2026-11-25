@@ -1635,11 +1635,15 @@ impl Studio {
     fn objects_body(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
         let rows = self.object_rows();
+        let selected_count = self.sel_indices().len();
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Design layers").strong().size(15.0).color(p.text));
-            caption(ui, format!("{} objects", self.doc.shapes.len()));
+            caption(ui, format!("{} layers", self.doc.shapes.len()));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if selected_count > 0 {
+                    caption(ui, format!("{selected_count} selected"));
+                }
+            });
         });
-        caption(ui, "Select objects to edit their stitch settings.");
         if rows.is_empty() {
             ui.add_space(theme::space::S);
             caption(ui, "Import artwork, add lettering or draw to create your first layer.");
@@ -1653,9 +1657,9 @@ impl Studio {
             Some(side) => {
                 let h = self.dock_ui.column_h[side.side()];
                 if self.panels_in(side).len() > 1 {
-                    (rows.len().max(3) as f32 * 30.0 + 8.0).clamp(110.0, (h * 0.36).max(110.0))
+                    (rows.len().max(3) as f32 * 26.0 + 8.0).clamp(100.0, (h * 0.42).max(100.0))
                 } else {
-                    (h - 20.0 - 26.0 - 64.0).max(120.0)
+                    (h - 20.0 - 26.0 - 34.0).max(100.0)
                 }
             }
         };
@@ -1673,7 +1677,7 @@ impl Studio {
         let mut group_click: Option<Vec<usize>> = None;
         // Only the rows in view are laid out and painted (a traced design
         // has hundreds; each row is text, an icon and a hover check).
-        const ROW: f32 = 30.0;
+        const ROW: f32 = 26.0;
         egui::ScrollArea::vertical()
             .id_salt("objects")
             .max_height(list_h)
@@ -1938,7 +1942,7 @@ impl Studio {
                 }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                caption(ui, format!("{} objects", self.doc.shapes.len()));
+                caption(ui, "Sew order");
             });
         });
     }
@@ -2116,7 +2120,6 @@ impl Studio {
             );
         }
         ui.label(egui::RichText::new("Stitch type").strong().size(14.0).color(p.text));
-        caption(ui, "Choose how the selected artwork will be sewn.");
         // The stitch type: the main decision for every object.
         let allowed = allowed_kinds(&self.doc.shapes[i]);
         let current = self.doc.shapes[i].params.kind.unwrap_or(Kind::Fill);
@@ -2130,7 +2133,7 @@ impl Studio {
             for row in allowed.chunks(4) {
                 ui.horizontal(|ui| {
                     for &k in row {
-                        if kind_tile(ui, k, k == current, tile_w, 52.0)
+                        if kind_tile(ui, k, k == current, tile_w, 44.0)
                             .on_hover_text(kind_help(k, filled))
                             .clicked()
                         {
