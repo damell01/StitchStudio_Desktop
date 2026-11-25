@@ -1144,11 +1144,36 @@ struct DigitizerReview {
     optimization: Option<[usize;2]>,
 }
 
+
+fn ocr_pixels(bytes: &[u8], remove_background: bool, tolerance: u8, cleanup: bool) -> Result<(u32,u32,Vec<u8>),String> {
+    let (w,h,rgba) = zigzag::trace::prepared_pixels(bytes,remove_background,tolerance,cleanup).map_err(|e|e.to_string())?;
+    let (mut l,mut t,mut r,mut b)=(w,h,0,0);
+    for y in 0..h { for x in 0..w {
+        if rgba[((y*w+x)*4+3) as usize]>=32 { l=l.min(x); t=t.min(y); r=r.max(x+1); b=b.max(y+1); }
+    }}
+    if l>=r || t>=b { return Err("No foreground available for lettering recognition".into()); }
+    let mut cropped=Vec::new();
+    for y in t..b { cropped.extend_from_slice(&rgba[((y*w+l)*4) as usize..((y*w+r)*4) as usize]); }
+    Ok((r-l,b-t,cropped))
+}
+
+#[tauri::command]
+async fn recognize_artwork_lettering(bytes: Vec<u8>, remove_background: bool, tolerance: u8, cleanup: bool) -> Result<Vec<zigzag::ocr::RecognizedLine>,String> {
+    if bytes.is_empty() || bytes.len()>20_000_000 { return Err("Invalid artwork size".into()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        let (w,h,rgba)=ocr_pixels(&bytes,remove_background,tolerance,cleanup)?;
+        let mut lines=zigzag::ocr::recognize_rgba(w,h,&rgba).map_err(|e|e.to_string())?;
+        // Normalize to the prepared raster width/height; reconstruction uses the same crop.
+        for line in &mut lines { line.rect=[line.rect[0]/w as f64,line.rect[1]/h as f64,line.rect[2]/w as f64,line.rect[3]/h as f64]; }
+        Ok(lines)
+    }).await.map_err(|e|e.to_string())?
+}
+
 #[tauri::command]
 async fn digitize_artwork(
     bytes: Vec<u8>, name: String, mime: String, width_mm: f64, colors: u32,
     remove_background: bool, detail: f64, fabric: String, cleanup: bool,
-    tolerance: u8, thin_lines: bool, thread_palette: Option<Vec<[u8; 3]>>, state: tauri::State<'_, Mutex<Workspace>>,
+    tolerance: u8, thin_lines: bool, thread_palette: Option<Vec<[u8; 3]>>, lettering: Option<Vec<zigzag::ocr::RecognizedLine>>, state: tauri::State<'_, Mutex<Workspace>>,
 ) -> Result<DigitizerReview, String> {
     if bytes.is_empty() || bytes.len() > 20_000_000 || !(5.0..=300.0).contains(&width_mm)
         || !(0.0..=100.0).contains(&detail) || !(colors == 0 || (2..=10).contains(&colors))
@@ -1167,7 +1192,19 @@ async fn digitize_artwork(
         let options = zigzag::trace::TraceOptions {
             width_mm, colors, remove_background, detail, lines: thin_lines, threads: thread_palette.unwrap_or_default().into_iter().take(1024).collect(), ..Default::default()
         };
-        let mut document = if mime == "image/svg+xml" {
+        let mut selected = lettering.unwrap_or_default();
+        selected.retain(|l| l.enabled);
+        if selected.len()>64 { return Err("Review at most 64 lettering regions.".into()); }
+        let has_lettering = !selected.is_empty() && mime != "image/svg+xml";
+        let mut document = if has_lettering {
+            let trace=zigzag::trace::trace_prepared_bytes(&bytes,&options,tolerance,cleanup).map_err(|e|e.to_string())?;
+            let mut doc=zigzag::document::Document::from_svg(&trace.svg,&name,None).map_err(|e|e.to_string())?;
+            zigzag::design::auto_stitch_types(&mut doc.shapes);
+            let (w,h,_)=ocr_pixels(&bytes,remove_background,tolerance,cleanup)?;
+            for line in &mut selected { line.rect=[line.rect[0]*w as f64,line.rect[1]*h as f64,line.rect[2]*w as f64,line.rect[3]*h as f64]; }
+            zigzag::ocr::replace_lettering(&mut doc,&selected,width_mm/w as f64).map_err(|e|e.to_string())?;
+            doc
+        } else if mime == "image/svg+xml" {
             let svg = std::str::from_utf8(&bytes).map_err(|err| err.to_string())?;
             zigzag::document::Document::from_svg(svg, &name, None).map_err(|err| err.to_string())?
         } else {
@@ -1183,7 +1220,7 @@ async fn digitize_artwork(
         // Compare a second automatic trace only for raster imports with
         // automatic colors. Keep the original unless the alternate retains
         // the palette and approximate extent while reducing sewing complexity.
-        if mime != "image/svg+xml" && colors == 0 && !thin_lines && design.stitch_count() <= 100_000 {
+        if !has_lettering && mime != "image/svg+xml" && colors == 0 && !thin_lines && design.stitch_count() <= 100_000 {
             let mut alternate_options = options.clone();
             alternate_options.lines = true;
             if let Ok(mut alternate) = zigzag::trace::digitize_raster(&bytes, &name, &alternate_options, tolerance, cleanup) {
@@ -1214,7 +1251,7 @@ async fn digitize_artwork(
             }
         }
         let mut optimization = None;
-        if mime != "image/svg+xml" {
+        if !has_lettering && mime != "image/svg+xml" {
             if let Some((next,candidate))=optimized_density(&document,&design){
                 optimization=Some([design.stitch_count(),candidate.stitch_count()]);
                 document=next;design=candidate;
@@ -1555,4 +1592,4 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
 async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
