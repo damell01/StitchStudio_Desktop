@@ -261,7 +261,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
           </fieldset>
         </details>}
       </>}
-      {processing && <p role="status"><progress aria-label="Digitizing artwork" /> Preparing artwork and generating stitches…</p>}
+      {processing && <p>Digitizing in progress…</p>}
       {!valid && <p role="alert">Width must be between 5 and 300 mm.</p>}
       {(error || generationError) && <p role="alert">{error || generationError}</p>}
       {generationError && !vector && settings.removeBackground && generationError.includes('No foreground') &&
@@ -305,7 +305,17 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       {displayUrl && (showProcessed || original?.mime !== 'image/tiff') &&
         <img src={displayUrl} alt={showProcessed ? 'Processed artwork' : 'Original artwork'} className="digitizer-source-image" />}
       {showProcessed && !displayUrl && mode !== 'stitches' && <p>{previewError || 'Preparing artwork preview…'}</p>}
-      {plan && <>
+      {processing && <>
+        <h3 className="stitch-heading">Generating stitch paths</h3>
+        <div className="digitizer-stitch-image digitizer-processing" role="status" aria-live="polite">
+          <div className="digitizer-processing-orbit" aria-hidden="true"><span>✦</span></div>
+          <strong>Digitizing your artwork</strong>
+          <p>Analyzing shapes, thread colors and stitch paths.</p>
+          <small>Complex artwork may take a little longer.</small>
+          <div className="digitizer-processing-dots" aria-hidden="true"><i/><i/><i/></div>
+        </div>
+      </>}
+      {!processing && plan && <>
         <h3 className="stitch-heading">{mode === 'density' ? 'Densest 1 mm² cells · DST preview' : 'Generated stitch paths'}</h3>
         <svg aria-label="Generated stitches" viewBox={[-extent * 1.1, -extent * 1.1, extent * 2.2, extent * 2.2].join(' ')} className={`digitizer-stitch-image ${mode === 'thread' ? 'digitizer-thread-view' : ''}`}>
           {mode === 'density' && review ? review.density.map(([x, y, count]) =>
