@@ -141,6 +141,22 @@ mod tests {
     }
 
     #[test]
+    fn reference_mapping_preserves_commands_and_is_atomic() {
+        let mut work=design();
+        work.source=None;
+        let original:Vec<_>=work.current.as_ref().unwrap().blocks.iter().map(|b|b.color).collect();
+        let before=zigzag::formats::dst::write_dst(work.current.as_ref().unwrap());
+        let mapped:Vec<_>=original.iter().map(|c|[c[2],c[0],c[1]]).collect();
+        assert!(map_blocks(&mut work,&original,&[]).is_err());
+        assert!(work.undo.is_empty());
+        map_blocks(&mut work,&original,&mapped).unwrap();
+        assert_eq!(work.undo.len(),1);
+        assert_eq!(before,zigzag::formats::dst::write_dst(work.current.as_ref().unwrap()));
+        assert_eq!(work.current.as_ref().unwrap().blocks.iter().map(|b|b.color).collect::<Vec<_>>(),mapped);
+        assert!(map_blocks(&mut work,&original,&mapped).is_err());
+        assert_eq!(work.undo.len(),1);
+    }
+    #[test]
     fn replaces_repeated_colors_with_one_undo_step(){
       let mut work=design();let before=work.source.as_ref().unwrap().to_svg().unwrap();
       let previous=[0x88,0x22,0x11];let next=[90,70,150];
