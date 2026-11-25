@@ -1126,13 +1126,20 @@ fn sew_order(shapes: &[Shape], opt: &PlanOptions) -> Vec<usize> {
                 .collect()
         })
         .collect();
-    let mut done = vec![false; n];
+    // Maintain dependency counts instead of rescanning every predecessor on
+    // every selection. The ready set preserves the original ordering tie-break.
+    let mut remaining: Vec<usize> = deps.iter().map(Vec::len).collect();
+    let mut successors = vec![Vec::new(); n];
+    for (j, predecessors) in deps.iter().enumerate() {
+        for &i in predecessors { successors[i].push(j); }
+    }
+    let mut ready: std::collections::BTreeSet<usize> =
+        (0..n).filter(|&i| remaining[i] == 0).collect();
     let mut order = Vec::with_capacity(n);
     let mut color: Option<[u8; 3]> = None;
     let mut previous_center: Option<P> = None;
     while order.len() < n {
-        let pick = (0..n)
-            .filter(|&j| !done[j] && deps[j].iter().all(|&i| done[i]))
+        let pick = ready.iter().copied()
             .min_by(|&a, &b| {
                 let key = |j: usize| {
                     let c = bounds[j].center();
@@ -1144,7 +1151,11 @@ fn sew_order(shapes: &[Shape], opt: &PlanOptions) -> Vec<usize> {
                 ka.0.cmp(&kb.0).then(ka.1.total_cmp(&kb.1))
             })
             .expect("dependencies only point backwards, so something is always available");
-        done[pick] = true;
+        ready.remove(&pick);
+        for &j in &successors[pick] {
+            remaining[j] -= 1;
+            if remaining[j] == 0 { ready.insert(j); }
+        }
         color = Some(shapes[pick].color);
         previous_center = Some(bounds[pick].center());
         order.push(pick);
