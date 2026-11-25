@@ -238,9 +238,19 @@ impl Studio {
                 egui::Popup::menu(&share).show(|ui| {
                     ui.set_min_width(260.0);
                     caption(ui, "Export for your machine");
+                    let ready = !self.planner.pending && !self.design.blocks.is_empty()
+                        && !self.issues.iter().any(|i| i.level == zigzag::checks::Level::Error);
+                    if self.planner.pending {
+                        caption(ui, "Wait for the updated stitch plan.");
+                    } else if !ready && !self.design.blocks.is_empty() {
+                        if ui.button("Review export errors").clicked() {
+                            self.run_action(Action::ShowIssues);
+                            ui.close();
+                        }
+                    }
                     for (ext, label) in zigzag::formats::MACHINE_FORMATS {
                         if ui
-                            .add_enabled(!self.design.blocks.is_empty(), egui::Button::new(label))
+                            .add_enabled(ready, egui::Button::new(label))
                             .clicked()
                         {
                             self.run_action(Action::Export(ext));
