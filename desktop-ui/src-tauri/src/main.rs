@@ -802,6 +802,38 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
     doc.sync().ok()?;let plan=doc.plan();
     Some((doc,plan))
 }
+// An explicitly visual alternative: restore solid ink even when it costs
+// more stitches. Keep counters and meaningful holes, and never replace
+// specialty stitches, recorded lettering or unselected shapes.
+fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
+    let mut candidates=Vec::new();
+    let old_bounds=original.bounds();let old_audit=measure_stitches(original);
+    let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
+    let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
+    let seconds=|d:&Design|d.stitch_count() as f64*60.0/speed+d.trim_count() as f64*trim;
+    for radius in [8.0,12.0,16.0]{
+        let Some(doc)=rebuild_solid_artwork(source,uids,radius) else{continue};
+        let plan=doc.plan();
+        // Do not convert the reconstructed artwork back into outline-only
+        // paths: this alternative is intended to show a solid fill.
+        let mut variants=vec![(doc.clone(),plan.clone())];
+        for angle in [0.0,45.0,90.0]{
+            if let Some(v)=economical_fill_candidate(&doc,&plan,uids,3,angle){variants.push(v);}
+        }
+        for (d,p) in variants{
+            let b=p.bounds();let audit=measure_stitches(&p);
+            if p.stitch_count()==0||p.stitch_count()>200_000||p.stitch_count()>original.stitch_count().saturating_mul(2)
+                ||p.stitch_count()<original.stitch_count()/3||audit.long>old_audit.long||audit.zero>old_audit.zero
+                ||old_bounds.min.dist(b.min)>8.0||old_bounds.max.dist(b.max)>8.0
+                ||!original.blocks.iter().map(|b|b.color).eq(p.blocks.iter().map(|b|b.color)){continue}
+            // Stronger visual reconstruction takes precedence over absolute
+            // stitch savings. At equal strength choose the fastest plan.
+            candidates.push((radius,d,p));
+        }
+    }
+    candidates.sort_by(|a,b|b.0.total_cmp(&a.0).then_with(||seconds(&a.2).total_cmp(&seconds(&b.2))));
+    candidates.into_iter().next().map(|(_,d,p)|(d,p)).ok_or("No eligible solid silhouette could be reconstructed".into())
+}
 fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
@@ -889,7 +921,14 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
         if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
         let options=options.unwrap_or_default();
         let mut variants=Vec::new();let mut stored=Vec::new();
-        for strength in 1..=3{
+        for strength in 1..=4{
+            if strength==4{
+                match choose_silhouette(&source,&original,uids.as_deref(),&options){
+                    Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None});stored.push((strength,doc,design));}
+                    Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
+                }
+                continue
+            }
             let mut mode=options.clone();
             if strength==1{mode.solid=false;mode.lighter_underlay=false;mode.merge=false;mode.auto_types=false;}
             if strength==2{mode.lighter_underlay=false;}
@@ -2180,7 +2219,14 @@ async fn compare_digitizer_draft(id:u64,app:tauri::AppHandle)->Result<Vec<Simpli
             (d.document.clone(),d.design.clone())
         };
         let mut variants=Vec::new();let mut alternatives=Vec::new();
-        for strength in 1..=3 {
+        for strength in 1..=4 {
+            if strength==4{
+                match choose_silhouette(&doc,&original,None,&SimplifyOptions::default()){
+                    Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None});alternatives.push((strength,d,plan));}
+                    Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
+                }
+                continue
+            }
             let options=SimplifyOptions{solid:strength==3,merge:strength>=2,auto_types:strength>=2,..Default::default()};
             match choose_simplification(&doc,&original,strength,None,strength==3,&options){
                 Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None});alternatives.push((strength,d,plan));}
