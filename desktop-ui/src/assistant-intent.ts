@@ -4,6 +4,7 @@ export function assistantIntent(input:string):{kind:string;value?:number;fabric?
  const lettering=input.trim().match(/^(?:please )?(?:add|insert) (?:text|lettering) "([^"\r\n]+)"(?: (?:at|size) (\d+(?:\.\d+)?)\s*mm)?[.!]?$/i);
  if(lettering){const size=Number(lettering[2]??12);if(lettering[1].trim()&&Array.from(lettering[1]).length<=120&&size>=3&&size<=80)return {kind:'lettering',text:lettering[1],size};return null}
  const s=input.trim().toLowerCase().replace(/[.!?]+$/,'').replace(/\s+/g,' ');
+ if(/^(?:please )?(?:(?:optimize|optimise) (?:this |the )?design|reduce (?:the )?(?:stitch count|stitch density|unnecessary stitches)(?: without losing detail)?)$/.test(s))return {kind:'optimize'};
  if(/^(?:please )?(?:review|analyze|analyse|evaluate)(?: (?:this |the )?design)?$/.test(s))return {kind:'review'};
  if(/^(?:please )?(?:recommend|suggest|choose|find)(?: (?:the |a |best )?)(?: compatible)?hoop(?: for (?:this |the |my )?design)?$/.test(s))return {kind:'recommendHoop'};
  if(/^(?:please )?(?:optimize|optimise|prepare)(?: (?:the |this )?design)? for (?:a |an )?(standard|cotton|twill|denim|canvas|polyester|t-shirt|jersey|sweatshirt|stretch|fleece|towel|hat|leather|knit|thin-cap|structured-cap)$/.test(s)){
