@@ -1,5 +1,5 @@
 fn main() {
-    if std::env::var_os("CARGO_FEATURE_GUI").is_some() { prepare_ocr_models(); }
+    if std::env::var_os("CARGO_FEATURE_OCR").is_some() { prepare_ocr_models(); }
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=packaging/windows/AppIcon.ico");
     println!("cargo:rerun-if-changed=Cargo.toml");
