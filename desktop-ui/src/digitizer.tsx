@@ -83,7 +83,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const [comparison,setComparison]=useState<{id:number;variants:{strength:number;plan:Plan|null;reason:string|null}[]}|null>(null);
   const [compareBusy,setCompareBusy]=useState(false);
   const [compareError,setCompareError]=useState('');
-  const [chosen,setChosen]=useState(0);
+  const [chosen,setChosen]=useState(0);const [exportWidth,setExportWidth]=useState('');const [exportHeight,setExportHeight]=useState('');const [exportNotice,setExportNotice]=useState('');const [showExport,setShowExport]=useState(false);
   const activeComparison=comparison?.id===review?.id?comparison:null;
   useEffect(()=>{
     setChosen(0);setCompareError('');setCompareBusy(false);
@@ -242,6 +242,14 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     return()=>{active=false;clearTimeout(timer);setOcrBusy(false);};
   },[art,vector,autoOcr,ocrReady,settings.removeBackground,settings.tolerance,settings.cleanup]);
 
+  async function exportChosen(){
+    if(!review||busy||compareBusy)return;
+    const w=Number(exportWidth)*25.4,h=Number(exportHeight)*25.4;
+    if(!Number.isFinite(w)||!Number.isFinite(h)||w<=0||h<=0){setExportNotice('Enter the usable hoop width and height.');return}
+    setBusy(true);setExportNotice('');
+    try{const saved=await invoke<boolean>('export_digitizer_variant',{id:review.id,strength:activeComparison?chosen:0,format:outputFormat,width:w,height:h});if(saved)setExportNotice('Embroidery file saved. Verify the hoop and thread sequence on your machine.');}
+    catch(e){setExportNotice(String(e))}finally{setBusy(false)}
+  }
   async function openDraft() {
     if (!review) return;
     setBusy(true);
@@ -425,7 +433,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     </article>
     <article className={`artwork-preview review-${mode === 'density' || mode === 'thread' ? 'stitches' : mode}`}>
       <div className="preview-heading"><div><small>DESIGN REVIEW</small><strong title={art?.name}>{art?.name}</strong></div><span className="digitizer-preview-state" role="status">{processing?"Generating":review?"Preview ready":"Artwork"}</span></div>
-      {review&&<section className="digitizer-variant-review" aria-label="Compare embroidery-ready designs"><div className="digitizer-variant-heading"><div><strong>Choose your stitch plan</strong><small>Compare actual stitch paths before editing or exporting.</small></div>{compareBusy&&<span role="status">Optimizing alternatives…</span>}</div>{compareError&&<p role="status">Alternative preview unavailable: {compareError}. Original still available.</p>}<DigitizerVariants base={review.plan} variants={activeComparison?.variants??[]} chosen={chosen} onChoose={setChosen}/><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Use {['original','gentle','balanced','maximum'][activeComparison?chosen:0]} design <ArrowRight size={16}/></button><small>Detailed quality and density report below describes the original digitized plan; inspect the chosen version in the editor.</small></section>}
+      {review&&<section className="digitizer-variant-review" aria-label="Compare embroidery-ready designs"><div className="digitizer-variant-heading"><div><strong>Choose your stitch plan</strong><small>Compare actual stitch paths before editing or exporting.</small></div>{compareBusy&&<span role="status">Optimizing alternatives…</span>}</div>{compareError&&<p role="status">Alternative preview unavailable: {compareError}. Original still available.</p>}<DigitizerVariants base={review.plan} variants={activeComparison?.variants??[]} chosen={chosen} onChoose={setChosen}/><div className="digitizer-review-actions"><button disabled={busy||compareBusy} onClick={()=>setShowExport(v=>!v)}>Export {outputFormat.toUpperCase()}</button><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Edit {['original','gentle','balanced','maximum'][activeComparison?chosen:0]} design <ArrowRight size={16}/></button></div>{showExport&&<div className="digitizer-direct-export"><strong>Confirm usable sewing field</strong><div className="workspace-hoop-fields"><label>Width (in)<input type="number" min=".1" step=".01" value={exportWidth} onChange={e=>setExportWidth(e.target.value)}/></label><label>Height (in)<input type="number" min=".1" step=".01" value={exportHeight} onChange={e=>setExportHeight(e.target.value)}/></label></div><small>Use the machine's usable sewing field, not the hoop's outer dimensions. DST does not preserve exact thread colors.</small><button className="primary" disabled={busy||compareBusy||!(Number(exportWidth)>0&&Number(exportHeight)>0)} onClick={()=>void exportChosen()}>Save {outputFormat.toUpperCase()} file</button>{exportNotice&&<p role="status">{exportNotice}</p>}</div>}<small>Detailed quality and density report below describes the original digitized plan; inspect the chosen version in the editor.</small></section>}
       {plan&&<div className="digitizer-preview-metrics"><div><small>Stitch points</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Unique colors</small><strong>{colors.size}</strong></div><div><small>Color blocks</small><strong>{plan.blocks.length}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div></div>}<div className="review-switch" role="group" aria-label="Preview options">
         {(['compare', 'stitches', 'original'] as const).map(view =>
           <button key={view} aria-pressed={mode === view} onClick={() => setMode(view)}>
