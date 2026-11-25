@@ -251,8 +251,10 @@ pub fn check(
     let mut tiny = 0usize;
     let mut total = 0usize;
     let mut longest = 0.0_f64;
+    let mut invalid = 0usize;
     for block in &design.blocks {
         for run in &block.runs {
+            invalid += run.pts.iter().filter(|p| !p.x.is_finite() || !p.y.is_finite()).count();
             for pair in run.pts.windows(2) {
                 let length = pair[0].dist(pair[1]) / 10.0;
                 total += 1;
@@ -260,6 +262,16 @@ pub fn check(
                 if length > 12.0 { long += 1; }
                 if length < 0.2 { tiny += 1; }
             }
+        }
+    }
+    if invalid > 0 {
+        add(None, Level::Error, format!("{invalid} stitch coordinates are invalid. Regenerate the stitch plan before export."));
+    }
+    for (i, shape) in shapes.iter().enumerate() {
+        if shape.params.kind != Some(Kind::Skip)
+            && !design.covered.get(i).copied().unwrap_or(false)
+            && design.per_shape.get(i).copied().unwrap_or(0) == 0 {
+            add(Some(i), Level::Warning, "Object generated no stitches. Inspect its geometry or stitch type.".into());
         }
     }
     if long > 0 {
