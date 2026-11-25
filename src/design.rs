@@ -478,10 +478,15 @@ fn fill_runs(
     let mut groups = Vec::new();
     let mut region = Bounds::empty();
     rings.iter().flatten().for_each(|&point| region.add(point));
-    let narrow = region.width().min(region.height()) < mm(1.5);
+    let mut narrow = region.width().min(region.height()) < mm(1.5);
     // Use actual connected filled areas, not a single bounding box around
     // disconnected letters or a large hollow outline.
     let components = satin::components(rings, rule);
+    // A large bounding box can hide thin disconnected or hollow details.
+    // Preserve the original density if any component lacks a 0.75 mm core.
+    narrow |= components.iter().any(|comp| {
+        boolean::offset(comp, rule, -mm(0.75)).is_empty()
+    });
     let small_detail = !components.is_empty() && components.iter().all(|comp| {
         let area = comp.first().map(|r| boolean::ring_area(r).abs()).unwrap_or(0.0)
             - comp.iter().skip(1).map(|r| boolean::ring_area(r).abs()).sum::<f64>();
