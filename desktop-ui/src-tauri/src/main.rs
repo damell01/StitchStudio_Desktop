@@ -1203,9 +1203,25 @@ async fn digitize_artwork(
             zigzag::design::auto_stitch_types(&mut doc.shapes);
             let (w,h,_)=ocr_pixels(&bytes,remove_background,tolerance,cleanup)?;
             for line in &mut selected { line.rect=[line.rect[0]*w as f64,line.rect[1]*h as f64,line.rect[2]*w as f64,line.rect[3]*h as f64]; }
+            doc.settings.fabric=fabric.clone();
+            let mut accepted_plan=doc.plan();
             for line in &selected {
-                if let Err(err)=zigzag::ocr::replace_lettering(&mut doc,std::slice::from_ref(line),width_mm/w as f64) {
-                    lettering_warnings.push(format!("Kept traced lettering '{}': {}",line.text,err));
+                let mut candidate=doc.clone();
+                match zigzag::ocr::replace_lettering(&mut candidate,std::slice::from_ref(line),width_mm/w as f64) {
+                    Ok(()) => {
+                        let plan=candidate.plan();
+                        let old_trims=accepted_plan.trim_count();
+                        let old_stitches=accepted_plan.stitch_count();
+                        if plan.stitch_count()>0 &&
+                            plan.trim_count() <= old_trims.saturating_add(4) &&
+                            plan.stitch_count() <= old_stitches.saturating_add(old_stitches/10).saturating_add(40) {
+                            doc=candidate;
+                            accepted_plan=plan;
+                        } else {
+                            lettering_warnings.push(format!("Kept traced lettering '{}': reconstruction increased sewing complexity.",line.text));
+                        }
+                    }
+                    Err(err) => lettering_warnings.push(format!("Kept traced lettering '{}': {}",line.text,err)),
                 }
             }
             doc
