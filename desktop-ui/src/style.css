@@ -1754,3 +1754,17 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .digitizer-review-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .digitizer-direct-export{display:grid;gap:10px;padding:12px;border:1px solid var(--lav-border);border-radius:10px}
 .studio-layer-drop{outline:2px solid var(--workspace-accent,#8055b4);outline-offset:1px;border-radius:5px}
+
+/* Simplification progress and compact dialog header */
+.simplify-dialog .simplify-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.simplify-dialog .simplify-dialog-heading h3{margin:0}
+.simplify-dialog .simplify-dialog-heading button{width:34px!important;min-width:34px;min-height:34px;display:grid;place-items:center;padding:0}
+.simplify-loading{display:grid;grid-template-columns:48px minmax(0,1fr);align-items:center;gap:16px;border:1px solid var(--lav-border,#ddd0eb);background:var(--brand-soft,#f4eef9);border-radius:12px;padding:18px}
+.simplify-loading p{margin:6px 0;font-size:13px}
+.simplify-loading small{letter-spacing:normal;font-weight:400}
+.simplify-spinner{width:42px;height:42px;border:4px solid #8055b433;border-top-color:#8055b4;border-radius:50%;animation:simplify-spin .8s linear infinite}
+.simplify-progress{height:5px;background:#8055b422;overflow:hidden;border-radius:8px;margin:12px 0}
+.simplify-progress span{display:block;background:#8055b4;width:35%;height:100%;border-radius:8px;animation:simplify-progress 1.6s ease-in-out infinite}
+@keyframes simplify-spin{to{transform:rotate(360deg)}}
+@keyframes simplify-progress{from{transform:translateX(-100%)}to{transform:translateX(390%)}}
+@media(prefers-reduced-motion:reduce){.simplify-spinner,.simplify-progress span{animation:none}}
