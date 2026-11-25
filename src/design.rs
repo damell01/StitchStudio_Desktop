@@ -589,7 +589,7 @@ fn satin_pieces_strip(
                 // Automatic satin must not bridge holes or unrelated branches.
                 // Validate cross-column samples against slightly expanded
                 // source geometry before generating any needle movements.
-                if opt.hat_order && whole {
+                if whole && (opt.hat_order || shape.groups.iter().any(|g| g.starts_with("tl-lettering-"))) {
                     if let Geometry::Fill { rings, rule } = &shape.geometry {
                         let allowed = boolean::offset(rings, *rule, 2.0);
                         let pairs = satin::pairs(&rails, 2.0);
