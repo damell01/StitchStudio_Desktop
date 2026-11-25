@@ -1,5 +1,9 @@
 import {expect,test} from '@playwright/test';
 
+test.use({launchOptions:{executablePath:process.env.STITCH_TEST_CHROMIUM,
+  args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']}});
+
+
 test('garment choices and placement offsets update the preview without editing design data', async ({page})=>{
   await page.setViewportSize({width:900,height:650});
   await page.addInitScript(()=>{
@@ -28,11 +32,8 @@ test('garment choices and placement offsets update the preview without editing d
   await dialog.getByLabel('Garment',{exact:true}).selectOption('shorts');
   await dialog.getByLabel('Placement',{exact:true}).selectOption('1');
   await expect(image).toHaveAccessibleName('Design on adult Shorts, right leg (wearer)');
-  await dialog.getByLabel('Garment',{exact:true}).selectOption('hoodie');
   await dialog.getByLabel('Garment size',{exact:true}).selectOption('toddler');
-  await expect(image).toHaveAccessibleName('Design on toddler Hoodie, left chest (wearer)');
-  await dialog.getByLabel('Garment',{exact:true}).selectOption('shorts');
-  await dialog.getByLabel('Placement',{exact:true}).selectOption('1');
+  await expect(image).toHaveAccessibleName('Design on toddler Shorts, right leg (wearer)');
   const canvas=dialog.locator('canvas');
   await expect.poll(()=>canvas.evaluate(element=>(element as HTMLCanvasElement).getContext('2d')?.getImageData(418,588,1,1).data[3])).toBeGreaterThan(0);
   await dialog.getByLabel('Horizontal').fill('8');
@@ -44,3 +45,29 @@ test('garment choices and placement offsets update the preview without editing d
   expect(changes).not.toContain('transform_design');
   expect(changes).not.toContain('edit_artwork_object');
 });
+
+test('renders the offline model and responds to rotation and fabric color',async({page})=>{
+    await page.addInitScript(()=>{
+      localStorage.setItem('studio-tour-seen','1');
+      Object.assign(window,{__TAURI_INTERNALS__:{async invoke(command:string){
+        if(command==='current_preview')return {name:'Test design',stitches:3,trims:0,blocks:[
+          {color:[115,62,154],runs:[[[-18,0],[18,0],[0,20]]]},
+        ]};
+        return command==='editable_objects'||command==='fabric_catalog'?[]:null;
+      }}});
+    });
+    await page.goto('/');
+    await page.getByRole('button',{name:/Blank design/}).last().click();
+    await page.getByRole('button',{name:'Garment mockup'}).click();
+    const dialog=page.getByRole('dialog',{name:'Garment mockup'});
+    await dialog.getByLabel('Garment',{exact:true}).selectOption('hoodie');
+    const model=dialog.getByRole('img',{name:'Rotatable 3D hoodie with the current design'});
+    await expect(model).toHaveAttribute('aria-busy','false',{timeout:18000});
+    const original=await model.screenshot();
+    await dialog.getByLabel('Fabric color').fill('#983b58');
+    expect((await model.screenshot()).equals(original)).toBe(false);
+    await dialog.getByRole('slider',{name:'Rotate hoodie'}).fill('45');
+    await expect(dialog.getByRole('slider',{name:'Rotate hoodie'})).toHaveValue('45');
+    await dialog.getByRole('button',{name:'Flat view'}).click();
+    await expect(dialog.getByRole('img',{name:'Design on adult Hoodie, left chest (wearer)'})).toBeVisible();
+  });
