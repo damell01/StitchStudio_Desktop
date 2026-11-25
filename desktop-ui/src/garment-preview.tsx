@@ -116,12 +116,23 @@ function paintMockup(
       context.moveTo(run[0][0], run[0][1]);
       for (let i = 1; i < run.length; i++) context.lineTo(run[i][0], run[i][1]);
     }
-    context.strokeStyle = '#1a112b39';
-    context.lineWidth = .53;
+    context.save();
+    context.translate(.18,.22);
+    context.strokeStyle = '#1a112b65';
+    context.lineWidth = .58;
     context.stroke();
+    context.restore();
     context.strokeStyle = `rgb(${block.color.join(',')})`;
-    context.lineWidth = .35;
+    context.lineWidth = .42;
     context.stroke();
+    // Fine directional sheen on individual thread segments.
+    for(const run of block.runs) for(let i=1;i<run.length;i++){
+      const a=run[i-1],b=run[i],dx=b[0]-a[0],dy=b[1]-a[1];
+      const len=Math.hypot(dx,dy);if(len<.15)continue;
+      context.beginPath();context.moveTo(a[0],a[1]-.09);context.lineTo(b[0],b[1]-.09);
+      context.strokeStyle=`rgba(255,255,255,${.08+.22*Math.abs(dx/len)})`;
+      context.lineWidth=.12;context.stroke();
+    }
   }
   context.restore();
 }
@@ -138,6 +149,8 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
   const turn=useRef<{id:number;x:number;angle:number}|null>(null);
   const [placementIndex,setPlacement] = useState(0);
   const [color,setColor] = useState('#e6dced');
+  const drag=useRef<{id:number;x:number;y:number;ox:number;oy:number}|null>(null);
+  const [dragging,setDragging]=useState(false);
   const [x,setX] = useState('');
   const [y,setY] = useState('');
   const is3d=garmentName==='hoodie'&&hoodieMode==='3d'&&!unavailable;
@@ -181,7 +194,28 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
             {is3d?<Suspense fallback={<p role="status">Loading hoodie…</p>}>
               <HoodieView angle={angle} color={color} blocks={blocks} placement={placementIndex}
                 xMm={xOffset} yMm={yOffset} sizeRatio={garmentSize.ratio} onUnavailable={()=>setUnavailable(true)}/>
-            </Suspense>:<canvas ref={canvas} width={size.width*2} height={size.height*2} role="img"
+            </Suspense>:<canvas ref={canvas} width={size.width*2} height={size.height*2} role="img" tabIndex={0} style={{cursor:dragging?'grabbing':'grab',touchAction:'none'}}
+              onPointerDown={event=>{
+                if(event.button!==0)return;
+                drag.current={id:event.pointerId,x:event.clientX,y:event.clientY,ox:xOffset,oy:yOffset};
+                event.currentTarget.setPointerCapture(event.pointerId);setDragging(true);
+              }}
+              onPointerMove={event=>{
+                const d=drag.current;if(!d||d.id!==event.pointerId)return;
+                const rect=event.currentTarget.getBoundingClientRect();
+                const factor=Math.min(rect.width/size.width,rect.height/size.height)*scale;
+                if(factor<=0)return;
+                const clamp=(v:number)=>Math.max(-8,Math.min(8,v/25.4)).toFixed(3);
+                setX(clamp(d.ox+(event.clientX-d.x)/factor));
+                setY(clamp(d.oy+(event.clientY-d.y)/factor));
+              }}
+              onLostPointerCapture={()=>{drag.current=null;setDragging(false);}}
+              onKeyDown={event=>{
+                const delta:Record<string,[number,number]>={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+                const d=delta[event.key];if(!d)return;event.preventDefault();
+                const step=event.shiftKey?5:1;
+                setX(((xOffset+d[0]*step)/25.4).toFixed(3));setY(((yOffset+d[1]*step)/25.4).toFixed(3));
+              }}
               aria-label={`Design on ${garmentSize.label.toLowerCase()} ${garment.label}, ${placement.label.toLowerCase()}`}/>}
           </div>
           <div className="garment-preview-options">
@@ -206,13 +240,15 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
             </>}
             {garmentName==='hoodie'&&unavailable&&<p role="status">3D is unavailable here. Showing the flat mockup.</p>}
             <label className="garment-color">Fabric color<input type="color" value={color} onChange={event=>setColor(event.target.value)}/></label>
-            <fieldset>
+            <p className="muted">{is3d?'Switch to Flat view to drag the design.':'Drag the design on the garment, or use arrow keys on the preview.'}</p>
+            <button onClick={()=>{setX('');setY('');}}>Reset placement</button>
+            <details><summary>Precise placement (optional)</summary><fieldset>
               <legend>Adjust placement (in)</legend>
               <label>Horizontal<input type="number" min="-8" max="8" step=".25" value={x}
                 placeholder="0" onChange={event=>setX(event.target.value)}/></label>
               <label>Vertical<input type="number" min="-8" max="8" step=".25" value={y}
                 placeholder="0" onChange={event=>setY(event.target.value)}/></label>
-            </fieldset>
+            </fieldset></details>
             {!insideZone&&<p role="status">This design extends beyond the suggested area for this placement.</p>}
             <p className="muted">Garment scale is approximate. Mockup adjustments affect only this preview.</p>
           </div>
