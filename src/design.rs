@@ -1838,14 +1838,14 @@ pub fn plan_cached(
                 // disconnected islands. For automatic fills, prefer a slightly
                 // farther endpoint reachable by a covered straight stitch.
                 // Bound the geometry checks and preserve reserved end pieces.
-                if opt.hat_order && !force_trim && !from_start && !finishing
+                if (opt.hat_order || shape.groups.iter().any(|g| g.starts_with("tl-lettering-"))) && !force_trim && !from_start && !finishing
                     && same_shape && cursor.is_some()
                     && let Some((rings, rule)) = sr.area.as_ref()
                 {
                     let endpoint = if best_alt {
                         group[best].alt.as_ref().unwrap()[0]
                     } else { group[best].pts[best_at] };
-                    let limit = opt.travel_inside.max(100.0);
+                    let limit = if opt.hat_order { opt.travel_inside.max(100.0) } else { opt.travel_inside };
                     if best_d > 2.0 && (best_d > limit
                         || !segment_inside(rings, *rule, here, endpoint, 1.0))
                     {
