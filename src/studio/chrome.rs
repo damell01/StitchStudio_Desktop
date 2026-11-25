@@ -735,6 +735,25 @@ impl Studio {
             ui.label(egui::RichText::new(format!("Estimated machine time: {:.1} min", count as f64 / speed as f64 + overhead)).strong());
             caption(ui, format!("{trims} trims · {changes} color-block transitions · {overhead:.1} min estimated overhead"));
             caption(ui, "Excludes acceleration, hooping, manual stops and thread breaks. Adjust delays to match your machine.");
+            let baseline_id = egui::Id::new(("sewing-comparison", self.active_tab().rec));
+            let baseline: Option<(usize, usize, usize)> = ui.data(|d| d.get_temp(baseline_id));
+            ui.horizontal_wrapped(|ui| {
+                if ui.add_enabled(!self.planner.pending && count > 0, egui::Button::new("Capture baseline")).clicked() {
+                    ui.data_mut(|d| d.insert_temp(baseline_id, (count, trims, changes)));
+                }
+                if baseline.is_some() && ui.small_button("Clear comparison").clicked() {
+                    ui.data_mut(|d| d.remove::<(usize, usize, usize)>(baseline_id));
+                }
+            });
+            if let Some((original, original_trims, original_changes)) = baseline {
+                let original_time = original as f64 / speed as f64
+                    + (original_trims as f64 * delays[0] + original_changes as f64 * delays[1]) / 60.0;
+                let current_time = count as f64 / speed as f64 + overhead;
+                caption(ui, format!("Baseline: {} stitches · {:.1} min", fmt_int(original), original_time));
+                caption(ui, format!("Change: {:+.1}% stitches · {:+.1} min",
+                    (count as f64 / original.max(1) as f64 - 1.0) * 100.0,
+                    current_time - original_time));
+            }
             if self.planner.pending { caption(ui, "Based on the previous stitch plan."); }
         });
     }
