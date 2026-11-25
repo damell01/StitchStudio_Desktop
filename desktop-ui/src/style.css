@@ -358,7 +358,7 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .digitizer-stage-3 .digitizer-source-image,.digitizer-stage-3 .digitizer-stitch-image{height:clamp(160px,29vh,360px)}
 .digitizer-controls .digitizer-presets{grid-template-columns:1fr;gap:6px}
 .digitizer-controls .digitizer-presets button{min-height:54px;padding:10px}
-.digitizer-controls .wizard-actions{position:sticky;bottom:0;padding:10px 0 0;background:var(--lav-panel,#fff);border-top:1px solid var(--lav-border,#e5e3eb);margin-top:16px}
+.digitizer-controls .wizard-actions{padding:10px 0 0;background:var(--lav-panel,#fff);border-top:1px solid var(--lav-border,#e5e3eb);margin-top:16px}
 .digitizer-controls .wizard-actions .primary{flex:1;justify-content:center}
 @media(max-width:950px){.digitizer-layout:not(.digitizer-stage-0){grid-template-columns:minmax(0,1fr) 285px!important}}
 
@@ -846,3 +846,8 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 @media (max-width: 820px) {
   .desktop-nav summary { gap: 4px; padding-inline: 5px; }
 }
+.thread-order-dialog { width: min(570px, calc(100vw - 24px)); }
+.thread-order-table { width: 100%; border-collapse: collapse; }
+.thread-order-table :is(th,td) { text-align: left; padding: 6px; border-bottom: 1px solid var(--lav-border, var(--studio-line)); }
+.thread-order-table input { width: min(160px, 100%); }
+.thread-order-swatch { display: inline-block; vertical-align: middle; width: 21px; height: 21px; border: 1px solid #867a90; border-radius: 5px; margin-right: 8px; }

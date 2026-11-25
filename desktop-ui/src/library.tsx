@@ -2,13 +2,14 @@ import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navig
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { File, FileArchive, FilePlus, FolderOpen, Search } from 'lucide-react';
+import { CharacterGallery, type Art } from './character-gallery';
 import { confirmAction } from './dialogs';
 import { importToLibrary, type LibraryImportSource } from './library-import';
 
 type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number };
 
-export function Library({ onDone }: { onDone: () => void }) {
-  const [tab, setTab] = useState<'embroidery' | 'projects'>('embroidery');
+export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: (art:Art)=>void }) {
+  const [tab, setTab] = useState<'embroidery' | 'projects' | 'artwork'>('embroidery');
   const [files, setFiles] = useState<string[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState('');
@@ -76,7 +77,9 @@ export function Library({ onDone }: { onDone: () => void }) {
     <div className="studio-tools" role="group" aria-label="Design library sources">
       <button aria-pressed={tab === 'embroidery'} onClick={() => { setTab('embroidery'); setQuery(''); }}>Embroidery files</button>
       <button aria-pressed={tab === 'projects'} onClick={() => { setTab('projects'); setQuery(''); }}>Stitch Studio projects</button>
+      {onArtwork&&<button aria-pressed={tab==='artwork'} onClick={()=>{setTab('artwork');setQuery('');}}>Artwork</button>}
     </div>
+    {tab==='artwork'&&onArtwork?<CharacterGallery onArt={onArtwork}/>:<>
     <div className="library-filters">
       <label className="library-search"><Search size={16} /><input aria-label="Search designs" placeholder="Search designs" value={query} onChange={event => setQuery(event.target.value)} /></label>
       {tab === 'embroidery' ? <>
@@ -94,7 +97,10 @@ export function Library({ onDone }: { onDone: () => void }) {
     {error && <p role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {tab === 'embroidery' ? <>
-      {files.length === 0 && <p>Import machine files in DST, PES, PEC, EXP or JEF format to use them here.</p>}
+      {files.length === 0 && <>
+        <p>Import machine files in DST, PES, PEC, EXP or JEF format to use them here.</p>
+        {onArtwork&&<CharacterGallery onArt={onArtwork}/>}
+      </>}
       {files.length > 0 && visibleFiles.length === 0 && <p>No files match your search.</p>}
       <div className="font-list">
         {filePage.items.map(file => <article key={file}>
@@ -112,6 +118,7 @@ export function Library({ onDone }: { onDone: () => void }) {
           <button disabled={busy} onClick={() => open(project)}>Open project</button>
         </article>)}
       </div><ListNavigation {...projectPage}/>
+    </>}
     </>}
   </section>;
 }

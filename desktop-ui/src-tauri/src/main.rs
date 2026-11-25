@@ -934,7 +934,11 @@ fn character_root()->Result<std::path::PathBuf,String>{
 fn character_component(s:&str)->bool{let mut c=std::path::Path::new(s).components();matches!(c.next(),Some(std::path::Component::Normal(_)))&&c.next().is_none()}
 #[tauri::command]
 fn character_list()->Result<Vec<CharacterEntry>,String>{
- let mut out=Vec::new();let root=character_root()?;
+ let mut out = vec![
+     CharacterEntry {group:"Classic animation (1928)".into(),name:"Mickey Mouse at the wheel".into(),file:"mickey-1928.jpg".into()},
+     CharacterEntry {group:"Classic animation (1928)".into(),name:"Minnie Mouse running".into(),file:"minnie-1928.png".into()},
+ ];
+ let Ok(root) = character_root() else { return Ok(out); };
  if !root.exists(){return Ok(out)}
  for group in std::fs::read_dir(root).map_err(|e|e.to_string())?.flatten(){
  if !group.file_type().is_ok_and(|t|t.is_dir()){continue}
@@ -950,6 +954,13 @@ fn character_list()->Result<Vec<CharacterEntry>,String>{
 }
 #[tauri::command]
 async fn character_image(group:String,file:String)->Result<Vec<u8>,String>{
+ if group == "Classic animation (1928)" {
+     match file.as_str() {
+         "mickey-1928.jpg" => return Ok(include_bytes!("../assets/classic-art/mickey-1928.jpg").to_vec()),
+         "minnie-1928.png" => return Ok(include_bytes!("../assets/classic-art/minnie-1928.png").to_vec()),
+         _ => (),
+     }
+ }
  if !character_component(&group)||!character_component(&file){return Err("Invalid artwork name".into())}
  let dir=character_root()?.join(group);let path=dir.join(file);
  if !std::fs::symlink_metadata(&dir).is_ok_and(|m|m.file_type().is_dir())||!std::fs::symlink_metadata(&path).is_ok_and(|m|m.file_type().is_file()&&m.len()<=20_000_000){return Err("Artwork unavailable".into())}

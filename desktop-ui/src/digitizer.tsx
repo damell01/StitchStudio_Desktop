@@ -47,9 +47,9 @@ function useArtworkUrl(art: Art | null) {
   return url;
 }
 
-export function Digitizer({ onDone }: { onDone: () => void }) {
-  const [art, setArt] = useState<Art | null>(null);
-  const [original, setOriginal] = useState<Art | null>(null);
+export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; initialArtwork?: Art | null }) {
+  const [art, setArt] = useState<Art | null>(initialArtwork??null);
+  const [original, setOriginal] = useState<Art | null>(initialArtwork??null);
   const [pdf, setPdf] = useState<File | null>(null);
   const [settings, setSettings] = useState(defaults);
   const [generated, setGenerated] = useState<{ art: Art; settings: typeof defaults; review: Review } | null>(null);
@@ -230,6 +230,10 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
             onChange={event => update('widthMm', Number(event.target.value) * 25.4)} />
         </label>}
         <FabricPicker value={settings.fabric} disabled={busy} onChange={fabric => update('fabric', fabric)}/>
+        {!vector && <button type="button" aria-pressed={settings.cleanup&&settings.colors===4}
+          onClick={()=>setSettings(previous=>({...previous,cleanup:true,colors:4}))}>
+          Simplify embroidered mockup
+        </button>}
         {!vector && <details className="digitizer-options">
           <summary>Advanced artwork options</summary>
           <fieldset disabled={busy}>
