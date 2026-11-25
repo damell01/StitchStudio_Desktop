@@ -152,9 +152,9 @@ impl Studio {
                     ui.separator();
                 }
                 for (heading, actions) in [
-                    ("Position", &[("Center in hoop", Action::CenterInHoop), ("Fit to hoop", Action::FitToHoop), ("Fit canvas view", Action::ZoomFit)][..]),
+                    ("Position", &[("Center in hoop", Action::CenterInHoop), ("Resize to hoop", Action::FitToHoop), ("Fit canvas view", Action::ZoomFit)][..]),
                     ("Edit selection", &[("Duplicate", Action::Duplicate), ("Flip horizontal", Action::FlipH), ("Flip vertical", Action::FlipV), ("Rotate 90°", Action::RotateRight)][..]),
-                    ("Embroidery", &[("Group thread colors", Action::GroupColors), ("Inspect design", Action::ShowIssues), ("Simulate stitching", Action::PlayPause)][..]),
+                    ("Embroidery", &[("Group thread colors", Action::GroupColors), ("Optimize stitch settings", Action::OptimizeStitches), ("Inspect design", Action::ShowIssues), ("Simulate stitching", Action::PlayPause)][..]),
                 ] {
                     caption(ui, heading);
                     for &(label, action) in actions {
@@ -169,7 +169,23 @@ impl Studio {
             if ui.button("＋ Text").on_hover_text("Add editable embroidery lettering").clicked() {
                 self.run_action(Action::AddText);
             }
-            let tools = [("Fit hoop", Action::FitToHoop), ("Fit view", Action::ZoomFit),
+            ui.menu_button("Edit", |ui| {
+                for (heading, actions) in [
+                    ("Transform", &[("Duplicate", Action::Duplicate), ("Center in hoop", Action::CenterInHoop), ("Rotate left", Action::RotateLeft), ("Rotate right", Action::RotateRight), ("Flip horizontal", Action::FlipH), ("Flip vertical", Action::FlipV)][..]),
+                    ("Arrange", &[("Bring to front", Action::BringToFront), ("Bring forward", Action::BringForward), ("Send backward", Action::SendBackward), ("Send to back", Action::SendToBack)][..]),
+                    ("Artwork", &[("Simplify paths", Action::SimplifyPath), ("Round corners", Action::RoundCorners), ("Clean up", Action::CleanUp), ("Create text outlines", Action::CreateOutlines)][..]),
+                ] {
+                    caption(ui, heading);
+                    for &(label, action) in actions {
+                        if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
+                            self.run_action(action);
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
+                }
+            });
+            let tools = [("Resize to hoop", Action::FitToHoop), ("Fit view", Action::ZoomFit),
                 ("Simulate", Action::PlayPause), ("Density", Action::ToggleDensity), ("Inspect", Action::ShowIssues)];
             if compact {
                 ui.menu_button("Design tools", |ui| {
