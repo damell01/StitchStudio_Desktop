@@ -1727,10 +1727,15 @@ async fn digitize_artwork(
             }
         }
         let mut optimization = None;
-        if !has_lettering && mime != "image/svg+xml" {
-            if let Some((next,candidate))=optimized_density(&document,&design){
-                optimization=Some([design.stitch_count(),candidate.stitch_count()]);
-                document=next;design=candidate;
+        // Automatic balanced optimization uses the same guarded candidate
+        // search as the editor, without deleting artwork or changing text.
+        if design.stitch_count() <= 100_000 {
+            let before=design.stitch_count();
+            let candidate=simplify_design_candidate(&document,&design,2,None,false)
+                .or_else(||optimized_density(&document,&design));
+            if let Some((next,plan))=candidate {
+                optimization=Some([before,plan.stitch_count()]);
+                document=next;design=plan;
             }
         }
         let count = design.stitch_count();
