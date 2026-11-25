@@ -53,6 +53,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const [original, setOriginal] = useState<Art | null>(initialArtwork??null);
   const [pdf, setPdf] = useState<File | null>(null);
   const [settings, setSettings] = useState(defaults);
+  const [inspector,setInspector] = useState<'settings'|'quality'|'threads'>('settings');
   const [generated, setGenerated] = useState<{ art: Art; settings: typeof defaults; review: Review } | null>(null);
   const [failed, setFailed] = useState<{ art: Art; settings: typeof defaults; message: string } | null>(null);
   const [error, setError] = useState('');
@@ -109,6 +110,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   }, [art, settings, showProcessed, vector, processing, valid, processedUrl]);
 
   const acceptArtwork = useCallback((next: Art) => {
+    setInspector('settings');
     setArt(next);
     setOriginal(next);
     setSettings({...defaults,useOwnedThreads:localStorage.getItem('studio-use-owned-threads')==='true'});
@@ -221,6 +223,8 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     }} />}
     <article className="digitizer-controls">
       <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2>
+      {art && <div className="digitizer-inspector-tabs" role="group" aria-label="Inspector view">{(['settings','quality','threads'] as const).map(t=><button key={t} aria-pressed={inspector===t} disabled={t!=='settings'&&!review} onClick={()=>setInspector(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div>}
+      <div hidden={!!art&&inspector!=='settings'} className="digitizer-inspector-content">
       {art && <p>Artwork is digitized automatically. Settings below are optional overrides.</p>}
       {art && settings !== defaults && <button type="button" onClick={()=>setSettings(defaults)}>Restore automatic settings</button>}
       <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
@@ -266,12 +270,14 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
           </fieldset>
         </details>}
       </>}
+      </div>
       {processing && <p>Digitizing in progress…</p>}
       {!valid && <p role="alert">Width must be between 5 and 300 mm.</p>}
       {(error || generationError) && <p role="alert">{error || generationError}</p>}
       {generationError && !vector && settings.removeBackground && generationError.includes('No foreground') &&
         <button onClick={() => update('removeBackground', false)}>Retry with background</button>}
       {review && <>
+        <div hidden={inspector!=='quality'} className="digitizer-inspector-content">
         <h3>Stitch quality</h3>
         <section className="digitizer-quality-summary" aria-label="Design preflight">
           <strong>{review.warnings.length || review.quality.long || review.quality.zero ? 'Review recommended' : 'No flagged geometry issues'}</strong>
@@ -289,8 +295,18 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         </div>
         <p>{(review.quality.sewn_mm / 1000).toFixed(2)} m of sewn path</p>
         <p>DST preview · {review.jumps} jumps · {review.color_changes} color changes</p>
-        <details className="digitizer-options">
-          <summary>Thread setup · {new Set(review.plan.blocks.map(b=>b.color.join(','))).size} unique colors</summary>
+
+        <p>About {(review.dst_stitches / 600).toFixed(1)} minutes of needle time at 600 stitches/min,
+          excluding travel and stops.</p>
+        {(review.quality.short > 0 || review.quality.long > 0 || review.quality.zero > 0) &&
+          <p>{review.quality.short} short, {review.quality.long} long, and {review.quality.zero} near-zero segments.</p>}
+        {review.warnings.length > 0 && <ul>{review.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
+        <div className="review-palette" aria-label="Generated thread colors">
+          {Array.from(colors, rgb => <span key={rgb} title={`RGB ${rgb}`} style={{ background: `rgb(${rgb})` }} />)}
+        </div>
+        </div>
+        <div hidden={inspector!=='threads'} className="digitizer-inspector-content">        <section className="digitizer-options">
+          <h3>Thread setup · {new Set(review.plan.blocks.map(b=>b.color.join(','))).size} unique colors</h3>
           <p>Follow this sewing order on your machine. Repeated colors reuse the same thread slot. DST does not store thread colors.</p>
           <div style={{maxHeight:280,overflow:'auto'}}>
           {review.plan.blocks.map((b,i)=>{
@@ -315,15 +331,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
             const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
             const link=document.createElement('a');link.href=url;link.download=(art?.name||'design')+'-thread-sequence.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
           }}>Download thread sequence CSV</button>
-        </details>
-        <p>About {(review.dst_stitches / 600).toFixed(1)} minutes of needle time at 600 stitches/min,
-          excluding travel and stops.</p>
-        {(review.quality.short > 0 || review.quality.long > 0 || review.quality.zero > 0) &&
-          <p>{review.quality.short} short, {review.quality.long} long, and {review.quality.zero} near-zero segments.</p>}
-        {review.warnings.length > 0 && <ul>{review.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
-        <div className="review-palette" aria-label="Generated thread colors">
-          {Array.from(colors, rgb => <span key={rgb} title={`RGB ${rgb}`} style={{ background: `rgb(${rgb})` }} />)}
-        </div>
+        </section></div>
         <div className="wizard-actions"><button className="primary" disabled={busy} onClick={openDraft}>Open in design studio <ArrowRight size={16} /></button></div>
       </>}
     </article>
