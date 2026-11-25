@@ -1181,6 +1181,8 @@ fn sew_order(shapes: &[Shape], opt: &PlanOptions) -> Vec<usize> {
         match (&s.geometry, s.params.kind.unwrap_or(Kind::Fill)) {
             (Geometry::Fill { rings, rule }, Kind::Fill) =>
                 Some(boolean::offset(rings, *rule, opt.overlap.abs().max(5.0))),
+            (_, Kind::Satin) => coverage(s).map(|(rings, rule)|
+                boolean::offset(&rings, rule, opt.overlap.abs().max(5.0))),
             _ => None,
         }
     }).collect();
@@ -1223,7 +1225,14 @@ fn sew_order(shapes: &[Shape], opt: &PlanOptions) -> Vec<usize> {
                     (change, distance)
                 };
                 let (ka, kb) = (key(a), key(b));
-                ka.0.cmp(&kb.0).then(ka.1.total_cmp(&kb.1))
+                // Prefer a new thread that can unlock more immediately
+                // sewable regions of that same color before switching again.
+                let unlock = |j: usize| successors[j].iter().filter(|&&k|
+                    remaining[k] == 1 && shapes[k].color == shapes[j].color).count();
+                ka.0.cmp(&kb.0).then_with(|| {
+                    if ka.0 == 1 { unlock(b).cmp(&unlock(a)) }
+                    else { std::cmp::Ordering::Equal }
+                }).then(ka.1.total_cmp(&kb.1))
             })
             .expect("dependencies only point backwards, so something is always available");
         ready.remove(&pick);
