@@ -221,7 +221,47 @@ fn flat_art_cleanup_preserves_one_pixel_ink() {
     assert_eq!(out.rgba,r.rgba);
 }
 
+// Recognize high-contrast neutral ink on light paper. Do not apply this
+// to colored artwork, transparent originals, or photographic gray ramps.
+fn monochrome_ink(r:&Raster)->Option<Raster>{
+    let mut dark=0usize;let mut light=0usize;let mut middle=0usize;let mut colored=0usize;let mut clear=0usize;
+    for p in r.rgba.chunks_exact(4){
+        if p[3]<224{clear+=1;continue}
+        let lo=*p[..3].iter().min()?;let hi=*p[..3].iter().max()?;
+        if hi-lo>22{colored+=1;}
+        let gray=(u16::from(p[0])+u16::from(p[1])+u16::from(p[2]))/3;
+        if gray<100{dark+=1;}else if gray>220{light+=1;}else{middle+=1;}
+    }
+    let n=dark+light+middle;
+    if n==0||dark*100<n*2||light*100<n*35||middle*100>n*12||colored*1000>n*3||clear*100>n {return None}
+    let mut edge=0usize;let mut white=0usize;
+    for y in 0..r.height{for x in 0..r.width{
+        if x!=0&&y!=0&&x+1!=r.width&&y+1!=r.height{continue}
+        let i=(y as usize*r.width as usize+x as usize)*4;let p=&r.rgba[i..i+4];edge+=1;
+        if p[3]>=224&&p[..3].iter().all(|&v|v>=220){white+=1}
+    }}
+    if edge==0||white*100<edge*95{return None}
+    Some(Raster::from_fn(r.width,r.height,|x,y|{
+        let i=(y as usize*r.width as usize+x as usize)*4;let p=&r.rgba[i..i+4];
+        let gray=(u16::from(p[0])+u16::from(p[1])+u16::from(p[2]))/3;
+        if p[3]>=128&&gray<160{[12,12,12,255]}else{[0,0,0,0]}
+    }))
+}
+
+#[test]
+fn monochrome_logo_removes_enclosed_paper_but_keeps_ink(){
+    let r=Raster::from_fn(80,80,|x,y|if (10..70).contains(&x)&&(10..70).contains(&y)&&(!(25..55).contains(&x)||!(25..55).contains(&y)){[20,20,20,255]}else{[250,250,250,255]});
+    let out=prepare_raster(&r,true,32,true);
+    assert_eq!(out.rgba[(40*80+40)*4+3],0);
+    assert_eq!(out.rgba[(15*80+15)*4+3],255);
+    assert_eq!(out.rgba[3],0);
+    let color=Raster::from_fn(80,80,|x,y|if (10..70).contains(&x)&&(10..70).contains(&y){[170,30,50,255]}else{[250,250,250,255]});
+    assert!(monochrome_ink(&color).is_none());
+}
+
 fn prepare_raster(r:&Raster,remove_background:bool,tolerance:u8,cleanup:bool)->Raster{
+    if cleanup && remove_background {if let Some(ink)=monochrome_ink(r){return ink;}}
+
     // Suppress fabric texture before edge flood fill, preserving the original alpha.
     // A predominantly flat palette is typical of logos and cartoons.
     // Skip destructive median passes for such artwork, especially thin ink lines.
