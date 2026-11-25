@@ -231,10 +231,10 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       setEditing(false);
     }} />}
     <article className="digitizer-controls">
-      <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2>{!art&&<div className="digitizer-start-steps"><span><b>1</b> Import artwork</span><span><b>2</b> Review stitches</span><span><b>3</b> Open editor</span></div>}
+      <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2><div className="digitizer-start-steps" aria-label="Digitizing progress">{['Import','Configure','Review','Edit & export'].map((label,i)=><span key={label} aria-current={i===(!art?0:!started?1:2)?'step':undefined}><b>{i+1}</b> {label}</span>)}</div>
       {art && <div className="digitizer-inspector-tabs" role="group" aria-label="Inspector view">{(['settings','quality','threads'] as const).map(t=><button key={t} aria-pressed={inspector===t} disabled={t!=='settings'&&!review} onClick={()=>setInspector(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div>}
       <div hidden={!!art&&inspector!=='settings'} className="digitizer-inspector-content">
-      {art && <p>Choose the machine file format and review your settings before digitizing.</p>}
+      {art && <p>{!started?'Next: select the format your embroidery machine accepts, set the design width and fabric, then click Start digitizing.':processing?'Generating stitches. Review the result before opening the editor.':review?'Next: compare artwork and stitches, check the Quality and Threads tabs, then open the design studio.':'Adjust settings or retry the generation.'}</p>}
       {art && settings !== defaults && <button type="button" onClick={()=>setSettings(defaults)}>Restore automatic settings</button>}
       <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
         <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image or PDF' : 'Choose or drop an image'}</strong>{!art&&<span>Browse your computer to get started</span>}
@@ -282,7 +282,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         {!started&&<button className="primary" disabled={busy||!valid} onClick={()=>setStarted(true)}>Start digitizing · {outputFormat.toUpperCase()}</button>}
       </>}
       </div>
-      {processing && <p>Digitizing in progress…</p>}
+      {processing && <p>Digitizing in progress…</p>}{art&&!started&&<small>Your original image is unchanged. You can adjust the settings again after generating a preview.</small>}
       {!valid && <p role="alert">Width must be between 5 and 300 mm.</p>}
       {(error || generationError) && <p role="alert">{error || generationError}</p>}
       {generationError && !vector && settings.removeBackground && generationError.includes('No foreground') &&
