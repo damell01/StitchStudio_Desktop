@@ -45,7 +45,7 @@ pub fn recognize_rgba(w: u32, h: u32, rgba: &[u8]) -> anyhow::Result<Vec<Recogni
     let mut lines = group_lines(lines);
     let fonts = crate::document::font_families();
     for line in &mut lines {
-        line.font = recommend_font(line, &fonts);
+        line.font = recommend_font(line, &fonts, w, h, &rgb);
     }
     Ok(lines)
 }
@@ -94,23 +94,64 @@ fn group_lines(mut input: Vec<RecognizedLine>) -> Vec<RecognizedLine> {
     output
 }
 
-fn recommend_font(line: &RecognizedLine, fonts: &[String]) -> String {
+// Compare normalized ink silhouettes rather than selecting a font on aspect
+// alone. Coarse cells and row/column projections tolerate antialiasing and
+// modest tracking differences without requiring a cloud model.
+const MASK_W:usize=64;
+const MASK_H:usize=24;
+fn source_mask(rect:[f64;4],w:u32,h:u32,rgb:&[u8])->Vec<f64>{
+    let mut mask=vec![0.0;MASK_W*MASK_H];
+    if w==0||h==0{return mask}
+    for y in 0..MASK_H {for x in 0..MASK_W {
+        let mut ink=0.0;
+        for dy in [0.25,0.75] {for dx in [0.25,0.75] {
+            let px=(rect[0]+(x as f64+dx)/MASK_W as f64*(rect[2]-rect[0])).clamp(0.0,(w-1) as f64) as usize;
+            let py=(rect[1]+(y as f64+dy)/MASK_H as f64*(rect[3]-rect[1])).clamp(0.0,(h-1) as f64) as usize;
+            let i=(py*w as usize+px)*3;
+            if i+2<rgb.len(){ink+=1.0-(rgb[i] as f64*0.299+rgb[i+1] as f64*0.587+rgb[i+2] as f64*0.114)/255.0;}
+        }}
+        mask[y*MASK_W+x]=ink/4.0;
+    }}
+    mask
+}
+fn mask_distance(a:&[f64],b:&[f64])->f64{
+    let sum_a=a.iter().sum::<f64>().max(1.0);
+    let sum_b=b.iter().sum::<f64>().max(1.0);
+    let pixel=a.iter().zip(b).map(|(x,y)|(x/sum_a-y/sum_b).abs()).sum::<f64>();
+    let rows=(0..MASK_H).map(|y|{let start=y*MASK_W;let end=start+MASK_W;(a[start..end].iter().sum::<f64>()/sum_a-b[start..end].iter().sum::<f64>()/sum_b).abs()}).sum::<f64>();
+    let cols=(0..MASK_W).map(|x|{let p=(0..MASK_H).map(|y|a[y*MASK_W+x]).sum::<f64>();let q=(0..MASK_H).map(|y|b[y*MASK_W+x]).sum::<f64>();(p/sum_a-q/sum_b).abs()}).sum::<f64>();
+    pixel*0.35+rows*0.4+cols*0.25
+}
+
+fn recommend_font(line: &RecognizedLine, fonts: &[String], w:u32,h:u32,rgb:&[u8]) -> String {
     use crate::{document::{Document, TextSpec}, svg::shapes_bounds};
     let aspect = (line.rect[2]-line.rect[0])/(line.rect[3]-line.rect[1]);
     let mut best = (f64::INFINITY, line.font.clone());
+    let source = source_mask(line.rect,w,h,rgb);
     // A small, common installed-font shortlist avoids measuring hundreds
-    // of fonts on the OCR worker. Match proportions, not font identity.
+    // of fonts on the OCR worker. Match silhouettes and proportions.
     for font in std::iter::once(&line.font).chain(fonts.iter().filter(|f|
         ["Arial", "Arial Narrow", "Helvetica", "Times New Roman", "Georgia",
          "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Liberation Serif",
-         "Poppins", "Inter", "Verdana", "Courier New"].contains(&f.as_str()))) {
+         "Poppins", "Inter", "Verdana", "Courier New", "Bodoni MT", "Didot", "Garamond", "Baskerville", "Palatino Linotype", "Book Antiqua"].contains(&f.as_str()))) {
         let mut doc = Document::empty();
         let spec = TextSpec { text: line.text.clone(), font: font.clone(),
             spacing_mm: 0.0, bold: false, ..TextSpec::default() };
         if let Ok(i) = doc.add_lettering(&spec, (0.0,0.0)) {
             let b = shapes_bounds(std::slice::from_ref(&doc.shapes[i]));
             if b.width() > 0.0 && b.height() > 0.0 {
-                let score = ((b.width()/b.height())/aspect).ln().abs();
+                let ratio = ((b.width()/b.height())/aspect).ln().abs();
+                let visual = match &doc.shapes[i].geometry {
+                    crate::svg::Geometry::Fill{rings,rule} => {
+                        let mut mask=vec![0.0; MASK_W*MASK_H];
+                        for y in 0..MASK_H {for x in 0..MASK_W {
+                            let p=crate::geom::P::new(b.min.x+(x as f64+0.5)/MASK_W as f64*b.width(),b.min.y+(y as f64+0.5)/MASK_H as f64*b.height());
+                            mask[y*MASK_W+x]=if crate::geom::point_inside(rings,*rule,p){1.0}else{0.0};
+                        }}
+                        mask_distance(&source,&mask)
+                    }, _ => 1.0,
+                };
+                let score = visual + ratio*0.18;
                 if score < best.0 { best = (score, font.clone()); }
             }
         }
