@@ -43,7 +43,7 @@ pub(crate) fn apply_fabric_profile(fabric: String, state: tauri::State<'_, Mutex
     let design = source.plan();
     if design.stitch_count() == 0 { return Err("This fabric produced no stitches".into()); }
     let result = preview(&design);
-    workspace.checkpoint();
+    workspace.checkpoint_named("Change fabric profile");
     workspace.current = Some(design);
     workspace.source = Some(source);
     Ok(result)
