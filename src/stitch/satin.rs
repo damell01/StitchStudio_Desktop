@@ -290,9 +290,14 @@ fn split_long(pts: &[P], max: f64) -> Polyline {
             out.push(w[0]);
         }
         let len = w[0].dist(w[1]);
-        let n = (len / max).ceil() as usize;
+        let n = (len / max).ceil().max(1.0) as usize;
         if n > 1 {
-            let shift = [0.0, 0.33, -0.33][k % 3] / n as f64;
+            // Stagger only within the remaining length budget. A fixed
+            // offset can make the first or last segment exceed max,
+            // particularly when the original length is an exact multiple.
+            let slack = (max / len - 1.0 / n as f64).max(0.0);
+            let shift = [0.0_f64, 0.33, -0.33][k % 3].signum()
+                * (0.33 / n as f64).min(slack);
             for j in 1..n {
                 out.push(w[0].lerp(w[1], j as f64 / n as f64 + shift));
             }
@@ -697,6 +702,17 @@ mod tests {
             split: None,
             style: Default::default(),
         }
+    }
+
+    #[test]
+    fn staggered_satin_splits_respect_maximum_length() {
+        let pts = vec![P::new(0.0, 0.0), P::new(90.0, 0.0),
+                       P::new(0.0, 1.0), P::new(90.0, 1.0),
+                       P::new(0.0, 2.0)];
+        let split = split_long(&pts, 30.0);
+        assert!(split.windows(2).all(|w| w[0].dist(w[1]) <= 30.0 + 1e-8));
+        assert_eq!(split.first(), pts.first());
+        assert_eq!(split.last(), pts.last());
     }
 
     #[test]
