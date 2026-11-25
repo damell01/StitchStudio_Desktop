@@ -295,11 +295,15 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     // Avoid global hue merging: it destroys intentional shading in character artwork.
         // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
     let prepared=Image{raster};
+    // On flat artwork, attempt mixed fill/centerline tracing before
+    // simplifying the palette. This preserves thin outlines as strokes.
+    let prefer_lines = flat_palette(&prepared.raster) && options.colors == 0 && !options.lines;
     let mut failures = Vec::new();
     // Try the requested fidelity first, then progressively simplify.
     // Empty successful traces are also retried, rather than ending import.
     for attempt in 0..3 {
         let mut candidate = options.clone();
+        if prefer_lines && attempt == 0 { candidate.lines = true; }
         if attempt == 1 {
             candidate.detail = candidate.detail.min(50.0);
             candidate.speckle_mm = candidate.speckle_mm.max(0.8);
