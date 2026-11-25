@@ -8,6 +8,14 @@ import { importToLibrary, type LibraryImportSource } from './library-import';
 
 type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number };
 
+export function RecentProjects({onOpen}:{onOpen:()=>void}) {
+  const [projects,setProjects]=useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
+  const [error,setError]=useState('');
+  async function scan(){try{const result=await invoke<Project[]|null>('scan_projects');if(result){const recent=result.sort((a,b)=>b.modified-a.modified).slice(0,5);setProjects(recent);localStorage.setItem('studio-recent-projects',JSON.stringify(recent))}}catch(e){setError(String(e))}}
+  async function open(project:Project){try{if(!await confirmAction('Open this project? Save existing work first.'))return;const settings=await invoke<{width:number;height:number;format:string}>('library_open',{file:project.file});sessionStorage.setItem('studio-open-project-settings',JSON.stringify(settings));onOpen()}catch(e){setError(String(e))}}
+  return <section className="recent-project-grid">{projects.map(p=><article key={p.file}><File size={25}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
+}
+
 export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: (art:Art)=>void }) {
   const [tab, setTab] = useState<'embroidery' | 'projects' | 'artwork'>('embroidery');
   const [files, setFiles] = useState<string[]>([]);
@@ -55,7 +63,7 @@ export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: 
   function scan() {
     void run(async () => {
       const result = await invoke<Project[] | null>('scan_projects');
-      if (result) setProjects(result);
+      if (result) { setProjects(result); localStorage.setItem("studio-recent-projects",JSON.stringify([...result].sort((a,b)=>b.modified-a.modified).slice(0,5))); }
     });
   }
 
