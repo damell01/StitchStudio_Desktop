@@ -137,6 +137,9 @@ async fn open_svg(width_mm: f64, colors: u32, remove_background: bool, detail: f
     let Some(path) = rfd::AsyncFileDialog::new().add_filter("Artwork and embroidery", &["svg","png","jpg","jpeg","webp","gif","bmp","tiff","dst","pes","pec","exp","jef"]).pick_file().await else { return Ok(None); };
     let path = path.path().to_owned();
     let source = tauri::async_runtime::spawn_blocking(move || -> Result<zigzag::document::Document,String> {
+        if std::fs::metadata(&path).map_err(|err| err.to_string())?.len() > 20_000_000 {
+            return Err("Design exceeds 20 MB".into());
+        }
         let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Design");
         if ext == "svg" { return zigzag::document::Document::open(&path).map_err(|e| e.to_string()); }
@@ -178,38 +181,143 @@ fn history_step(redo:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Pre
  if let Some(old)=w.current.replace(design){if redo {w.undo.push((old,previous_source))}else{w.redo.push((old,previous_source))}}
  Ok(preview(w.current.as_ref().ok_or("No design")?))
 }
-#[derive(serde::Serialize,serde::Deserialize)]
-struct Project { #[serde(default)] source_svg:Option<String>, #[serde(default)] source_offset:Option<[f64;2]>, version:u32,name:String,width:f64,height:f64,format:String,blocks:Vec<ProjectBlock> }
-#[derive(serde::Serialize,serde::Deserialize)]
-struct ProjectBlock {color:[u8;3],runs:Vec<ProjectRun>}
-#[derive(serde::Serialize,serde::Deserialize)]
-struct ProjectRun {points:Vec<[f64;2]>,trim_before:bool}
+const MAX_PROJECT_BYTES: u64 = 100_000_000;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Project {
+    #[serde(default)]
+    source_svg: Option<String>,
+    #[serde(default)]
+    source_offset: Option<[f64; 2]>,
+    version: u32,
+    name: String,
+    width: f64,
+    height: f64,
+    format: String,
+    blocks: Vec<ProjectBlock>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ProjectBlock {
+    color: [u8; 3],
+    runs: Vec<ProjectRun>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ProjectRun {
+    points: Vec<[f64; 2]>,
+    trim_before: bool,
+}
+
 #[derive(serde::Serialize)]
-struct OpenedProject {plan:Preview,width:f64,height:f64,format:String}
-#[tauri::command]
-async fn save_project(width:f64,height:f64,format:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<bool,String> {
- let project={let w=state.lock().map_err(|e|e.to_string())?;let d=w.current.as_ref().ok_or("No design")?;
- Project{source_svg:w.source.as_ref().map(|s|s.to_svg()).transpose().map_err(|e|e.to_string())?,source_offset:w.source.as_ref().map(|doc|[doc.offset.x,doc.offset.y]),version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
- let bytes=serde_json::to_vec(&project).map_err(|e|e.to_string())?;
- let Some(path)=rfd::AsyncFileDialog::new().add_filter("Stitch Studio project",&["stitchstudio"]).set_file_name("design.stitchstudio").save_file().await else{return Ok(false)};
- std::fs::write(path.path(),bytes).map_err(|e|e.to_string())?;Ok(true)
+struct OpenedProject { plan: Preview, width: f64, height: f64, format: String }
+
+impl Project {
+    fn capture(workspace: &Workspace, width: f64, height: f64, format: String) -> Result<Option<Self>, String> {
+        let Some(design) = &workspace.current else { return Ok(None); };
+        let source = workspace.source.as_ref();
+        Ok(Some(Self {
+            source_svg: source.map(|document| document.to_svg()).transpose().map_err(|err| err.to_string())?,
+            source_offset: source.map(|document| [document.offset.x, document.offset.y]),
+            version: 1,
+            name: design.name.clone(),
+            width,
+            height,
+            format,
+            blocks: design.blocks.iter().map(|block| ProjectBlock {
+                color: block.color,
+                runs: block.runs.iter().map(|run| ProjectRun {
+                    points: run.pts.iter().map(|point| [point.x, point.y]).collect(),
+                    trim_before: run.trim_before,
+                }).collect(),
+            }).collect(),
+        }))
+    }
+
+    fn load(path: &std::path::Path) -> Result<Self, String> {
+        use std::io::Read;
+        let file = std::fs::File::open(path).map_err(|err| err.to_string())?;
+        let mut bytes = Vec::new();
+        file.take(MAX_PROJECT_BYTES + 1).read_to_end(&mut bytes).map_err(|err| err.to_string())?;
+        if bytes.len() as u64 > MAX_PROJECT_BYTES { return Err("Project exceeds size limit".into()); }
+        serde_json::from_slice(&bytes).map_err(|err| err.to_string())
+    }
+
+    fn restore(self, state: &Mutex<Workspace>) -> Result<OpenedProject, String> {
+        if self.version != 1
+            || !self.width.is_finite() || !self.height.is_finite()
+            || self.width <= 0.0 || self.height <= 0.0
+            || !["dst", "pes", "jef", "exp", "vp3", "pec"].contains(&self.format.as_str())
+            || self.source_offset.is_some_and(|offset| offset.iter().any(|v| !v.is_finite() || v.abs() > 1_000_000.0))
+        {
+            return Err("Invalid project settings".into());
+        }
+        let runs = self.blocks.iter().flat_map(|block| &block.runs);
+        let count: usize = runs.clone().map(|run| run.points.len()).sum();
+        if !(1..=2_000_000).contains(&count)
+            || runs.flat_map(|run| &run.points).flatten().any(|v| !v.is_finite() || v.abs() > 1_000_000.0)
+        {
+            return Err("Invalid project stitch data".into());
+        }
+        let source = self.source_svg.as_ref().map(|svg| match self.source_offset {
+            Some([x, y]) => zigzag::document::Document::restore_svg(svg, &self.name, zigzag::geom::P::new(x, y)),
+            None => zigzag::document::Document::from_svg(svg, &self.name, None),
+        }).transpose().map_err(|err| err.to_string())?;
+        let design = Design {
+            name: self.name,
+            blocks: self.blocks.into_iter().map(|block| zigzag::design::Block {
+                color: block.color,
+                runs: block.runs.into_iter().map(|run| zigzag::design::Run {
+                    pts: run.points.into_iter().map(|[x, y]| zigzag::geom::P::new(x, y)).collect(),
+                    trim_before: run.trim_before,
+                }).collect(),
+            }).collect(),
+            ..Default::default()
+        };
+        let result = OpenedProject { plan: preview(&design), width: self.width, height: self.height, format: self.format };
+        *state.lock().map_err(|err| err.to_string())? = Workspace { source, current: Some(design), ..Default::default() };
+        Ok(result)
+    }
 }
-#[tauri::command]
-async fn open_project(state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<OpenedProject>,String> {
- let Some(path)=rfd::AsyncFileDialog::new().add_filter("Stitch Studio project",&["stitchstudio"]).pick_file().await else{return Ok(None)};
- open_project_path(path.path(),&state).map(Some)
+
+fn write_project(path: &std::path::Path, project: &Project) -> Result<(), String> {
+    use std::io::Write;
+    let bytes = serde_json::to_vec(project).map_err(|err| err.to_string())?;
+    if bytes.len() as u64 > MAX_PROJECT_BYTES { return Err("Project exceeds size limit".into()); }
+    let directory = path.parent().ok_or("Project must have a parent directory")?;
+    let mut temp = tempfile::NamedTempFile::new_in(directory).map_err(|err| err.to_string())?;
+    temp.write_all(&bytes).map_err(|err| err.to_string())?;
+    temp.as_file().sync_all().map_err(|err| err.to_string())?;
+    temp.persist(path).map_err(|err| err.to_string())?;
+    Ok(())
 }
-fn open_project_path(path:&std::path::Path,state:&Mutex<Workspace>)->Result<OpenedProject,String>{
- if std::fs::metadata(path).map_err(|e|e.to_string())?.len()>100_000_000{return Err("Project exceeds size limit".into())}
- let p:Project=serde_json::from_slice(&std::fs::read(path).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
- if p.version!=1 || !p.width.is_finite() || !p.height.is_finite() || p.width<=0.0 || p.height<=0.0 || !["dst","pes","jef","exp","vp3","pec"].contains(&p.format.as_str()) || p.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.points).flatten().any(|v|!v.is_finite()||v.abs()>1000000.0){return Err("Invalid project".into())}
- let source = p.source_svg.as_ref().map(|svg| match p.source_offset {
-     Some([x, y]) => zigzag::document::Document::restore_svg(svg, &p.name, zigzag::geom::P::new(x, y)),
-     None => zigzag::document::Document::from_svg(svg, &p.name, None),
- }).transpose().map_err(|err| err.to_string())?;
- let d=Design{name:p.name,blocks:p.blocks.into_iter().map(|b|zigzag::design::Block{color:b.color,runs:b.runs.into_iter().map(|r|zigzag::design::Run{pts:r.points.into_iter().map(|v|zigzag::geom::P::new(v[0],v[1])).collect(),trim_before:r.trim_before}).collect()}).collect(),..Default::default()};
- let result=OpenedProject{plan:preview(&d),width:p.width,height:p.height,format:p.format};
- *state.lock().map_err(|e|e.to_string())?=Workspace{source,current:Some(d),..Default::default()};Ok(result)
+
+#[tauri::command]
+async fn save_project(width: f64, height: f64, format: String, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool, String> {
+    let Some(path) = rfd::AsyncFileDialog::new().add_filter("Stitch Studio project", &["stitchstudio"])
+        .set_file_name("design.stitchstudio").save_file().await else { return Ok(false); };
+    let path = path.path().to_owned();
+    if !path.extension().and_then(|value| value.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("stitchstudio")) {
+        return Err("Save the project with the .stitchstudio extension".into());
+    }
+    let project = {
+        let workspace = state.lock().map_err(|err| err.to_string())?;
+        Project::capture(&workspace, width, height, format)?.ok_or("No design")?
+    };
+    tauri::async_runtime::spawn_blocking(move || write_project(&path, &project))
+        .await.map_err(|err| err.to_string())??;
+    Ok(true)
+}
+
+#[tauri::command]
+async fn open_project(state: tauri::State<'_, Mutex<Workspace>>) -> Result<Option<OpenedProject>, String> {
+    let Some(path) = rfd::AsyncFileDialog::new().add_filter("Stitch Studio project", &["stitchstudio"])
+        .pick_file().await else { return Ok(None); };
+    open_project_path(path.path(), &state).map(Some)
+}
+
+fn open_project_path(path: &std::path::Path, state: &Mutex<Workspace>) -> Result<OpenedProject, String> {
+    Project::load(path)?.restore(state)
 }
 #[tauri::command]
 fn load_template(id:String,art:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
@@ -350,34 +458,42 @@ fn create_specialty(shape:String,style:String,width:f64,state:tauri::State<'_,Mu
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
 }
 #[tauri::command]
-fn recovery_save(app:tauri::AppHandle,width:f64,height:f64,format:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<(),String>{
- use tauri::Manager;
- let project={let w=state.lock().map_err(|e|e.to_string())?;let Some(d)=w.current.as_ref() else{return Ok(())};
- Project{source_svg:w.source.as_ref().map(|s|s.to_svg()).transpose().map_err(|e|e.to_string())?,source_offset:w.source.as_ref().map(|doc|[doc.offset.x,doc.offset.y]),version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
- let dir=app.path().app_local_data_dir().map_err(|e|e.to_string())?;
- std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
- let bytes=serde_json::to_vec(&project).map_err(|e|e.to_string())?;
- if bytes.len()>100_000_000{return Err("Recovery file exceeds size limit".into())}
- let tmp=dir.join("recovery.tmp");let target=dir.join("recovery.stitchstudio");let backup=dir.join("recovery.previous");
- std::fs::write(&tmp,bytes).map_err(|e|e.to_string())?;
- if target.exists(){if backup.exists(){std::fs::remove_file(&backup).map_err(|e|e.to_string())?;}std::fs::rename(&target,&backup).map_err(|e|e.to_string())?;}
- std::fs::rename(tmp,target).map_err(|e|e.to_string())?;Ok(())
+fn recovery_save(app: tauri::AppHandle, width: f64, height: f64, format: String, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
+    use tauri::Manager;
+    // Keep recovery writes in order if more than one caller requests a snapshot.
+    static RECOVERY_WRITE: Mutex<()> = Mutex::new(());
+    let _write = RECOVERY_WRITE.lock().map_err(|err| err.to_string())?;
+    let project = {
+        let workspace = state.lock().map_err(|err| err.to_string())?;
+        Project::capture(&workspace, width, height, format)?
+    };
+    let Some(project) = project else { return Ok(()); };
+    let dir = app.path().app_local_data_dir().map_err(|err| err.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
+    let target = dir.join("recovery.stitchstudio");
+    if let Ok(previous) = Project::load(&target) {
+        write_project(&dir.join("recovery.previous"), &previous)?;
+    }
+    write_project(&target, &project)
 }
+
 #[tauri::command]
-fn recovery_open(app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<OpenedProject>,String>{
- use tauri::Manager;
- let dir=app.path().app_local_data_dir().map_err(|e|e.to_string())?;
- let mut found=None;
- for name in ["recovery.stitchstudio","recovery.previous"]{let path=dir.join(name);if let Ok(meta)=std::fs::metadata(&path){if meta.len()<=100_000_000{if let Ok(bytes)=std::fs::read(path){if let Ok(p)=serde_json::from_slice::<Project>(&bytes){found=Some(p);break}}}}}
- let Some(p)=found else{return Ok(None)};
- if p.version!=1||!p.width.is_finite()||!p.height.is_finite()||p.width<=0.0||p.height<=0.0||!["dst","pes","jef","exp","vp3","pec"].contains(&p.format.as_str())||p.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.points).flatten().any(|v|!v.is_finite()||v.abs()>1000000.0){return Err("Invalid recovery project".into())}
- let source = p.source_svg.as_ref().map(|svg| match p.source_offset {
-     Some([x, y]) => zigzag::document::Document::restore_svg(svg, &p.name, zigzag::geom::P::new(x, y)),
-     None => zigzag::document::Document::from_svg(svg, &p.name, None),
- }).transpose().map_err(|err| err.to_string())?;
- let d=Design{name:p.name,blocks:p.blocks.into_iter().map(|b|zigzag::design::Block{color:b.color,runs:b.runs.into_iter().map(|r|zigzag::design::Run{pts:r.points.into_iter().map(|v|zigzag::geom::P::new(v[0],v[1])).collect(),trim_before:r.trim_before}).collect()}).collect(),..Default::default()};
- let result=OpenedProject{plan:preview(&d),width:p.width,height:p.height,format:p.format};
- *state.lock().map_err(|e|e.to_string())?=Workspace{source,current:Some(d),..Default::default()};Ok(Some(result))
+fn recovery_open(app: tauri::AppHandle, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Option<OpenedProject>, String> {
+    use tauri::Manager;
+    let dir = app.path().app_local_data_dir().map_err(|err| err.to_string())?;
+    let mut last_error = None;
+    for name in ["recovery.stitchstudio", "recovery.previous"] {
+        let path = dir.join(name);
+        if !path.exists() { continue; }
+        match open_project_path(&path, &state) {
+            Ok(project) => return Ok(Some(project)),
+            Err(err) => last_error = Some(err),
+        }
+    }
+    match last_error {
+        Some(err) => Err(format!("Unable to open the recovery copies: {err}")),
+        None => Ok(None),
+    }
 }
 #[tauri::command]
 fn lettering_fonts()->Vec<String>{zigzag::document::font_families()}
@@ -654,6 +770,41 @@ async fn insert_character(bytes:Vec<u8>,name:String,width_mm:f64,x_mm:f64,y_mm:f
  if combined.blocks.is_empty(){combined.name=added.name.clone();}
  combined.blocks.extend(added.blocks);combined.per_shape.clear();combined.sew_order.clear();combined.notes.clear();combined.block_shapes.clear();combined.covered.clear();
  let p=preview(&combined);w.checkpoint();w.current=Some(combined);w.source=None;Ok(p)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_round_trip_preserves_hoop_position_and_source() {
+        let art = r#"<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="30mm" viewBox="0 0 40 30"><rect id="art" x="10" y="5" width="20" height="15" fill="purple"/></svg>"#;
+        let mut source = zigzag::document::Document::from_svg(art, "placed", None).unwrap();
+        source.transform(&[0], [1.0, 0.0, 0.0, 1.0, 125.0, 50.0]).unwrap();
+        let design = source.plan();
+        let expected = formats::write_format(&design, "dst").unwrap();
+        let original = Workspace { current: Some(design), source: Some(source), ..Default::default() };
+        let project = Project::capture(&original, 100.0, 100.0, "dst".into()).unwrap().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("placed.stitchstudio");
+        write_project(&path, &project).unwrap();
+        write_project(&path, &project).unwrap();
+        let restored = Mutex::new(Workspace::default());
+        open_project_path(&path, &restored).unwrap();
+        let workspace = restored.into_inner().unwrap();
+        assert_eq!(formats::write_format(&workspace.current.unwrap(), "dst").unwrap(), expected);
+        assert_eq!(formats::write_format(&workspace.source.unwrap().plan(), "dst").unwrap(), expected);
+    }
+
+    #[test]
+    fn inserting_vector_artwork_keeps_existing_source_objects() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm" viewBox="0 0 20 20"><rect id="square" x="5" y="5" width="10" height="10" fill="purple"/></svg>"#;
+        let mut workspace = Workspace::default();
+        insert_editable_artwork(&mut workspace, svg, "first", -15.0, 0.0, false).unwrap().unwrap();
+        insert_editable_artwork(&mut workspace, svg, "second", 15.0, 0.0, false).unwrap().unwrap();
+        assert_eq!(workspace.source.as_ref().unwrap().shapes.len(), 2);
+        assert_eq!(workspace.undo.last().unwrap().1.as_ref().unwrap().shapes.len(), 1);
+    }
 }
 
 fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}

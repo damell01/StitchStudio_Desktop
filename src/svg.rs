@@ -146,6 +146,16 @@ fn fontdb_if(may_have_text: bool) -> std::sync::Arc<usvg::fontdb::Database> {
         .clone()
 }
 
+#[test]
+fn svg_parser_does_not_load_images_from_disk() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/studio.png");
+    let svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><image width="40" height="40" href="{}"/></svg>"#,
+        fixture.display()
+    );
+    assert!(parse_tree(svg.as_bytes()).unwrap().root().children().is_empty());
+}
+
 /// Whether raw SVG bytes could hold text (or an image, which may be an SVG
 /// with text of its own). Errs towards yes: compressed data always could.
 fn bytes_may_have_text(data: &[u8]) -> bool {
@@ -153,11 +163,19 @@ fn bytes_may_have_text(data: &[u8]) -> bool {
     data.starts_with(&[0x1f, 0x8b]) || has(b"text") || has(b"image")
 }
 
+fn local_svg_options(may_have_text: bool) -> usvg::Options<'static> {
+    usvg::Options {
+        fontdb: fontdb_if(may_have_text),
+        image_href_resolver: usvg::ImageHrefResolver {
+            resolve_string: Box::new(|_, _| None),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 pub fn parse_tree(data: &[u8]) -> Result<usvg::Tree> {
-    let opt = usvg::Options {
-        fontdb: fontdb_if(bytes_may_have_text(data)),
-        ..usvg::Options::default()
-    };
+    let opt = local_svg_options(bytes_may_have_text(data));
     usvg::Tree::from_data(data, &opt).context("parsing SVG")
 }
 
@@ -192,10 +210,7 @@ pub fn load_with_tree_and<T>(
             let may_have_text = doc
                 .descendants()
                 .any(|n| matches!(n.tag_name().name(), "text" | "image"));
-            let opt = usvg::Options {
-                fontdb: fontdb_if(may_have_text),
-                ..usvg::Options::default()
-            };
+            let opt = local_svg_options(may_have_text);
             (
                 usvg::Tree::from_xmltree(doc, &opt).context("parsing SVG")?,
                 layer_ids_in(doc),
