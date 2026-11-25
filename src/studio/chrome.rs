@@ -48,64 +48,73 @@ impl Studio {
         let p = pal_ui(ui);
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 5.0;
-            egui::ScrollArea::horizontal().id_salt("workspace-actions").show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Design Studio").strong().size(15.0).color(p.text));
-                    ui.separator();
-                    for (label, action) in [
-                        ("New", Action::New), ("Open", Action::Open), ("Save", Action::Save),
-                        ("Undo", Action::Undo), ("Redo", Action::Redo),
-                        ("Import artwork", Action::Place), ("Lettering", Action::AddText),
-                        ("Fit hoop", Action::FitToHoop), ("Fit view", Action::ZoomFit),
-                        ("Simulate", Action::PlayPause), ("Density", Action::ToggleDensity),
-                        ("Inspect", Action::ShowIssues),
-                    ] {
-                        let enabled = self.action_enabled(action);
-                        if ui.add_enabled(enabled, egui::Button::new(label).min_size(Vec2::new(0.0, 28.0))).on_hover_text(match label {
-                            "Import artwork" => "Turn a picture or vector artwork into embroidery objects",
-                            "Fit hoop" => "Resize the design to fit the selected hoop",
-                            "Fit view" => "Zoom to the design without changing its size",
-                            "Inspect" => "Check the design for potential sewing problems",
-                            "Simulate" => "Play or pause the actual stitch sequence",
-                            "Density" => "Show or hide stitch density visualization",
-                            _ => label,
-                        }).clicked() {
+            let compact = ui.available_width() < 1180.0;
+            for (label, action) in [
+                ("New", Action::New), ("Open", Action::Open), ("Save", Action::Save),
+                ("Undo", Action::Undo), ("Redo", Action::Redo),
+                ("Digitize", Action::Place), ("Lettering", Action::AddText),
+            ] {
+                let button = if label == "Digitize" {
+                    egui::Button::new(egui::RichText::new(label).strong().color(
+                        if p.dark { Color32::from_rgb(23, 30, 26) } else { Color32::WHITE }
+                    )).fill(p.accent)
+                } else { egui::Button::new(label) };
+                if ui.add_enabled(self.action_enabled(action), button.min_size(Vec2::new(0.0, 28.0)))
+                    .on_hover_text(if label == "Digitize" { "Import artwork and convert it into embroidery objects" } else { label })
+                    .clicked() {
+                    self.run_action(action);
+                }
+            }
+            ui.separator();
+            let tools = [("Fit hoop", Action::FitToHoop), ("Fit view", Action::ZoomFit),
+                ("Simulate", Action::PlayPause), ("Density", Action::ToggleDensity), ("Inspect", Action::ShowIssues)];
+            if compact {
+                ui.menu_button("Design tools", |ui| {
+                    for (label, action) in tools {
+                        if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
                             self.run_action(action);
+                            ui.close();
+                        }
+                    }
+                });
+            } else {
+                for (label, action) in tools {
+                    if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
+                        self.run_action(action);
+                    }
+                }
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let export = ui.add_enabled(
+                    !self.design.blocks.is_empty(),
+                    egui::Button::new(egui::RichText::new("Export").strong()).min_size(Vec2::new(64.0, 28.0))
+                );
+                egui::Popup::menu(&export).show(|ui| {
+                    ui.set_min_width(250.0);
+                    caption(ui, "Choose your machine format");
+                    for (ext, label) in zigzag::formats::MACHINE_FORMATS {
+                        if ui.button(label).clicked() {
+                            self.run_action(Action::Export(ext));
+                            ui.close();
                         }
                     }
                     ui.separator();
-                    egui::ComboBox::from_id_salt("workspace-hoop")
-                        .selected_text(crate::app::HOOPS[self.doc.settings.hoop.min(crate::app::HOOPS.len() - 1)].1)
-                        .width(150.0)
-                        .show_ui(ui, |ui| {
-                            for (k, h) in crate::app::HOOPS.iter().enumerate() {
-                                ui.selectable_value(&mut self.doc.settings.hoop, k, h.1);
-                            }
-                        }).response.on_hover_text("Select the hoop matching your machine. This does not resize your design.");
-                    let export = ui.add_enabled(
-                        !self.design.blocks.is_empty(),
-                        egui::Button::new(egui::RichText::new("Export design").strong().color(
-                            if p.dark { Color32::from_rgb(23, 30, 26) } else { Color32::WHITE }
-                        )).fill(p.accent)
-                    );
-                    egui::Popup::menu(&export).show(|ui| {
-                        ui.set_min_width(250.0);
-                        caption(ui, "Choose your machine format");
-                        for (ext, label) in zigzag::formats::MACHINE_FORMATS {
-                            if ui.button(label).clicked() {
-                                self.run_action(Action::Export(ext));
-                            }
-                        }
-                        ui.separator();
-                        caption(ui, "DST does not store exact thread colors.");
-                    });
-                    if ui.button("Quick tour").clicked() {
-                        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("studio-tour"), 0usize));
-                    }
-                    self.quick_tour(ui.ctx());
+                    caption(ui, "DST does not store exact thread colors.");
                 });
+                egui::ComboBox::from_id_salt("workspace-hoop")
+                    .selected_text(crate::app::HOOPS[self.doc.settings.hoop.min(crate::app::HOOPS.len() - 1)].1)
+                    .width(if compact { 100.0 } else { 150.0 })
+                    .show_ui(ui, |ui| {
+                        for (k, h) in crate::app::HOOPS.iter().enumerate() {
+                            ui.selectable_value(&mut self.doc.settings.hoop, k, h.1);
+                        }
+                    }).response.on_hover_text("Select the hoop matching your machine. This does not resize your design.");
+                if ui.button("Help").on_hover_text("Start guided tour").clicked() {
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("studio-tour"), 0usize));
+                }
             });
         });
+        self.quick_tour(ui.ctx());
     }
 
     fn quick_tour(&mut self, ctx: &egui::Context) {
