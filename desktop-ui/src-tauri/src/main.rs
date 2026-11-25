@@ -536,7 +536,7 @@ struct SimplifyOptions {
     solid:bool, merge:bool, auto_types:bool, lighter_underlay:bool,
     target_minutes:Option<f64>, speed:Option<f64>, trim_seconds:Option<f64>,
 }
-fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptions,uids:Option<&[usize]>)->Result<(),String>{
+fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptions,uids:Option<&[usize]>,texture_radius:f64)->Result<(),String>{
     use zigzag::{params::Kind,svg::Geometry,boolean::{self,PathOp},geom::FillRule};
     let selected=|uid|uids.is_none_or(|ids|ids.contains(&uid));
     let eligible=|d:&zigzag::document::Document,i:usize| {
@@ -551,8 +551,8 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
         for (i,s) in doc.shapes.iter().enumerate(){
             if !eligible(doc,i)||s.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill{continue}
             if let Geometry::Fill{rings,rule}=&s.geometry{
-                let grown=boolean::offset(rings,*rule,2.0);
-                let closed=boolean::offset(&grown,FillRule::EvenOdd,-2.0);
+                let grown=boolean::offset(rings,*rule,texture_radius);
+                let closed=boolean::offset(&grown,FillRule::EvenOdd,-texture_radius);
                 let before=zigzag::stitch::satin::components(rings,*rule);
                 let after=zigzag::stitch::satin::components(&closed,FillRule::EvenOdd);
                 if before.len()!=after.len()||closed.is_empty(){continue}
@@ -563,6 +563,42 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
             }
         }
         doc.set_paths(&edits).map_err(|e|e.to_string())?;
+    }
+    // Solid mode can join narrow hatch gaps between neighboring fragments,
+    // not just holes within a single outline. Work on adjacent same-color
+    // entries only, and do not touch lettering or special machine stops.
+    if options.solid && options.merge {
+        let mut i=0;let mut attempts=0;
+        while i+1<doc.shapes.len()&&attempts<128{
+            let a=&doc.shapes[i];let b=&doc.shapes[i+1];
+            let compatible=eligible(doc,i)&&eligible(doc,i+1)&&a.color==b.color&&a.groups==b.groups
+                &&a.params==b.params&&a.params.kind.unwrap_or(Kind::Fill)==Kind::Fill
+                &&a.params.trim!=Some(true)&&b.params.trim!=Some(true)
+                &&a.params.stop!=Some(true)&&b.params.stop!=Some(true);
+            let joined=if compatible{match (&a.geometry,&b.geometry){
+                (Geometry::Fill{rings:r,rule:f},Geometry::Fill{rings:s,rule:g})=>{
+                    let united=boolean::pathfinder(&[(r.clone(),*f),(s.clone(),*g)],PathOp::Unite);
+                    let components=zigzag::stitch::satin::components(&united,FillRule::EvenOdd);
+                    if components.len()!=2{None}else{
+                        let grown=boolean::offset(&united,FillRule::EvenOdd,texture_radius);
+                        let closed=boolean::offset(&grown,FillRule::EvenOdd,-texture_radius);
+                        let result=zigzag::stitch::satin::components(&closed,FillRule::EvenOdd);
+                        let area=|c:&Vec<Vec<zigzag::geom::Polyline>>|c.iter().map(|r|r.first().map(|p|boolean::ring_area(p)).unwrap_or(0.0)-r.iter().skip(1).map(|p|boolean::ring_area(p)).sum::<f64>()).sum::<f64>();
+                        let old=area(&components);let new=area(&result);
+                        let holes=|c:&Vec<Vec<zigzag::geom::Polyline>>|c.iter().flat_map(|r|r.iter().skip(1)).filter(|r|boolean::ring_area(r)>100.0).count();
+                        if result.len()==1&&old>0.0&&new>=old*0.95&&new<=old*1.20&&holes(&components)==holes(&result){Some(zigzag::bezier::from_rings(&closed,0.2))}else{None}
+                    }
+                },_=>None
+            }}else{None};
+            if let Some(path)=joined{
+                if path.is_empty(){i+=1;continue}
+                let second=doc.shapes[i+1].uid;
+                doc.set_path(i,&path).map_err(|e|e.to_string())?;
+                let j=doc.shapes.iter().position(|s|s.uid==second).ok_or("Shape changed while simplifying")?;
+                doc.delete_many(&[j]).map_err(|e|e.to_string())?;
+                attempts+=1;
+            }else{i+=1;}
+        }
     }
     if options.merge{
         // Only adjacent sewing-order entries with identical paint and stitch
@@ -614,16 +650,19 @@ async fn simplify_current_design(strength:u8,uids:Option<Vec<usize>>,remove_deta
         let mut candidates=Vec::new();
         if let Some(v)=simplify_design_candidate(&source,original,strength,uids.as_deref(),remove_detail.unwrap_or(false)){candidates.push(v);}
         if options.solid||options.merge||options.auto_types||options.lighter_underlay{
-            let mut geometry=source.clone();
-            if optimize_geometry(&mut geometry,&options,uids.as_deref()).is_ok(){
-                let plan=geometry.plan();
-                if let Some(v)=simplify_design_candidate(&geometry,&plan,strength,uids.as_deref(),false){candidates.push(v);}
-                candidates.push((geometry,plan));
+            let radii:&[f64]=if options.solid&&strength>=3{&[2.0,4.0,6.0]}else if options.solid&&strength==2{&[2.0,4.0]}else{&[2.0]};
+            for &radius in radii{
+                let mut geometry=source.clone();
+                if optimize_geometry(&mut geometry,&options,uids.as_deref(),radius).is_ok(){
+                    let plan=geometry.plan();
+                    if let Some(v)=simplify_design_candidate(&geometry,&plan,strength,uids.as_deref(),false){candidates.push(v);}
+                    candidates.push((geometry,plan));
+                }
             }
         }
         let before=measure_stitches(original);let a=original.bounds();
         candidates.retain(|(_,d)|{let b=d.bounds();let after=measure_stitches(d);
-            d.stitch_count()>0&&d.stitch_count()>=original.stitch_count()*65/100&&seconds(d)<seconds(original)
+            d.stitch_count()>0&&d.stitch_count()>=original.stitch_count()*(if options.solid&&strength==3{45}else{65})/100&&seconds(d)<seconds(original)
             &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero
             &&a.min.dist(b.min)<=5.0&&a.max.dist(b.max)<=5.0
             &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
