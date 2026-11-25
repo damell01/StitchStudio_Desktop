@@ -1338,9 +1338,11 @@ fn effective_geometry_cached(
             cache.insert(key, out[i].clone());
             continue;
         }
+        // Keep valid small rings, including holes. Filtering by area here
+        // can erase narrow facial details or fill small negative spaces.
         let remaining: Vec<Polyline> = boolean::difference(rings, *rule, &shrunk)
             .into_iter()
-            .filter(|r| r.len() >= 3 && boolean::ring_area(r) > 12.0)
+            .filter(|r| r.len() >= 3 && boolean::ring_area(r).abs() > 0.01)
             .collect();
         out[i] = Geometry::Fill {
             rings: remaining,
