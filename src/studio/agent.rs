@@ -105,6 +105,7 @@ pub struct AgentState {
     pub kind: AgentKind,
     /// Opt-in to external inference; native commands remain available offline.
     pub inference_enabled: bool,
+    pub external_inference: bool,
     pub prompt: String,
     pub log: Vec<Entry>,
     /// Claude's session id or Codex's thread id, to continue the chat.
@@ -210,6 +211,7 @@ impl AgentState {
         AgentState {
             kind,
             inference_enabled,
+            external_inference: config.as_ref().and_then(|f| std::fs::read_to_string(f).ok()).and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| v["external_inference"].as_bool()).unwrap_or(false),
             config,
             ..Default::default()
         }
@@ -222,7 +224,7 @@ impl AgentState {
         }
         let _ = std::fs::write(
             f,
-            serde_json::json!({ "agent": self.kind.key(), "inference_enabled": self.inference_enabled }).to_string(),
+            serde_json::json!({ "agent": self.kind.key(), "inference_enabled": self.inference_enabled, "external_inference": self.external_inference }).to_string(),
         );
     }
 
@@ -1186,6 +1188,10 @@ impl Studio {
             if !a.inference_enabled { a.stop(); }
             a.save();
         }
+        if a.inference_enabled && ui.checkbox(&mut a.external_inference, "Use external provider (optional)").on_hover_text("External providers may require your own account and send requests online.").changed() {
+            a.stop();
+            a.save();
+        }
         // The conversation: plain, on the panel itself.
         let transcript_h = egui::Frame::new()
             .inner_margin(egui::Margin::symmetric(0, space::S as i8))
@@ -1216,14 +1222,14 @@ impl Studio {
                     }
                     // Its program isn't on this Mac: how to install it instead.
                     let kind = a.kind;
-                    if a.inference_enabled && crate::local_ai::Bundle::discover().is_none() {
+                    if a.inference_enabled && ((!a.external_inference && crate::local_ai::Bundle::discover().is_none()) || (a.external_inference && a.installed(kind, &ui.ctx().clone()) == Some(false))) {
                         let mut child = ui.new_child(
                             egui::UiBuilder::new()
                                 .max_rect(r)
                                 .layout(egui::Layout::top_down(egui::Align::Min)),
                         );
                         child.add_space((inner_h * 0.5 - 170.0).max(8.0));
-                        caption(&mut child, "Bundled AI assets are missing. Native commands remain available.");
+                        if a.external_inference { install_steps(&mut child, a); } else { caption(&mut child, "Bundled AI assets are missing. Native commands remain available."); }
                         return;
                     }
                     // Nothing yet: what it can do, and a few ideas to start from.
@@ -1245,7 +1251,7 @@ impl Studio {
                         egui::Label::new(
                             egui::RichText::new(format!(
                                 "Ask {} for a design, or a change to this one. It works on the canvas as you watch.",
-                                a.kind.name()
+                                if a.external_inference { a.kind.name() } else { "StitchStudio AI" }
                             ))
                             .size(12.0)
                             .color(p.secondary),
@@ -1431,7 +1437,7 @@ impl Studio {
             ctx.request_repaint();
             return;
         }
-        if crate::local_ai::Bundle::discover().is_some() {
+        if !self.agent.external_inference && crate::local_ai::Bundle::discover().is_some() {
             let prompt = std::mem::take(&mut self.agent.prompt);
             self.agent.log.push(Entry::You(prompt.clone()));
             let (tx, rx) = std::sync::mpsc::channel();
@@ -1444,9 +1450,10 @@ impl Studio {
             });
             return;
         }
-        self.agent.log.push(Entry::Error("Bundled AI assets are missing. Native commands remain available.".into()));
-        return;
-        #[allow(unreachable_code)]
+        if !self.agent.external_inference {
+            self.agent.log.push(Entry::Error("Bundled AI assets are missing. Native commands remain available.".into()));
+            return;
+        }
         let addr = self.mcp.as_ref().map(|m| m.addr);
         self.agent.send(addr, ctx);
         if self.agent.running() {
