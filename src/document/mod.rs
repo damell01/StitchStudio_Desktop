@@ -51,6 +51,8 @@ pub struct Settings {
     pub connect_mm: f64,
     /// The fabric's color, for previewing the stitches on it.
     pub cloth: [u8; 3],
+    /// Named color variations keyed by SVG element ID and stroke/fill part.
+    pub colorways: Vec<(String, Vec<(String, bool, [u8; 3])>)>,
 }
 
 /// The preview fabric color when a design doesn't say.
@@ -65,6 +67,7 @@ impl Default for Settings {
             hoop: 0,
             connect_mm: 0.0,
             cloth: DEFAULT_CLOTH,
+            colorways: Vec::new(),
         }
     }
 }
@@ -82,6 +85,14 @@ impl Settings {
                 "hat" => s.hat_order = v == "1",
                 "hoop" => s.hoop = v.parse().unwrap_or(0),
                 "connect" => s.connect_mm = v.parse().unwrap_or(0.0),
+                "colorways" if v.len() <= 2_000_000 && v.len() % 2 == 0 => {
+                    let bytes: Option<Vec<u8>> = v.as_bytes().chunks_exact(2)
+                        .map(|pair| std::str::from_utf8(pair).ok().and_then(|s| u8::from_str_radix(s, 16).ok()))
+                        .collect();
+                    if let Some(bytes) = bytes {
+                        s.colorways = serde_json::from_slice(&bytes).unwrap_or_default();
+                    }
+                }
                 "cloth" if v.len() == 6 => {
                     if let Ok(n) = u32::from_str_radix(v, 16) {
                         s.cloth = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
@@ -102,6 +113,15 @@ impl Settings {
                 " connect={}",
                 crate::params::fmt_num(self.connect_mm)
             ));
+        }
+        if !self.colorways.is_empty() {
+            if let Ok(bytes) = serde_json::to_vec(&self.colorways) {
+                if bytes.len() <= 1_000_000 {
+                    use std::fmt::Write;
+                    s.push_str(" colorways=");
+                    for b in bytes { let _ = write!(s, "{b:02x}"); }
+                }
+            }
         }
         if self.cloth != DEFAULT_CLOTH {
             let [r, g, b] = self.cloth;
@@ -1311,5 +1331,16 @@ mod tests {
             "{out}"
         );
         assert!(!out.contains("data-threadline"), "{out}");
+    }
+}
+
+#[cfg(test)]
+mod colorway_settings_tests {
+    use super::*;
+    #[test]
+    fn named_colorways_roundtrip() {
+        let mut settings = Settings::default();
+        settings.colorways.push(("Blue & gold".into(), vec![("path 1".into(), false, [1, 2, 3])]));
+        assert_eq!(Settings::parse(&settings.format()), settings);
     }
 }
