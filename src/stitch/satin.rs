@@ -243,7 +243,14 @@ pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
             // dense straight column must retain both of its edges.
             let fraction = |d: f64, other: f64| {
                 if d < SHORT_DIST && d < other * 0.8 {
-                    (SHORT_INSET + 0.10 * (1.0 - d / SHORT_DIST)).min(0.25)
+                    {
+                        // Smoothly increase the inset as the inner rail crowds.
+                        // Avoid an abrupt density change at the threshold.
+                        let severity = (1.0 - d / SHORT_DIST).clamp(0.0, 1.0);
+                        let asymmetry = (1.0 - d / other.max(1e-9)).clamp(0.0, 1.0);
+                        ((SHORT_INSET + 0.10 * severity) * (severity * 2.0).min(1.0)
+                            * (asymmetry * 2.5).min(1.0)).min(0.25)
+                    }
                 } else { 0.0 }
             };
             let fa = fraction(da, db);
