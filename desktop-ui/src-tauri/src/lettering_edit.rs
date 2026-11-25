@@ -26,7 +26,7 @@ impl LetteringSettings {
             || self.text.chars().any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t')) {
             return Err("Enter up to 120 characters of lettering.".into());
         }
-        if !(3.0..=80.0).contains(&self.size) || !(0.0..=5.0).contains(&self.spacing)
+        if !(0.5..=80.0).contains(&self.size) || !(0.0..=5.0).contains(&self.spacing)
             || !(-300.0..=300.0).contains(&self.arc) {
             return Err("Check the capital height, letter spacing and arc radius.".into());
         }
