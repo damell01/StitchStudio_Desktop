@@ -61,6 +61,9 @@ function applyThreadMap(material:THREE.MeshStandardMaterial, texture:THREE.Canva
         if (all(greaterThanEqual(threadUV, vec2(0.0))) && all(lessThanEqual(threadUV, vec2(1.0)))) {
           vec4 overlay = texture2D(threadMap, threadUV);
           diffuseColor.rgb = mix(diffuseColor.rgb, overlay.rgb, overlay.a);
+          // Subtle yarn relief follows the stitched texture without extra geometry.
+          float edge = texture2D(threadMap, threadUV + vec2(0.0007,0.0007)).a - overlay.a;
+          diffuseColor.rgb *= 1.0 + clamp(edge * 0.18, -0.10, 0.12);
         }
       }
     `);
@@ -70,7 +73,7 @@ function applyThreadMap(material:THREE.MeshStandardMaterial, texture:THREE.Canva
         vec2 uvThread = (vHoodiePosition.xy - vec2(${textureBounds.left}, ${textureBounds.bottom})) / vec2(${textureBounds.width}, ${textureBounds.height}) - threadOffset;
         if (all(greaterThanEqual(uvThread, vec2(0.0))) && all(lessThanEqual(uvThread, vec2(1.0)))) {
           float coverage = texture2D(threadMap, uvThread).a;
-          roughnessFactor = mix(roughnessFactor, 0.38, coverage);
+          roughnessFactor = mix(roughnessFactor, 0.46, coverage);
         }
       }
     `);
@@ -122,6 +125,8 @@ export default function HoodieView(props:Props) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
     renderer.setClearColor(0,0);
     renderer.outputColorSpace=THREE.SRGBColorSpace;
+    renderer.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure=1.05;
     renderer.domElement.setAttribute('aria-hidden','true');
     element.appendChild(renderer.domElement);
 
@@ -134,6 +139,8 @@ export default function HoodieView(props:Props) {
     const fill=new THREE.DirectionalLight(0xd8defb,1.0);
     fill.position.set(-2,0,2);
     scene.add(fill);
+    const rim=new THREE.DirectionalLight(0xffffff,1.1);
+    rim.position.set(1,2,-2);scene.add(rim);
     const camera=new THREE.PerspectiveCamera(30,1,.05,20);
     camera.position.set(0,.025,1.88);
     camera.lookAt(0,0,0);
