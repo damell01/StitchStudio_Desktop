@@ -328,7 +328,35 @@ impl Studio {
             });
         });
 
+        // Use the current source immediately after a palette change.
+        let src = self.palettes.source;
         let colors = self.palettes.colors(src, self.view_tools.brand);
+        let search_id = ui.make_persistent_id((id, "thread-search"));
+        let mut query = ui.ctx().data_mut(|d| d.get_temp::<String>(search_id).unwrap_or_default());
+        ui.horizontal(|ui| {
+            let width = (ui.available_width() - 54.0).max(60.0);
+            ui.add(egui::TextEdit::singleline(&mut query)
+                .hint_text("Name, number or hex")
+                .desired_width(width));
+            if ui.add_enabled(!query.is_empty(), egui::Button::new("Clear")).clicked() {
+                query.clear();
+            }
+        });
+        ui.ctx().data_mut(|d| d.insert_temp(search_id, query.clone()));
+        let query = query.trim().to_lowercase();
+        let mut visible: Vec<_> = colors.iter().filter(|(c, name)| {
+            query.is_empty() || name.to_lowercase().contains(&query)
+                || hex(*c).contains(&query)
+        }).collect();
+        // Put the nearest available threads first when matching an object.
+        if let Some(current) = current {
+            visible.sort_by(|a, b| {
+                zigzag::formats::perceptual_distance(current, a.0)
+                    .total_cmp(&zigzag::formats::perceptual_distance(current, b.0))
+            });
+        }
+        crate::theme::caption(ui, format!("{} of {} threads{}", visible.len(), colors.len(),
+            if current.is_some() { " · closest first" } else { "" }));
         let mine: Vec<(usize, String)> = self
             .palettes
             .mine
@@ -344,11 +372,11 @@ impl Studio {
         let cols = ((w + gap) / (20.0 + gap)).floor().max(1.0);
         let size = ((w - (cols - 1.0) * gap) / cols).floor();
         let cols = cols as usize;
-        let mut tiles: Vec<Option<&([u8; 3], String)>> = colors.iter().map(Some).collect();
-        if matches!(src, Source::Mine(_)) {
+        let mut tiles: Vec<Option<&([u8; 3], String)>> = visible.into_iter().map(Some).collect();
+        if query.is_empty() && matches!(src, Source::Mine(_)) {
             tiles.push(None); // the + tile
         }
-        ui.scope(|ui| {
+        egui::ScrollArea::vertical().id_salt((id, "palette-grid")).max_height(160.0).auto_shrink([false, true]).show(ui, |ui| {
             ui.spacing_mut().item_spacing = Vec2::splat(gap);
             for row in tiles.chunks(cols) {
                 ui.horizontal(|ui| {
@@ -417,6 +445,9 @@ impl Studio {
                 });
             }
         });
+        if tiles.is_empty() && !query.is_empty() {
+            crate::theme::caption(ui, "No matching threads. Try another name or number.");
+        }
         if colors.is_empty() && matches!(src, Source::Mine(_)) {
             crate::theme::caption(ui, "Empty. Select an object and click + to add its thread.");
         }
