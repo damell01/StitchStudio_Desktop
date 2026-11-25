@@ -48,6 +48,7 @@ mod tests {
 
     fn project(name: &str) -> Project {
         Project {
+            thread_assignments: Default::default(),
             source_svg: None,
             source_offset: None,
             version: 1,
