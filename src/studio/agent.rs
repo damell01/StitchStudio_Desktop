@@ -103,6 +103,8 @@ struct Run {
 #[derive(Default)]
 pub struct AgentState {
     pub kind: AgentKind,
+    /// Opt-in to external inference; native commands remain available offline.
+    pub inference_enabled: bool,
     pub prompt: String,
     pub log: Vec<Entry>,
     /// Claude's session id or Codex's thread id, to continue the chat.
@@ -197,8 +199,14 @@ impl AgentState {
                 _ => AgentKind::Codex,
             })
             .unwrap_or_default();
+        let inference_enabled = config.as_ref()
+            .and_then(|f| std::fs::read_to_string(f).ok())
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v["inference_enabled"].as_bool())
+            .unwrap_or(false);
         AgentState {
             kind,
+            inference_enabled,
             config,
             ..Default::default()
         }
@@ -211,7 +219,7 @@ impl AgentState {
         }
         let _ = std::fs::write(
             f,
-            serde_json::json!({ "agent": self.kind.key() }).to_string(),
+            serde_json::json!({ "agent": self.kind.key(), "inference_enabled": self.inference_enabled }).to_string(),
         );
     }
 
@@ -1130,6 +1138,10 @@ impl Studio {
         let top = ui.cursor().top();
 
         let a = &mut self.agent;
+        if ui.checkbox(&mut a.inference_enabled, "Enable AI inference").on_hover_text("Off: only instant native commands; no external AI process is started.").changed() {
+            if !a.inference_enabled { a.stop(); }
+            a.save();
+        }
         // The conversation: plain, on the panel itself.
         let transcript_h = egui::Frame::new()
             .inner_margin(egui::Margin::symmetric(0, space::S as i8))
@@ -1143,7 +1155,7 @@ impl Studio {
                     );
                     // Its program isn't on this Mac: how to install it instead.
                     let kind = a.kind;
-                    if a.installed(kind, &ui.ctx().clone()) == Some(false) {
+                    if a.inference_enabled && a.installed(kind, &ui.ctx().clone()) == Some(false) {
                         let mut child = ui.new_child(
                             egui::UiBuilder::new()
                                 .max_rect(r)
@@ -1328,6 +1340,10 @@ impl Studio {
                 self.agent.log.push(Entry::Error("Action unavailable in the current selection or document.".into()));
             }
             ctx.request_repaint();
+            return;
+        }
+        if !self.agent.inference_enabled {
+            self.agent.log.push(Entry::Error("AI inference is disabled. Try a native quick command or enable AI in the assistant panel.".into()));
             return;
         }
         let addr = self.mcp.as_ref().map(|m| m.addr);
