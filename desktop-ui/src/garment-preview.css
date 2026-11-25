@@ -29,3 +29,19 @@
 .garment-view-switch { display: flex; gap: 5px; }
 .garment-view-switch button { flex: 1; }
 .garment-view-switch button[aria-pressed=true] { border-color: var(--lav-accent,#6945a2); background: var(--brand-soft,#eee6fb); }
+
+/* Desktop mockup studio */
+.garment-preview{width:min(1120px,calc(100vw - 32px));padding:16px}
+.garment-preview-layout{grid-template-columns:minmax(0,1fr) 260px;gap:12px}
+.garment-preview-display{min-width:0;border:1px solid var(--workspace-border,#ded3ed);border-radius:12px;overflow:hidden;background:var(--workspace-surface,#fff)}
+.garment-stage-heading,.garment-stage-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;font-size:12px}
+.garment-stage-heading small,.garment-stage-footer{opacity:.85}
+.garment-preview-display .garment-preview-stage{border-inline:0;border-radius:0}
+.garment-preview-stage canvas:not(.hoodie-view canvas){max-height:59vh;object-fit:contain}
+.garment-preview-options{gap:7px;padding:12px;border:1px solid var(--workspace-border,#ded3ed);border-radius:12px;max-height:68vh;overflow:auto;scrollbar-width:thin}
+.garment-preview-options h3{margin:0 0 4px;font-size:15px}
+.garment-fabric-swatches{display:flex;gap:7px;flex-wrap:wrap}
+.garment-fabric-swatches button{width:28px;height:28px;padding:0;border-radius:50%;border:1px solid #9d91a8}
+.garment-fabric-swatches button[aria-pressed=true]{outline:2px solid var(--brand,#754bb0);outline-offset:2px}
+.garment-view-switch button{font-size:12px;min-width:0;padding:6px}
+@media(max-width:700px){.garment-preview-layout{grid-template-columns:1fr}.garment-preview-options{max-height:none}}
