@@ -602,6 +602,46 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
         }
         doc.set_paths(&edits).map_err(|e|e.to_string())?;
     }
+    // Collect consecutive small same-color hatch fragments as a region.
+    // A collective closing can join a group that pairwise closing cannot.
+    // Restrict to unbranched narrow marks, identical settings, and explicit
+    // solid mode; protect significant holes and reject large area expansion.
+    if options.solid && options.merge && texture_radius>=4.0{
+        let mut i=0;let mut budget=64usize;
+        while i+2<doc.shapes.len()&&budget>0{
+            let first=&doc.shapes[i];
+            let mut parts=Vec::new();
+            let mut ids=Vec::new();
+            for j in i..(i+12).min(doc.shapes.len()){
+                let q=&doc.shapes[j];
+                if !eligible(doc,j)||q.color!=first.color||q.params!=first.params||q.groups!=first.groups
+                    ||q.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill||q.params.stop==Some(true)||q.params.trim==Some(true)
+                    ||q.params.start.is_some()||q.params.end.is_some(){break}
+                if let Geometry::Fill{rings,rule}=&q.geometry{
+                    if zigzag::design::thin_centerline(rings,*rule).is_none(){break}
+                    parts.push((rings.clone(),*rule));ids.push(q.uid);
+                }else{break}
+            }
+            if parts.len()<3{i+=1;continue}
+            budget-=1;
+            let united=boolean::pathfinder(&parts,PathOp::Unite);
+            let grown=boolean::offset(&united,FillRule::EvenOdd,texture_radius);
+            let closed=boolean::offset(&grown,FillRule::EvenOdd,-texture_radius);
+            let before=zigzag::stitch::satin::components(&united,FillRule::EvenOdd);
+            let after=zigzag::stitch::satin::components(&closed,FillRule::EvenOdd);
+            let area=|c:&Vec<Vec<zigzag::geom::Polyline>>|c.iter().map(|r|r.first().map(|p|boolean::ring_area(p)).unwrap_or(0.0)-r.iter().skip(1).map(|p|boolean::ring_area(p)).sum::<f64>()).sum::<f64>();
+            let holes=|c:&Vec<Vec<zigzag::geom::Polyline>>|c.iter().flat_map(|r|r.iter().skip(1)).filter(|r|boolean::ring_area(r)>100.0).count();
+            let old=area(&before);let new=area(&after);
+            if after.is_empty()||after.len()>=before.len()||old<=0.0||new<old*0.95||new>old*1.35||holes(&before)!=holes(&after){i+=1;continue}
+            let path=zigzag::bezier::from_rings(&closed,0.2);
+            if path.is_empty(){i+=1;continue}
+            doc.set_path(i,&path).map_err(|e|e.to_string())?;
+            let gone:Vec<_>=doc.shapes.iter().enumerate().filter(|(_,q)|ids[1..].contains(&q.uid)).map(|(j,_)|j).collect();
+            if gone.len()!=ids.len()-1{return Err("Shading fragment identity changed".into())}
+            doc.delete_many(&gone).map_err(|e|e.to_string())?;
+            i+=1;
+        }
+    }
     // Solid mode can join narrow hatch gaps between neighboring fragments,
     // not just holes within a single outline. Work on adjacent same-color
     // entries only, and do not touch lettering or special machine stops.
