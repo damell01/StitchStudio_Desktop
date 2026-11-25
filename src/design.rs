@@ -1119,10 +1119,30 @@ fn sew_order(shapes: &[Shape], opt: &PlanOptions) -> Vec<usize> {
     }
     let bottom = all.max.y;
     // deps[j] = shapes that must come before j (earlier in the document and overlapping).
+    // Only relax dependencies for ordinary filled regions with a clear
+    // separation. Satin, strokes and other special stitch types retain the
+    // conservative bounding-box dependency.
+    let fill_areas: Vec<Option<Vec<Polyline>>> = shapes.iter().map(|s| {
+        match (&s.geometry, s.params.kind.unwrap_or(Kind::Fill)) {
+            (Geometry::Fill { rings, rule }, Kind::Fill) =>
+                Some(boolean::offset(rings, *rule, opt.overlap.abs().max(5.0))),
+            _ => None,
+        }
+    }).collect();
     let deps: Vec<Vec<usize>> = (0..n)
         .map(|j| {
             (0..j)
-                .filter(|&i| overlaps(&bounds[i], &bounds[j]))
+                .filter(|&i| {
+                    if !overlaps(&bounds[i], &bounds[j]) { return false; }
+                    match (&fill_areas[i], &fill_areas[j]) {
+                        (Some(a), Some(b)) if !a.is_empty() && !b.is_empty() =>
+                            !boolean::pathfinder(
+                                &[(a.clone(), FillRule::EvenOdd), (b.clone(), FillRule::EvenOdd)],
+                                boolean::PathOp::Intersect,
+                            ).is_empty(),
+                        _ => true,
+                    }
+                })
                 .collect()
         })
         .collect();
