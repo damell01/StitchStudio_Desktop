@@ -694,21 +694,39 @@ fn split_at_tips(ring: &[P]) -> Option<Rails> {
             sync: Vec::new(),
         }
     };
-    let mean_width = |rails: &Rails| -> f64 {
-        let step = polyline_length(&rails.a).max(polyline_length(&rails.b)) / 24.0;
-        let ps = pairs(rails, step.max(1.0));
-        ps.iter().map(|(a, b)| a.dist(*b)).sum::<f64>() / ps.len().max(1) as f64
-    };
-    // Each candidate's width worked out once (not twice per comparison).
-    cands
-        .iter()
-        .filter(|c| c.0 >= best * 0.85)
-        .map(|&(_, i, j)| {
-            let rails = rails_for(i, j);
-            (mean_width(&rails), rails)
-        })
-        .min_by(|x, y| x.0.total_cmp(&y.0))
-        .map(|(_, rails)| rails)
+    // Prefer columns that follow the interior and have consistent width,
+    // rather than simply minimizing mean width (which can favor pinched
+    // or crossed rails). Keep the candidate search bounded.
+    let mut ranked: Vec<_> = cands.into_iter()
+        .filter(|c| c.0 >= best * 0.85).collect();
+    ranked.sort_by(|a,b| b.0.total_cmp(&a.0));
+    let outline = vec![ring.to_vec()];
+    ranked.into_iter().take(96).filter_map(|(_,i,j)| {
+        let rails = rails_for(i,j);
+        let step = polyline_length(&rails.a).max(polyline_length(&rails.b)) / 32.0;
+        let ps = pairs(&rails, step.max(1.0));
+        if ps.len()<3 {return None}
+        let mut width=0.0_f64;
+        let mut widest=0.0_f64;
+        let mut variation=0.0_f64;
+        let mut previous:Option<f64>=None;
+        let mut outside=0usize;
+        for &(a,b) in &ps {
+            let w=a.dist(b);
+            width+=w;
+            widest=widest.max(w);
+            if let Some(prev)=previous {variation+=(w-prev).abs();}
+            previous=Some(w);
+            if w>1.0 {
+                for t in [0.25,0.5,0.75] {
+                    if !point_inside(&outline,FillRule::EvenOdd,a.lerp(b,t)) {outside+=1;}
+                }
+            }
+        }
+        let n=ps.len() as f64;
+        let cost=width/n+widest*0.18+variation/n*0.6+outside as f64/n*80.0;
+        Some((cost,rails))
+    }).min_by(|a,b| a.0.total_cmp(&b.0)).map(|(_,rails)| rails)
 }
 
 #[cfg(test)]
