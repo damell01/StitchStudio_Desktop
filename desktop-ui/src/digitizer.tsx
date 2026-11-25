@@ -53,7 +53,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const [original, setOriginal] = useState<Art | null>(initialArtwork??null);
   const [pdf, setPdf] = useState<File | null>(null);
   const [settings, setSettings] = useState(defaults);
-  const [outputFormat,setOutputFormat]=useState(()=>{const saved=localStorage.getItem('studio-digitizer-format')||'dst';return ['dst','pes','pec','jef','exp','vp3'].includes(saved)?saved:'dst'});
+  const [outputFormat,setOutputFormat]=useState(()=>{let preferred='';try{const id=localStorage.getItem('studio-default-machine');const machines: {id:string;format?:string}[]=JSON.parse(localStorage.getItem('studio-machines')||'[]');preferred=machines.find(m=>m.id===id)?.format?.toLowerCase()||''}catch{}const saved=preferred||localStorage.getItem('studio-digitizer-format')||'dst';return ['dst','pes','pec','jef','exp','vp3'].includes(saved)?saved:'dst'});
   const [started,setStarted]=useState(false);
   const [inspector,setInspector] = useState<'settings'|'quality'|'threads'>('settings');
   const [generated, setGenerated] = useState<{ art: Art; settings: typeof defaults; review: Review } | null>(null);
