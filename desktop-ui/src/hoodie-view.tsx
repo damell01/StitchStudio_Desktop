@@ -29,9 +29,10 @@ function paintThreads(context:CanvasRenderingContext2D, props:Props) {
       context.moveTo(run[0][0],run[0][1]);
       for(let i=1;i<run.length;i++)context.lineTo(run[i][0],run[i][1]);
     }
+    context.save();context.translate(.13,.18);
     context.lineWidth=.74;
     context.strokeStyle='#1a111f71';
-    context.stroke();
+    context.stroke();context.restore();
     context.lineWidth=.48;
     context.strokeStyle=`rgb(${block.color.join(',')})`;
     context.stroke();
@@ -60,6 +61,16 @@ function applyThreadMap(material:THREE.MeshStandardMaterial, texture:THREE.Canva
         if (all(greaterThanEqual(threadUV, vec2(0.0))) && all(lessThanEqual(threadUV, vec2(1.0)))) {
           vec4 overlay = texture2D(threadMap, threadUV);
           diffuseColor.rgb = mix(diffuseColor.rgb, overlay.rgb, overlay.a);
+        }
+      }
+    `);
+    shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>', `
+      #include <roughnessmap_fragment>
+      if (vHoodiePosition.z > 0.115 && vHoodieFront > 0.14 && abs(vHoodiePosition.x) < 0.24) {
+        vec2 uvThread = (vHoodiePosition.xy - vec2(${textureBounds.left}, ${textureBounds.bottom})) / vec2(${textureBounds.width}, ${textureBounds.height}) - threadOffset;
+        if (all(greaterThanEqual(uvThread, vec2(0.0))) && all(lessThanEqual(uvThread, vec2(1.0)))) {
+          float coverage = texture2D(threadMap, uvThread).a;
+          roughnessFactor = mix(roughnessFactor, 0.38, coverage);
         }
       }
     `);
