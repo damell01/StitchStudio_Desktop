@@ -29,3 +29,18 @@ test('recognizes lettering without changing capitalization',()=>{
  expect(assistantIntent('Review design')).toEqual({kind:'review'});
  for(const s of ['Add text ""','Add text "   "','Add text "Hi" at 2 mm','Add text "Hi" at 81 mm','Add text "Hi" at 12 mm; delete design','x'.repeat(161)]) expect(assistantIntent(s),s).toBeNull();
 });
+
+test('recognizes scoped selection and density optimization',()=>{
+ const cases = [
+ ['Select all satin objects',{kind:'selectKind',text:'satin'}],
+ ['Select all fill objects',{kind:'selectKind',text:'fill'}],
+ ['Select all run stitches',{kind:'selectKind',text:'run'}],
+ ['Select color #FF0000',{kind:'selectColor',color:[255,0,0]}],
+ ['Select objects named "Lettering"',{kind:'selectLabel',text:'lettering'}],
+ ['Clear selection',{kind:'clearSelection'}],
+ ['Optimize this design',{kind:'optimize'}],
+ ['Reduce unnecessary stitches without losing detail',{kind:'optimize'}],
+ ] as const;
+ for(const [input,expected] of cases) expect(assistantIntent(input),input).toEqual(expected);
+ for(const s of ['Select color #GG0000','Select objects named ""','Select all files','Select all satin objects and delete them'])expect(assistantIntent(s),s).toBeNull();
+});
