@@ -48,6 +48,16 @@ ls src-tauri/target/release/bundle/dmg/
 
 For installation, open the DMG and copy the app into Applications. Local packaging targets the build machine’s architecture. Distribution outside your machine needs a Developer ID signing identity and Apple notarization. See [Tauri signing and notarization](https://v2.tauri.app/distribute/sign/macos/).
 
+## Offline lettering recognition
+
+The React/Tauri digitizer includes OCRS and RTen with embedded model weights. On the first build, Cargo uses curl to obtain approximately 12.2 MB of checksum-pinned model data; subsequent builds reuse cached weights. For an air-gapped build, set `STITCHSTUDIO_OCR_MODELS` to a folder containing the two verified `.rten` files. The installed application does not download anything or require Tesseract, Python, a GPU, or a cloud account.
+
+After pulling the OCR dependency changes, run `cargo check --manifest-path src-tauri/Cargo.toml` from `desktop-ui` without `--locked` once to refresh the Cargo lockfile, then launch the normal Tauri dev command. The root legacy editor lockfile also needs refreshing when building it.
+
+Choose raster artwork, click **Recognize lettering**, correct the text or font, select regions to replace, and click **Preview editable lettering**. Compare the generated stitches against the source, then open the design studio. If the traced region is inseparable from other artwork, leave it unchecked. Small or decorative lettering may need manual correction.
+
+Model provenance: Robert Knight's OCRS models, fetched from `https://ocrs-models.s3-accelerate.amazonaws.com/`; pinned digests are in `build.rs`. Review the model redistribution terms before publishing an installer.
+
 ## First design
 
 1. From Home, choose **Digitize artwork**. Select or drop a raster image, SVG, or PDF. For a multipage PDF, choose the page before tracing.
