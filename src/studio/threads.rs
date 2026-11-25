@@ -719,6 +719,15 @@ impl Studio {
                     p.spacing = None;
                     p.underlay = None;
                     p.angle = None;
+                    p.pull = None;
+                    p.satin_underlay = None;
+                    // Classify a copy: the classifier may expand wide stroke
+                    // geometry, which must not replace editable source artwork.
+                    let mut candidate = self.doc.shapes[i].clone();
+                    zigzag::design::auto_stitch_types(std::slice::from_mut(&mut candidate));
+                    let shape = &mut self.doc.shapes[i];
+                    shape.params.kind = candidate.params.kind.filter(|k| crate::widgets::allowed_kinds(shape).contains(k));
+                    shape.params.angle = candidate.params.angle;
                 }
                 self.status = "Restored automatic stitch settings for selection.".into();
             }
