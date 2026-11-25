@@ -19,6 +19,7 @@ mod gpu;
 mod icons;
 mod kits;
 mod layout;
+mod local_ai;
 mod lettering;
 mod machine;
 mod mcp;
