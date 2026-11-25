@@ -258,9 +258,20 @@ pub fn check(
     let mut invalid = 0usize;
     let mut repeated = 0usize;
     let mut worst = 0usize;
+    let mut hotspots = 0usize;
+    let mut max_penetrations = 0usize;
     for block in &design.blocks {
         for run in &block.runs {
             let mut edges = std::collections::HashMap::new();
+            let mut penetrations = std::collections::HashMap::new();
+            for p in &run.pts {
+                if !p.x.is_finite() || !p.y.is_finite() { continue; }
+                let key = (p.x.round() as i64, p.y.round() as i64);
+                let count = penetrations.entry(key).or_insert(0usize);
+                *count += 1;
+                max_penetrations = max_penetrations.max(*count);
+                if *count == 10 { hotspots += 1; }
+            }
             invalid += run.pts.iter().filter(|p| !p.x.is_finite() || !p.y.is_finite()).count();
             for pair in run.pts.windows(2) {
                 let length = pair[0].dist(pair[1]) / 10.0;
@@ -286,6 +297,9 @@ pub fn check(
             && design.per_shape.get(i).copied().unwrap_or(0) == 0 {
             add(Some(i), Level::Warning, "Object generated no stitches. Inspect its geometry or stitch type.".into());
         }
+    }
+    if hotspots > 0 {
+        add(None, Level::Warning, format!("{hotspots} needle locations receive at least ten penetrations within a run (maximum {max_penetrations}). Inspect dense corners, tie stitches and repeated travel before sewing."));
     }
     if repeated > 0 {
         add(None, Level::Warning, format!("{repeated} stitch segments are traversed at least five times within a run (maximum {worst}). Inspect hole boundaries, travel routes and intentional reinforcement before sewing."));
