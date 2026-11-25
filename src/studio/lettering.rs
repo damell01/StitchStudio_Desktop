@@ -362,6 +362,26 @@ impl Studio {
                 committed = true;
             }
         });
+        ui.collapsing("Initials & badge templates", |ui| {
+            ui.horizontal_wrapped(|ui| {
+                for (label, sample, radius) in [
+                    ("Single initial", "A", 0.0),
+                    ("Two initials", "AB", 0.0),
+                    ("Three initials", "ABC", 0.0),
+                    ("Spaced initials", "A B C", 0.0),
+                    ("Arched badge", "YOUR NAME", 35.0),
+                    ("Lower badge", "EST. 2026", -35.0),
+                ] {
+                    if ui.small_button(label).on_hover_text("Replace text with an editable template").clicked() {
+                        spec.text = sample.into();
+                        spec.path = None;
+                        spec.arc_mm = radius;
+                        committed = true;
+                    }
+                }
+            });
+            ui.label("Replace the sample letters with your own initials.");
+        });
         ui.separator();
         form(ui, &format!("{id}-form"), |fm| {
             fm.row("Text", |ui, lid| {
