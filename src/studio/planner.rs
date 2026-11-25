@@ -111,10 +111,8 @@ impl Studio {
     /// Plan the stitches for the document as it is now: right away, or (for
     /// a big design) on the worker, the current plan staying until it's done.
     pub fn plan_changes(&mut self, ctx: &egui::Context) {
-        if !self.planner.slow {
-            self.replan();
-            return;
-        }
+        // Interactive edits always schedule planning off the UI thread.
+        // Even a previously cheap design can become expensive after an edit.
         if self.planner.jobs.is_none() {
             self.planner.start(ctx);
         }
@@ -132,9 +130,13 @@ impl Studio {
             .as_ref()
             .is_some_and(|tx| tx.send(job).is_ok());
         if !sent {
-            // No worker after all: plan here.
+            // Keep the editor responsive and prevent exporting stale stitches.
             self.planner.jobs = None;
-            self.replan();
+            self.planner.pending = false;
+            self.dirty = false;
+            self.issues = vec![Issue { shape: None, level: checks::Level::Error,
+                message: "Background stitch planner unavailable. Edit again to retry.".into() }];
+            self.status = "Could not start background stitch planning.".into();
             return;
         }
         // Names are cheap, and the lists show them straight away.
