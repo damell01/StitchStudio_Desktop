@@ -273,6 +273,15 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         <button onClick={() => update('removeBackground', false)}>Retry with background</button>}
       {review && <>
         <h3>Stitch quality</h3>
+        <section className="digitizer-quality-summary" aria-label="Design preflight">
+          <strong>{review.warnings.length || review.quality.long || review.quality.zero ? 'Review recommended' : 'No flagged geometry issues'}</strong>
+          <small>Automated geometry checks are not a substitute for a test sew.</small>
+          <div><span>Unique threads</span><b>{new Set(review.plan.blocks.map(b=>b.color.join(','))).size}</b></div>
+          <div><span>Trims per 1,000 points</span><b>{(1000*review.plan.trims/Math.max(1,review.plan.stitches)).toFixed(1)}</b></div>
+          <div><span>Long segments</span><b>{review.quality.long}</b></div>
+          <div><span>Near-zero segments</span><b>{review.quality.zero}</b></div>
+          <button type="button" onClick={()=>setMode('density')}>Inspect needle density</button>
+        </section>
         <div className="digitize-metrics">
           <div><strong>{review.plan.stitches.toLocaleString()}</strong><small>Stitch points</small></div>
           <div><strong>{review.plan.blocks.length}</strong><small>Color blocks</small></div>
@@ -280,7 +289,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         </div>
         <p>{(review.quality.sewn_mm / 1000).toFixed(2)} m of sewn path</p>
         <p>DST preview · {review.jumps} jumps · {review.color_changes} color changes</p>
-        <details className="digitizer-options" open>
+        <details className="digitizer-options">
           <summary>Thread setup · {new Set(review.plan.blocks.map(b=>b.color.join(','))).size} unique colors</summary>
           <p>Follow this sewing order on your machine. Repeated colors reuse the same thread slot. DST does not store thread colors.</p>
           <div style={{maxHeight:280,overflow:'auto'}}>
