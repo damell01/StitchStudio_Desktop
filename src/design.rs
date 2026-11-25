@@ -625,7 +625,15 @@ fn satin_pieces_strip(
     let mut pieces = Vec::new();
     let mut fallback = Vec::new();
     let whole = t0 <= 0.0 && t1 >= 1.0;
-    for r in satin_rails(shape) {
+    // Match automatic filled satin rails to their own connected component.
+    // Border columns are intentionally centered on the outline and must not
+    // be subjected to the interior-only validation used for filled lettering.
+    let components = match &shape.geometry {
+        Geometry::Fill { rings, rule } if !p.is_border() =>
+            satin::components(rings, *rule),
+        _ => Vec::new(),
+    };
+    for (component_index, r) in satin_rails(shape).into_iter().enumerate() {
         match r {
             Ok(rails) => {
                 let rails = if whole {
@@ -637,17 +645,18 @@ fn satin_pieces_strip(
                 // Validate cross-column samples against slightly expanded
                 // source geometry before generating any needle movements.
                 if whole && (opt.hat_order || shape.groups.iter().any(|g| g.starts_with("tl-lettering-"))) {
-                    if let Geometry::Fill { rings, rule } = &shape.geometry {
-                        let allowed = boolean::offset(rings, *rule, 2.0);
+                    if let Some(comp) = components.get(component_index) {
+                        let allowed = boolean::offset(comp, FillRule::EvenOdd, 2.0);
                         let pairs = satin::pairs(&rails, 2.0);
                         if allowed.is_empty() || pairs.is_empty() || pairs.iter().any(|(a,b)| {
                             a.dist(*b) > 65.0 ||
                             !segment_inside(&allowed, FillRule::EvenOdd, *a, *b, 1.0)
                         }) {
                             notes.push("Unsafe automatic satin pairing; using fill instead.".into());
-                            // Fall back once for the entire source shape, not
-                            // once per component, to avoid duplicate stitching.
-                            return (Vec::new(), fill_runs(rings, *rule, shape, opt));
+                            // Preserve the satin columns that passed validation.
+                            // Fill only this rejected component, exactly once.
+                            fallback.extend(fill_runs(comp, FillRule::EvenOdd, shape, opt));
+                            continue;
                         }
                     }
                 }
