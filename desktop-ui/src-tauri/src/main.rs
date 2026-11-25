@@ -507,7 +507,7 @@ async fn save_project(width: f64, height: f64, format: String, thread_assignment
     project.thread_assignments = thread_assignments.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
         write_project(&path, &project)?;
-        Ok(Some(LibraryEntry { file:path.to_string_lossy().into_owned(), name:project.name, stitches:project.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(), colors:project.blocks.len(), width:project.width,height:project.height,modified:std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() }))
+        Ok(Some(LibraryEntry { file:path.to_string_lossy().into_owned(), name:project.name, stitches:project.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(), colors:project.blocks.len(), width:project.width,height:project.height,modified:std::fs::metadata(&path).ok().and_then(|m|m.modified().ok()).and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0),created:std::fs::metadata(&path).ok().and_then(|m|m.created().ok()).and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()) }))
     }).await.map_err(|err| err.to_string())?
 }
 
@@ -1291,7 +1291,7 @@ fn apply_digitizer_draft(id: u64, state: tauri::State<'_, Mutex<Workspace>>) -> 
     Ok(())
 }
 #[derive(serde::Serialize)]
-struct LibraryEntry {file:String,name:String,stitches:usize,colors:usize,width:f64,height:f64,modified:u64}
+struct LibraryEntry {file:String,name:String,stitches:usize,colors:usize,width:f64,height:f64,modified:u64,created:Option<u64>}
 #[tauri::command]
 async fn import_project_files()->Result<Option<Vec<LibraryEntry>>,String>{
  let Some(files)=rfd::AsyncFileDialog::new().add_filter("Stitch Studio projects",&["stitchstudio"]).pick_files().await else{return Ok(None)};
@@ -1302,7 +1302,7 @@ async fn import_project_files()->Result<Option<Vec<LibraryEntry>>,String>{
  let Ok(meta)=std::fs::symlink_metadata(&path) else{continue};
  if !meta.is_file()||meta.len()>100_000_000||!path.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){continue}
  let Ok(p)=Project::load(&path) else{continue};if p.version!=1{continue}
- out.push(LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0)});
+ out.push(LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0),created:meta.created().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs())});
  }Some(out)
  }).await.map_err(|e|e.to_string())
 }
@@ -1337,7 +1337,7 @@ async fn scan_projects()->Result<Option<Vec<LibraryEntry>>,String>{
  if meta.is_dir(){if let Ok(entries)=std::fs::read_dir(&path){stack.extend(entries.flatten().map(|e|e.path()))}continue}
  if !meta.is_file()||meta.len()>100_000_000||!path.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){continue}
  let Ok(bytes)=std::fs::read(&path) else{continue};let Ok(p)=serde_json::from_slice::<Project>(&bytes) else{continue};if p.version!=1{continue}
- out.push(LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0)});
+ out.push(LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0),created:meta.created().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs())});
  }out.sort_by(|a,b|b.modified.cmp(&a.modified));Some(out)
  }).await.map_err(|e|e.to_string())
 }
