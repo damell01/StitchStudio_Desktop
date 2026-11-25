@@ -131,6 +131,15 @@ fn thread_segment(out: &mut Vec<egui::Shape>, a: Pos2, b: Pos2, w: f32, shade: &
     let u = d / len;
     let inset = (w * 0.3).min(len * 0.2);
     let (a, b) = (a + u * inset, b - u * inset);
+    // At close zoom, the thread casts a small contact shadow onto the
+    // fabric. Keep it local to the stitch so cached meshes remain movable.
+    if w >= 4.0 && len >= w {
+        let offset = Vec2::splat(w * 0.10);
+        out.push(egui::Shape::line_segment(
+            [a + offset, b + offset],
+            Stroke::new(w * 1.10, Color32::from_black_alpha(55)),
+        ));
+    }
     out.push(egui::Shape::line_segment([a, b], Stroke::new(w, shade[0])));
     out.push(egui::Shape::line_segment(
         [a, b],
@@ -610,7 +619,9 @@ fn design_shapes(
                 }
                 StitchView::Thread if w >= 2.2 => {
                     for s in pts.windows(2) {
-                        if seen(s[0]) || seen(s[1]) {
+                        // A long stitch may cross the viewport even when
+                        // neither endpoint is visible.
+                        if clip.is_none_or(|r| r.intersects(Rect::from_two_pos(s[0], s[1]))) {
                             thread_segment(out, s[0], s[1], w, &shade);
                         }
                     }
