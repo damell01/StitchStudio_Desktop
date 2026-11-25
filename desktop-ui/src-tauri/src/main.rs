@@ -461,6 +461,55 @@ fn optimized_density(source:&zigzag::document::Document, original:&Design)->Opti
  {return None}
  Some((next,candidate))
 }
+// Simplification keeps original outlines, lettering and underlay. Test several
+// density levels, and accept only a measurable improvement with intact coverage.
+fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design,strength:u8)->Option<(zigzag::document::Document,Design)>{
+    use zigzag::{params::Kind,svg::Geometry};
+    if original.stitch_count()==0||original.stitch_count()>200_000{return None}
+    let mut best=None;let cost=|d:&Design|d.stitch_count().saturating_add(d.trim_count().saturating_mul(40));
+    let before=measure_stitches(original);
+    let original_bounds=original.bounds();
+    for factor in [1.05,1.10,1.18,1.25].into_iter().take(strength.clamp(1,3) as usize+1){
+        let mut next=source.clone();
+        let fabric=next.plan_options().fabric;
+        let mut changed=false;
+        for shape in &mut next.shapes{
+            if shape.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill || shape.groups.iter().any(|g|g.starts_with("tl-lettering-")){continue}
+            if !matches!(shape.geometry,Geometry::Fill{..}){continue}
+            let b=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
+            if b.width().min(b.height())<60.0{continue}
+            let spacing=shape.params.fill_spacing(&fabric);
+            let target=(spacing*factor).min(0.48);
+            if target>spacing+0.005{shape.params.spacing=Some(target);changed=true;}
+        }
+        if !changed{continue}
+        let d=next.plan();let after=measure_stitches(&d);let b=d.bounds();
+        if d.stitch_count()==0||cost(&d)>=cost(original)||d.stitch_count()<original.stitch_count()*65/100
+            ||d.trim_count()>original.trim_count()||after.long>before.long||after.zero>before.zero
+            ||after.short>before.short.saturating_add(5)
+            ||original_bounds.min.dist(b.min)>5.0||original_bounds.max.dist(b.max)>5.0
+            ||!original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
+            ||original.per_shape.len()!=d.per_shape.len()
+            ||!original.per_shape.iter().zip(&d.per_shape).all(|(&a,&b)|a==0||b>0){continue}
+        if best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|cost(&d)<cost(old)){best=Some((next,d));}
+    }
+    best
+}
+#[tauri::command]
+async fn simplify_current_design(strength:u8,app:tauri::AppHandle)->Result<Preview,String>{
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move||{
+        let state=app.state::<Mutex<Workspace>>();
+        let mut w=state.lock().map_err(|e|e.to_string())?;
+        let original=w.current.as_ref().ok_or("Open a design first")?;
+        let source=w.source.as_ref().ok_or("Open editable artwork first")?;
+        let (mut doc,_)=simplify_design_candidate(source,original,strength).ok_or("No safe reduction found at this level. Original design retained.")?;
+        doc.sync().map_err(|e|e.to_string())?;
+        let design=doc.plan();
+        let result=preview(&design);
+        w.checkpoint_named("Simplify design");w.source=Some(doc);w.current=Some(design);Ok(result)
+    }).await.map_err(|e|e.to_string())?
+}
 #[tauri::command]
 async fn optimize_editable_design(app:tauri::AppHandle)->Result<Preview,String>{
  use tauri::Manager;
@@ -1987,7 +2036,7 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
 async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
