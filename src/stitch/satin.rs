@@ -226,15 +226,23 @@ pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
     for (k, &(a, b)) in ps.iter().enumerate() {
         let dir = (a - b).norm();
         let (mut a2, mut b2) = (a + dir * p.pull, b - dir * p.pull);
-        if p.short_stitches && k > 0 && k % 2 == 1 {
+        if p.short_stitches && k > 0 && k + 1 < ps.len() && k % 2 == 1 {
             let (pa, pb) = ps[k - 1];
-            let w = a2.dist(b2);
-            if a.dist(pa) < SHORT_DIST {
-                a2 = a2 + (b2 - a2).norm() * (w * SHORT_INSET);
-            }
-            if b.dist(pb) < SHORT_DIST {
-                b2 = b2 + (a2 - b2).norm() * (w * SHORT_INSET);
-            }
+            let (na, nb) = ps[k + 1];
+            let da = a.dist(pa).min(a.dist(na));
+            let db = b.dist(pb).min(b.dist(nb));
+            // Only shorten the crowded side of a bend. A deliberately
+            // dense straight column must retain both of its edges.
+            let fraction = |d: f64, other: f64| {
+                if d < SHORT_DIST && d < other * 0.8 {
+                    (SHORT_INSET + 0.10 * (1.0 - d / SHORT_DIST)).min(0.25)
+                } else { 0.0 }
+            };
+            let fa = fraction(da, db);
+            let fb = fraction(db, da);
+            let (left, right) = (a2, b2);
+            a2 = left.lerp(right, fa);
+            b2 = right.lerp(left, fb);
         }
         top.push(a2);
         top.push(b2);
@@ -752,6 +760,15 @@ mod tests {
         for (pa, pb) in pairs(&r, 4.0) {
             assert!((pa.x - pb.x).abs() < 1e-6, "stitches stay perpendicular");
         }
+    }
+
+    #[test]
+    fn dense_straight_satin_keeps_both_edges() {
+        let r = rails_from_centerline(&[P::new(0.0, 0.0), P::new(100.0, 0.0)], false, 30.0);
+        let mut p = params(0);
+        p.spacing = 2.0;
+        let s = column(&r, &p);
+        assert!(s.iter().all(|q| (q.y.abs() - 15.0).abs() < 1e-6));
     }
 
     #[test]
