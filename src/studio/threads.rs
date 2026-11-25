@@ -653,6 +653,23 @@ impl Studio {
         });
         ui.collapsing("Advanced color tools", |ui| {
             let selection = self.sel_indices();
+            ui.collapsing("Batch stitch spacing", |ui| {
+                let id = ui.make_persistent_id("batch-spacing-mm");
+                let mut spacing = ui.ctx().data(|d| d.get_temp::<f64>(id).unwrap_or(0.4));
+                ui.add(egui::Slider::new(&mut spacing, 0.25..=0.8).suffix(" mm"));
+                ui.ctx().data_mut(|d| d.insert_temp(id, spacing));
+                if ui.add_enabled(!selection.is_empty(), egui::Button::new("Apply spacing")).clicked() {
+                    for &i in &selection {
+                        let p = &mut self.doc.shapes[i].params;
+                        if matches!(p.kind, Some(Kind::Fill | Kind::Satin)) {
+                            p.spacing = Some(spacing);
+                        }
+                    }
+                    self.status = "Applied spacing to selected explicit fill and satin objects.".into();
+                }
+                caption(ui, "Applies to Fill and Satin objects; smaller spacing increases density.");
+            });
+
             if ui.add_enabled(!selection.is_empty(), egui::Button::new("Automatic stitch settings")).on_hover_text("Reset selected objects to automatic stitch type and fabric spacing").clicked() {
                 for &i in &selection {
                     let p = &mut self.doc.shapes[i].params;
