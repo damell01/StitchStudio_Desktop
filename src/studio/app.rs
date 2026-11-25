@@ -1102,8 +1102,11 @@ impl Studio {
             .frame(egui::Frame::new().fill(pal.dock))
             .show(ui, |ui| self.doc_tabs(ui));
         egui::CentralPanel::no_frame().show(ui, |ui| {
-            if self.doc.shapes.is_empty() && self.tool == Tool::Select && ui.available_height() > 460.0 {
-                self.welcome_panel(ui);
+            if self.doc.shapes.is_empty() && self.tool == Tool::Select {
+                let height = (ui.available_height() * 0.45).clamp(80.0, 240.0);
+                egui::ScrollArea::vertical().id_salt("welcome-actions-scroll")
+                    .max_height(height).auto_shrink([false, true])
+                    .show(ui, |ui| self.welcome_panel(ui));
             }
             self.canvas(ui);
         });
