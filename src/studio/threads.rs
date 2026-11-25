@@ -653,7 +653,33 @@ impl Studio {
         });
         ui.collapsing("Advanced color tools", |ui| {
             let selection = self.sel_indices();
-            ui.collapsing("Batch stitch spacing", |ui| {
+            ui.collapsing("Batch stitch settings", |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for (label, kind) in [("Fill", Kind::Fill), ("Satin", Kind::Satin), ("Run", Kind::Run)] {
+                        if ui.add_enabled(!selection.is_empty(), egui::Button::new(label)).clicked() {
+                            for &i in &selection {
+                                let p = &mut self.doc.shapes[i].params;
+                                if p.kind != Some(Kind::Skip) {
+                                    p.kind = Some(kind);
+                                    p.spacing = None;
+                                }
+                            }
+                            self.status = format!("Applied {label} stitch type to selection.");
+                        }
+                    }
+                });
+                ui.horizontal(|ui| {
+                    for (label, value) in [("Underlay on", true), ("Off", false)] {
+                        if ui.add_enabled(!selection.is_empty(), egui::Button::new(label)).clicked() {
+                            for &i in &selection {
+                                let p = &mut self.doc.shapes[i].params;
+                                if matches!(p.kind, Some(Kind::Fill | Kind::Satin)) {
+                                    p.underlay = Some(value);
+                                }
+                            }
+                        }
+                    }
+                });
                 let id = ui.make_persistent_id("batch-spacing-mm");
                 let mut spacing = ui.ctx().data(|d| d.get_temp::<f64>(id).unwrap_or(0.4));
                 ui.add(egui::Slider::new(&mut spacing, 0.25..=0.8).suffix(" mm"));
