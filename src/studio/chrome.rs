@@ -15,11 +15,11 @@ impl Studio {
     /// Quick start panel for a blank document; all actions use the native editor.
     pub fn welcome_panel(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
-        egui::Frame::new().fill(p.desk).inner_margin(egui::Margin::same(16)).show(ui, |ui| {
+        egui::Frame::new().fill(p.desk).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            ui.label(egui::RichText::new("Start a design").size(23.0).strong().color(p.text));
+            ui.label(egui::RichText::new("Start a design").size(20.0).strong().color(p.text));
             caption(ui, "Choose a starting point for your next embroidery project.");
-            ui.add_space(10.0);
+            ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
                 let width = ((ui.available_width() - 16.0) / 3.0).clamp(130.0, 240.0);
                 for (label, detail, action) in [
@@ -27,11 +27,11 @@ impl Studio {
                     ("Open design", "Continue an existing project", Action::Open),
                     ("Create lettering", "Personalize with embroidery text", Action::AddText),
                 ] {
-                    ui.allocate_ui(Vec2::new(width, 72.0), |ui| {
+                    ui.allocate_ui(Vec2::new(width, 52.0), |ui| {
                         ui.vertical(|ui| {
                             if ui.add_enabled(self.action_enabled(action),
                                 egui::Button::new(egui::RichText::new(label).strong())
-                                    .min_size(Vec2::new(width, 34.0))).clicked() {
+                                    .min_size(Vec2::new(width, 28.0))).clicked() {
                                 self.run_action(action);
                             }
                             caption(ui, detail);
@@ -58,7 +58,7 @@ impl Studio {
             for (label, action) in [
                 ("New", Action::New), ("Open", Action::Open), ("Save", Action::Save),
                 ("Undo", Action::Undo), ("Redo", Action::Redo),
-                ("Digitize", Action::Place), ("Lettering", Action::AddText),
+                ("Digitize", Action::Place), ("Add Text", Action::AddText),
                 ("Center", Action::CenterInHoop),
             ] {
                 let button = if label == "Digitize" {
@@ -67,7 +67,7 @@ impl Studio {
                     )).fill(p.accent)
                 } else { egui::Button::new(label) };
                 if ui.add_enabled(self.action_enabled(action), button.min_size(Vec2::new(0.0, 28.0)))
-                    .on_hover_text(if label == "Digitize" { "Import artwork and convert it into embroidery objects" } else if label == "Center" { "Center the selection or design in the hoop without resizing" } else { label })
+                    .on_hover_text(if label == "Digitize" { "Import artwork and convert it into embroidery objects" } else if label == "Add Text" { "Add editable embroidery lettering (T for canvas typing)" } else if label == "Center" { "Center the selection or design in the hoop without resizing" } else { label })
                     .clicked() {
                     self.run_action(action);
                 }
@@ -166,9 +166,6 @@ impl Studio {
                     ui.separator();
                 }
             });
-            if ui.button("＋ Text").on_hover_text("Add editable embroidery lettering").clicked() {
-                self.run_action(Action::AddText);
-            }
             ui.menu_button("Edit", |ui| {
                 for (heading, actions) in [
                     ("Transform", &[("Duplicate", Action::Duplicate), ("Center in hoop", Action::CenterInHoop), ("Rotate left", Action::RotateLeft), ("Rotate right", Action::RotateRight), ("Flip horizontal", Action::FlipH), ("Flip vertical", Action::FlipV)][..]),
