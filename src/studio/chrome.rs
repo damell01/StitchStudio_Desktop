@@ -453,8 +453,25 @@ impl Studio {
                     self.toggle_play();
                 }
             });
-            let mut pos = self.player.unwrap_or(total);
-            ui.spacing_mut().slider_width = (ui.available_width() * 0.28).clamp(100.0, 340.0);
+            let mut pos = self.player.unwrap_or(total).min(total);
+            let mut boundaries = vec![0usize];
+            for block in &self.design.blocks {
+                let count: usize = block.runs.iter().map(|r| r.pts.len()).sum();
+                boundaries.push(boundaries.last().copied().unwrap_or(0).saturating_add(count).min(total));
+            }
+            if ui.add_enabled(pos > 0, egui::Button::new("◀ Color"))
+                .on_hover_text("Jump to the previous color block boundary").clicked() {
+                pos = boundaries.iter().copied().rev().find(|&b| b < pos).unwrap_or(0);
+                self.playing = false;
+                self.player = Some(pos);
+            }
+            if ui.add_enabled(pos < total, egui::Button::new("Color ▶"))
+                .on_hover_text("Jump to the next color block boundary").clicked() {
+                pos = boundaries.iter().copied().find(|&b| b > pos).unwrap_or(total);
+                self.playing = false;
+                self.player = if pos >= total { None } else { Some(pos) };
+            }
+            ui.spacing_mut().slider_width = (ui.available_width() * 0.23).clamp(64.0, 280.0);
             let slider = ui
                 .add_enabled(
                     total > 0,
@@ -469,7 +486,7 @@ impl Studio {
                 self.player = if pos >= total { None } else { Some(pos) };
             }
             ui.label(
-                egui::RichText::new(format!("{} / {}", fmt_int(pos.min(total)), fmt_int(total)))
+                egui::RichText::new(format!("{} / {} · {:.0}%", fmt_int(pos.min(total)), fmt_int(total), 100.0 * pos as f64 / total.max(1) as f64))
                     .size(11.0)
                     .color(p.secondary)
                     .monospace(),
@@ -482,8 +499,11 @@ impl Studio {
                 .show_ui(ui, |ui| {
                     for (v, l) in [
                         (100.0, "0.25×"),
+                        (200.0, "0.5×"),
                         (400.0, "1×"),
+                        (800.0, "2×"),
                         (1600.0, "4×"),
+                        (3200.0, "8×"),
                         (6400.0, "16×"),
                     ] {
                         ui.selectable_value(&mut self.speed, v, l);
