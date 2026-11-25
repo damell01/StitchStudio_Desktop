@@ -333,6 +333,44 @@ fn route_along(inset: &[Polyline], from: P, to: P, max_len: f64) -> Option<Polyl
     Some(out)
 }
 
+/// Find a short covered detour through concave artwork. A limited visibility
+/// search handles cases where the closest inset ring cannot be reached from
+/// both endpoints. Never connect across a hole or between disconnected islands.
+fn covered_detour(rings:&[Polyline],rule:FillRule,inset:&[Polyline],from:P,to:P,limit:f64)->Option<Polyline>{
+    let direct=from.dist(to);
+    if direct>limit||limit<=0.0{return None}
+    let mut vertices=Vec::new();
+    for ring in inset{
+        let stride=(ring.len()/96).max(1);
+        for &p in ring.iter().step_by(stride){
+            let cost=from.dist(p)+p.dist(to);
+            if cost<=limit{vertices.push((cost,p));}
+        }
+    }
+    vertices.sort_by(|a,b|a.0.total_cmp(&b.0));vertices.truncate(24);
+    let visible=|a:P,b:P|segment_inside(rings,rule,a,b,0.5);
+    let mut best:Option<(f64,Vec<P>)>=None;
+    let mut start=Vec::new();let mut end=Vec::new();
+    for &(_,p) in &vertices{
+        if visible(from,p){start.push(p);}
+        if visible(p,to){end.push(p);}
+    }
+    for &a in &start{
+        for &b in &end{
+            let cost=from.dist(a)+a.dist(b)+b.dist(to);
+            if cost>limit||best.as_ref().is_some_and(|(old,_)|cost>=*old){continue}
+            if a.dist(b)<0.001||visible(a,b){best=Some((cost,vec![a,b,to]));}
+        }
+    }
+    let (_,path)=best?;let mut out=Vec::new();let mut prev=from;
+    for q in path{
+        let n=(prev.dist(q)/30.0).ceil() as usize;
+        for k in 1..=n{out.push(prev.lerp(q,k as f64/n as f64));}
+        prev=q;
+    }
+    Some(out)
+}
+
 /// The outline a shape's start and end points are measured along: a
 /// fill's biggest ring (closed), or a stroke's first line.
 fn outline_of(g: &Geometry) -> Option<std::borrow::Cow<'_, Polyline>> {
@@ -1987,7 +2025,13 @@ pub fn plan_cached(
                                 route_along(
                                     thin_travel.get_or_insert_with(|| thin_travel_ring(rings, *rule)),
                                     prev, start, opt.travel_route.min(150.0),
-                                ).filter(valid)
+                                ).filter(&valid).or_else(|| {
+                                    covered_detour(
+                                        rings,*rule,
+                                        thin_travel.get_or_insert_with(|| thin_travel_ring(rings,*rule)),
+                                        prev,start,opt.travel_route.min(100.0),
+                                    ).filter(valid)
+                                })
                             })
                         }
                     {
