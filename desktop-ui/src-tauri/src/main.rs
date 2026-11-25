@@ -657,6 +657,13 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
     for i in 0..doc.shapes.len(){
         if !eligible(doc,i){continue}
         let s=&mut doc.shapes[i];let kind=s.params.kind.unwrap_or(Kind::Fill);
+        if options.solid&&options.auto_types&&kind==Kind::Fill&&s.params.start.is_none()&&s.params.end.is_none()&&s.params.colors.is_none()&&s.params.trim!=Some(true)&&s.params.stop!=Some(true){
+            if let Geometry::Fill{rings,rule}=&s.geometry{
+                if zigzag::design::thin_centerline(rings,*rule).is_some(){
+                    s.params.kind=Some(Kind::Run);s.params.border=Some(false);s.params.repeats=Some(1);s.params.len=Some(2.0);continue;
+                }
+            }
+        }
         if options.auto_types&&matches!(kind,Kind::Fill|Kind::Satin|Kind::Run){
             let mut trial=s.clone();trial.params.kind=None;
             zigzag::design::auto_stitch_types(std::slice::from_mut(&mut trial));
