@@ -479,6 +479,8 @@ fn fill_runs(
     let mut region = Bounds::empty();
     rings.iter().flatten().for_each(|&point| region.add(point));
     let narrow = region.width().min(region.height()) < mm(1.5);
+    let small_detail = region.width() * region.height() < 600.0;
+    let light_underlay = opt.hat_order && f.id == "standard" && p.underlay.is_none() && small_detail;
     // Avoid a second fill layer on tiny stable-woven automatic details.
     if p.underlay_on() && !(opt.hat_order && f.id == "standard" && p.underlay.is_none() && narrow) {
         if f.fill_edge_walk {
@@ -501,10 +503,10 @@ fn fill_runs(
             stagger: 1,
             bottom_up: opt.hat_order,
         };
-        let u: Vec<Piece> = tatami(rings, rule, &under)
+        let u: Vec<Piece> = if light_underlay { Vec::new() } else { tatami(rings, rule, &under)
             .into_iter()
             .map(Piece::reversible)
-            .collect();
+            .collect() };
         if !u.is_empty() {
             groups.push(u);
         }
