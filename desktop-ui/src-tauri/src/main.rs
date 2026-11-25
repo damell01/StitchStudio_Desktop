@@ -530,8 +530,75 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
     }
     best
 }
+#[derive(Default,serde::Deserialize)]
+#[serde(rename_all="camelCase",default)]
+struct SimplifyOptions {
+    solid:bool, merge:bool, auto_types:bool, lighter_underlay:bool,
+    target_minutes:Option<f64>, speed:Option<f64>, trim_seconds:Option<f64>,
+}
+fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptions,uids:Option<&[usize]>)->Result<(),String>{
+    use zigzag::{params::Kind,svg::Geometry,boolean::{self,PathOp},geom::FillRule};
+    let selected=|uid|uids.is_none_or(|ids|ids.contains(&uid));
+    let eligible=|d:&zigzag::document::Document,i:usize| {
+        let s=&d.shapes[i];
+        selected(s.uid)&&!d.records_text(i)&&!s.groups.iter().any(|g|g.starts_with("tl-lettering-"))
+        && d.shapes.iter().filter(|q|q.id==s.id).count()==1
+    };
+    if options.solid{
+        // Close only narrow texture gaps, keeping large negative spaces and
+        // disconnected components intact. Never change recorded text.
+        let mut edits=Vec::new();
+        for (i,s) in doc.shapes.iter().enumerate(){
+            if !eligible(doc,i)||s.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill{continue}
+            if let Geometry::Fill{rings,rule}=&s.geometry{
+                let grown=boolean::offset(rings,*rule,2.0);
+                let closed=boolean::offset(&grown,FillRule::EvenOdd,-2.0);
+                let before=zigzag::stitch::satin::components(rings,*rule);
+                let after=zigzag::stitch::satin::components(&closed,FillRule::EvenOdd);
+                if before.len()!=after.len()||closed.is_empty(){continue}
+                let large_holes=|c:&Vec<Vec<zigzag::geom::Polyline>>|c.iter().flat_map(|r|r.iter().skip(1)).filter(|r|boolean::ring_area(r)>100.0).count();
+                if large_holes(&before)!=large_holes(&after){continue}
+                let path=zigzag::bezier::from_rings(&closed,0.2);
+                if !path.is_empty(){edits.push((i,path));}
+            }
+        }
+        doc.set_paths(&edits).map_err(|e|e.to_string())?;
+    }
+    if options.merge{
+        // Only adjacent sewing-order entries with identical paint and stitch
+        // settings may merge. No intervening layers or gaps are bridged.
+        let mut i=0;let mut merged=0;
+        while i+1<doc.shapes.len()&&merged<128{
+            let a=&doc.shapes[i];let b=&doc.shapes[i+1];
+            let compatible=eligible(doc,i)&&eligible(doc,i+1)&&a.color==b.color&&a.params==b.params
+                &&a.groups==b.groups&&a.params.kind.unwrap_or(Kind::Fill)==Kind::Fill
+                &&a.params.trim!=Some(true)&&a.params.stop!=Some(true);
+            let overlap=if compatible{match (&a.geometry,&b.geometry){
+                (Geometry::Fill{rings:r,rule:f},Geometry::Fill{rings:s,rule:g})=>!boolean::pathfinder(&[(r.clone(),*f),(s.clone(),*g)],PathOp::Intersect).is_empty(),
+                _=>false
+            }}else{false};
+            if overlap{doc.pathfinder(&[i,i+1],PathOp::Unite).map_err(|e|e.to_string())?;merged+=1;}else{i+=1;}
+        }
+    }
+    for i in 0..doc.shapes.len(){
+        if !eligible(doc,i){continue}
+        let s=&mut doc.shapes[i];let kind=s.params.kind.unwrap_or(Kind::Fill);
+        if options.auto_types&&matches!(kind,Kind::Fill|Kind::Satin|Kind::Run){
+            let mut trial=s.clone();trial.params.kind=None;
+            zigzag::design::auto_stitch_types(std::slice::from_mut(&mut trial));
+            // Keep source geometry consistent with SVG; do not apply a
+            // geometry-changing conversion that cannot persist on reload.
+            if let Some(k)=trial.params.kind{if matches!((&s.geometry,k),(Geometry::Stroke{..},Kind::Run|Kind::Satin)|(Geometry::Fill{..},Kind::Satin)){s.params.kind=Some(k);}}
+        }
+        if options.lighter_underlay&&kind==Kind::Satin&&s.params.satin_underlay.is_some(){
+            let old=s.params.satin_underlay.unwrap_or(0);
+            if old.count_ones()>1{s.params.satin_underlay=Some(old & !zigzag::params::underlay::ZIGZAG);}
+        }
+    }
+    doc.sync().map_err(|e|e.to_string())
+}
 #[tauri::command]
-async fn simplify_current_design(strength:u8,uids:Option<Vec<usize>>,remove_detail:Option<bool>,app:tauri::AppHandle)->Result<Preview,String>{
+async fn simplify_current_design(strength:u8,uids:Option<Vec<usize>>,remove_detail:Option<bool>,options:Option<SimplifyOptions>,app:tauri::AppHandle)->Result<Preview,String>{
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move||{
         let state=app.state::<Mutex<Workspace>>();
@@ -539,7 +606,33 @@ async fn simplify_current_design(strength:u8,uids:Option<Vec<usize>>,remove_deta
         let original=w.current.as_ref().ok_or("Open a design first")?;
         let source=editable_base(&w,"Simplified design")?;
         if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
-        let (doc,design)=simplify_design_candidate(&source,original,strength,uids.as_deref(),remove_detail.unwrap_or(false)).ok_or("No safe reduction found at this level. Original design retained.")?;
+        let options=options.unwrap_or_default();
+        let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
+        let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
+        let seconds=|d:&Design|d.stitch_count() as f64/speed*60.0+d.trim_count() as f64*trim;
+        let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
+        let mut candidates=Vec::new();
+        if let Some(v)=simplify_design_candidate(&source,original,strength,uids.as_deref(),remove_detail.unwrap_or(false)){candidates.push(v);}
+        if options.solid||options.merge||options.auto_types||options.lighter_underlay{
+            let mut geometry=source.clone();
+            if optimize_geometry(&mut geometry,&options,uids.as_deref()).is_ok(){
+                let plan=geometry.plan();
+                if let Some(v)=simplify_design_candidate(&geometry,&plan,strength,uids.as_deref(),false){candidates.push(v);}
+                candidates.push((geometry,plan));
+            }
+        }
+        let before=measure_stitches(original);let a=original.bounds();
+        candidates.retain(|(_,d)|{let b=d.bounds();let after=measure_stitches(d);
+            d.stitch_count()>0&&d.stitch_count()>=original.stitch_count()*65/100&&seconds(d)<seconds(original)
+            &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero
+            &&a.min.dist(b.min)<=5.0&&a.max.dist(b.max)<=5.0
+            &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
+        });
+        candidates.sort_by(|(_,a),(_,b)|{
+            let rank=|d:&Design|if target.is_some_and(|t|seconds(d)<=t){(0,-seconds(d))}else{(1,seconds(d))};
+            let a=rank(a);let b=rank(b);a.0.cmp(&b.0).then(a.1.total_cmp(&b.1))
+        });
+        let (doc,design)=candidates.into_iter().next().ok_or("No eligible improvement passed the checks. Original retained.")?;
         let result=preview(&design);
         w.checkpoint_named("Simplify design");w.source=Some(doc);w.current=Some(design);Ok(result)
     }).await.map_err(|e|e.to_string())?
