@@ -79,7 +79,7 @@ pub(super) fn apply(workspace: &mut Workspace, spec: &TextSpec, placement: Optio
     };
     let design = plan_text(&mut document, spec, placement.unwrap_or([0.0, 0.0]), &mut workspace.plan_cache)?;
     let result = preview(&design);
-    workspace.checkpoint();
+    workspace.checkpoint_named("Insert lettering");
     workspace.current = Some(design);
     workspace.source = Some(document);
     Ok(result)
@@ -115,7 +115,7 @@ pub(crate) async fn update_lettering(uid:usize,settings:LetteringSettings,app:ta
  doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
  let design=doc.plan_cached(&mut w.plan_cache);
  if design.stitch_count()==0{return Err("No stitches generated".into())}
- let result=preview(&design);w.checkpoint();w.current=Some(design);w.source=Some(doc);Ok(result)
+ let result=preview(&design);w.checkpoint_named("Update lettering");w.current=Some(design);w.source=Some(doc);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
