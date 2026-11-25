@@ -1181,3 +1181,17 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .lettering-preview svg{filter:drop-shadow(0 .4px .25px #39264e30)}
 @media(max-width:1050px){.home-recent-layout{grid-template-columns:minmax(0,1fr)}.home-continue{display:none}}
 @media(max-width:720px){.page-workspace .lettering-workspace{grid-template-columns:1fr}.design-library.library-list .font-list>article>small{display:none}}
+
+/* Compact desktop profile management and keyboard-visible controls. */
+.profile-search{display:flex;align-items:center;gap:8px;max-width:360px;margin:10px 0;color:var(--brand)}
+.profile-search input{flex:1;min-width:0;width:100%}
+.profile-illustration{display:grid;place-items:center;width:72px;height:72px;flex:none;border-radius:10px;background:var(--brand-soft);color:var(--brand)}
+.profile-illustration svg{width:48px;height:48px}
+.profile-list .setup-row{align-items:center}
+.profile-list .setup-row>div>p{font-size:12px;margin:5px 0}
+.profile-empty>svg{color:var(--brand);margin-bottom:8px}
+.profile-empty .primary{margin:auto}
+[data-palette=lavender] :is(button,input,select,textarea,a):focus-visible{outline:2px solid var(--brand-accent);outline-offset:2px}
+[data-palette=lavender] .editor-workspace .workspace-segments button{white-space:normal;font-size:11px}
+[data-palette=lavender] .editor-workspace .workspace-status{padding-inline:12px}
+@media(max-height:760px){.home-workspace .home-hero{padding-block:12px}.home-workspace .home-hero-art,.home-workspace .home-hero-art svg{max-height:100px}.home-workspace .home-actions .tile{min-height:62px}.home-workspace .recent-project-grid article,.home-workspace .recent-project-grid .recent-scan{min-height:100px}.home-workspace .library-thumb{height:65px}.home-workspace .home-resources>button{min-height:56px}}
