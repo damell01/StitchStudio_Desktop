@@ -652,6 +652,21 @@ impl Studio {
             d.insert_temp(name_id, name);
         });
         ui.collapsing("Advanced color tools", |ui| {
+            let selection = self.sel_indices();
+            if ui.add_enabled(!selection.is_empty(), egui::Button::new("Restore original artwork colors")).clicked() {
+                for &i in &selection {
+                    self.doc.shapes[i].color = self.doc.shapes[i].paint;
+                }
+                self.status = format!("Restored artwork colors for {} objects.", selection.len());
+            }
+            if ui.add_enabled(!selection.is_empty(), egui::Button::new("Select matching colors")).clicked() {
+                let colors: Vec<_> = selection.iter().map(|&i| self.doc.shapes[i].color).collect();
+                let matching: Vec<_> = self.doc.shapes.iter().enumerate()
+                    .filter(|(_, s)| s.params.kind != Some(Kind::Skip) && colors.contains(&s.color))
+                    .map(|(i, _)| i).collect();
+                self.set_selection(&matching);
+            }
+
             let merge_id = ui.make_persistent_id("similar-thread-merge");
             let mut merge_open = ui.ctx().data(|d| d.get_temp::<bool>(merge_id).unwrap_or(false));
             if ui.add_enabled(colors > 1, egui::Button::new("Reduce similar colors")).clicked() {
