@@ -132,30 +132,40 @@ fn recolor_block(index: usize, color: [u8;3], state: tauri::State<'_, Mutex<Work
     d.blocks[index].color=color;
     Ok(preview(d))
 }
+fn load_design_document(
+    path: &std::path::Path,
+    options: &zigzag::trace::TraceOptions,
+) -> Result<zigzag::document::Document, String> {
+    if std::fs::metadata(path).map_err(|err| err.to_string())?.len() > 20_000_000 {
+        return Err("Design exceeds 20 MB".into());
+    }
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+    let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Design");
+    if ext == "svg" { return zigzag::document::Document::open(path).map_err(|e| e.to_string()); }
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    if zigzag::trace::is_image(&ext) {
+        if !(5.0..=300.0).contains(&options.width_mm) || !(0.0..=100.0).contains(&options.detail) {
+            return Err("Choose an artwork width between 5 and 300 mm and detail between 0 and 100".into());
+        }
+        return zigzag::trace::digitize_raster(&bytes, name, options, 32, false).map_err(|err| err.to_string());
+    }
+    let file = formats::read::read_stitch_file(&bytes, &ext).map_err(|err| err.to_string())?;
+    if file.blocks.is_empty() { return Err("No stitches found".into()); }
+    let svg = formats::read::to_svg(&file);
+    zigzag::document::Document::from_svg(&svg, name, None).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn open_svg(width_mm: f64, colors: u32, remove_background: bool, detail: f64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Option<Preview>, String> {
-    let Some(path) = rfd::AsyncFileDialog::new().add_filter("Artwork and embroidery", &["svg","png","jpg","jpeg","webp","gif","bmp","tiff","dst","pes","pec","exp","jef"]).pick_file().await else { return Ok(None); };
+    let Some(path) = rfd::AsyncFileDialog::new().add_filter("Artwork and embroidery", &["svg","png","jpg","jpeg","webp","gif","bmp","tiff","tif","dst","pes","pec","exp","jef"]).pick_file().await else { return Ok(None); };
     let path = path.path().to_owned();
-    let source = tauri::async_runtime::spawn_blocking(move || -> Result<zigzag::document::Document,String> {
-        if std::fs::metadata(&path).map_err(|err| err.to_string())?.len() > 20_000_000 {
-            return Err("Design exceeds 20 MB".into());
-        }
-        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
-        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Design");
-        if ext == "svg" { return zigzag::document::Document::open(&path).map_err(|e| e.to_string()); }
-        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let svg = if zigzag::trace::is_image(&ext) {
-            let options = zigzag::trace::TraceOptions { width_mm, colors, remove_background, detail, ..Default::default() };
-            zigzag::trace::trace_bytes(&bytes, &options).map_err(|e| e.to_string())?.svg
-        } else {
-            let file = formats::read::read_stitch_file(&bytes, &ext).map_err(|e| e.to_string())?;
-            if file.blocks.is_empty() { return Err("No stitches found".into()); }
-            formats::read::to_svg(&file)
-        };
-        zigzag::document::Document::from_svg(&svg, name, None).map_err(|e| e.to_string())
+    let (source, design) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+        let options = zigzag::trace::TraceOptions { width_mm, colors, remove_background, detail, ..Default::default() };
+        let source = load_design_document(&path, &options)?;
+        let design = source.plan();
+        if design.stitch_count() == 0 { return Err("No stitchable objects found".into()); }
+        Ok((source, design))
     }).await.map_err(|e| e.to_string())??;
-    let design=source.plan();
-    if design.blocks.is_empty() { return Err("No stitchable objects found".into()); }
     let preview = preview(&design);
     *state.lock().map_err(|e| e.to_string())? = Workspace {source:Some(source),current:Some(design),..Default::default()};
     Ok(Some(preview))
@@ -683,20 +693,14 @@ async fn digitize_artwork(
         let options = zigzag::trace::TraceOptions {
             width_mm, colors, remove_background, detail, lines: thin_lines, ..Default::default()
         };
-        let vector = mime == "image/svg+xml";
-        let svg = if vector {
-            String::from_utf8(bytes).map_err(|err| err.to_string())?
+        let mut document = if mime == "image/svg+xml" {
+            let svg = std::str::from_utf8(&bytes).map_err(|err| err.to_string())?;
+            zigzag::document::Document::from_svg(svg, &name, None).map_err(|err| err.to_string())?
         } else {
-            zigzag::trace::trace_prepared_bytes(&bytes, &options, tolerance, cleanup)
-                .map_err(|err| err.to_string())?.svg
+            zigzag::trace::digitize_raster(&bytes, &name, &options, tolerance, cleanup)
+                .map_err(|err| err.to_string())?
         };
-        let mut document = zigzag::document::Document::from_svg(&svg, &name, None)
-            .map_err(|err| err.to_string())?;
         document.settings.fabric = fabric;
-        if !vector {
-            zigzag::design::auto_stitch_types(&mut document.shapes);
-            document.settings.hat_order = document.shapes.len() <= 1000;
-        }
         let artwork_bounds = zigzag::svg::shapes_bounds(&document.shapes);
         if artwork_bounds.width() > 10_000.0 || artwork_bounds.height() > 10_000.0 {
             return Err("Artwork is larger than 1 meter. Reduce the artwork dimensions before digitizing.".into());
@@ -913,4 +917,9 @@ mod tests {
     }
 }
 
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+#[tauri::command]
+fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Result<(), String> {
+    window.set_fullscreen(fullscreen).map_err(|error| error.to_string())
+}
+
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}

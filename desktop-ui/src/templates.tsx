@@ -1,3 +1,4 @@
+import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowRight, Search, Star, X } from 'lucide-react';
@@ -124,7 +125,9 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65 }: {
     category === 'All' || category === template.category
     || (category === 'Favorites' && favorites.includes(template.id))
     || (category === 'Recent' && recent.includes(template.id))
-  ) && (template.name + ' ' + template.category).toLowerCase().includes(query.trim().toLowerCase()));
+  ) && matchesName(template.name + ' ' + template.category, query))
+    .sort((a,b)=>category==='Recent'?recent.indexOf(a.id)-recent.indexOf(b.id):compareNames(a.name,b.name));
+  const page=usePagedList(results,JSON.stringify([query,category]));
 
   function choose(id: string) {
     const next = [id, ...recent.filter(previous => previous !== id)].slice(0, 20);
@@ -150,7 +153,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65 }: {
     </div>
     {results.length === 0 && <p role="status">No designs match your search.</p>}
     <section className="template-grid" aria-label="Template results">
-      {results.map(template => <article key={template.id}>
+      {page.items.map(template => <article key={template.id}>
         <button className="design-favorite" title="Toggle favorite"
           aria-label={(favorites.includes(template.id) ? 'Remove favorite ' : 'Favorite ') + template.name}
           aria-pressed={favorites.includes(template.id)} onClick={() => favorite(template.id)}>
@@ -164,6 +167,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65 }: {
         </button>
       </article>)}
     </section>
+    <ListNavigation {...page}/>
     {selected && <TemplatePreview template={selected} insert={insert} widthMm={widthMm}
       onCancel={() => setSelected(null)} onChoose={() => choose(selected.id)} />}
   </>;

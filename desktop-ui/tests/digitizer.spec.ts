@@ -92,3 +92,9 @@ test('dropping artwork starts generation and reports tracing errors', async ({ p
   await expect(page.getByRole('alert')).toContainText('This artwork has no foreground');
   await expect(page.getByRole('button', { name: 'Open in design studio' })).toBeHidden();
 });
+
+test('a single-page PDF renders to artwork and starts digitizing', async ({ page }) => {
+  await page.getByLabel('Import PDF').setInputFiles('../tests/fixtures/digitizer/artwork.pdf');
+  await expect(page.getByRole('button', { name: 'Open in design studio' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Original artwork' })).toBeVisible();
+});

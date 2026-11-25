@@ -38,11 +38,24 @@ test('the compact template library previews stitches before opening a template',
   await dialog.getByRole('button', { name: 'Open in design studio' }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.locator('.design-canvas polyline')).toHaveCount(1);
+  await page.getByRole('button',{name:'Previous stitch'}).click();
+  await expect(page.getByLabel('Planned stitch position')).toHaveValue('1');
+  await page.getByRole('button',{name:'Next stitch'}).click();
+  await expect(page.getByLabel('Planned stitch position')).toHaveValue('2');
+  const nav = page.locator('.desktop-nav');
+  await page.getByRole('button', { name: 'Focus canvas' }).click();
+  await expect(nav).toBeHidden();
+  const canvas = page.locator('.design-canvas');
+  expect((await canvas.boundingBox())!.width).toBeGreaterThan(730);
+  await page.keyboard.press('Escape');
+  await expect(nav).toBeVisible();
+  await page.getByRole('button', { name: 'Inspector', exact: true }).click();
   const inspector = page.getByRole('group', { name: 'Inspector' });
   await inspector.getByRole('button', { name: 'Size' }).click();
   await expect(page.getByRole('button', { name: 'Resize to fit hoop' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Stitches' }).click();
   await expect(page.getByRole('button', { name: 'Check stitch quality' })).toBeVisible();
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await page.getByRole('group', { name: 'Layers' }).getByRole('button', { name: 'Threads' }).click();
   await expect(page.getByLabel('Thread 1 color')).toBeVisible();
 

@@ -56,7 +56,7 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [mode, setMode] = useState<'compare' | 'stitches' | 'original' | 'density'>('compare');
+  const [mode, setMode] = useState<'compare' | 'stitches' | 'original' | 'density' | 'thread'>('compare');
   const [showProcessed, setShowProcessed] = useState(false);
   const [processed, setProcessed] = useState<{ art: Art; settings: typeof defaults; url: string } | null>(null);
   const [previewError, setPreviewError] = useState('');
@@ -135,7 +135,7 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
     const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
     if (extension === 'pdf') { setPdf(file); setError(''); return; }
     const mime = artworkMimes[extension];
-    if (!mime) { setError('Choose a supported image or PDF.'); return; }
+    if (!mime) { setError('Choose PNG, JPEG, SVG, WebP, BMP, TIFF, GIF, or PDF. For another format, export it as PNG first.'); return; }
     if (!file.size || file.size > 20_000_000) { setError('Artwork must be between 1 byte and 20 MB.'); return; }
     setBusy(true);
     try {
@@ -259,6 +259,8 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
       {processing && <p role="status"><progress aria-label="Digitizing artwork" /> Preparing artwork and generating stitches…</p>}
       {!valid && <p role="alert">Width must be between 5 and 300 mm.</p>}
       {(error || generationError) && <p role="alert">{error || generationError}</p>}
+      {generationError && !vector && settings.removeBackground && generationError.includes('No foreground') &&
+        <button onClick={() => update('removeBackground', false)}>Retry with background</button>}
       {review && <>
         <h3>Stitch quality</h3>
         <div className="digitize-metrics">
@@ -279,7 +281,7 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
         <div className="wizard-actions"><button className="primary" disabled={busy} onClick={openDraft}>Open in design studio <ArrowRight size={16} /></button></div>
       </>}
     </article>
-    <article className={`artwork-preview review-${mode === 'density' ? 'stitches' : mode}`}>
+    <article className={`artwork-preview review-${mode === 'density' || mode === 'thread' ? 'stitches' : mode}`}>
       <div className="preview-heading"><strong title={art?.name}>{art?.name}</strong></div>
       <div className="review-switch" role="group" aria-label="Preview options">
         {(['compare', 'stitches', 'original'] as const).map(view =>
@@ -290,6 +292,7 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
                 ? <><Layers2 size={15} /> Stitches</>
                 : <><ArtworkIcon size={15} /> Artwork</>}
           </button>)}
+        {review && <button aria-pressed={mode === 'thread'} onClick={() => setMode('thread')}><Layers2 size={15} /> Thread view</button>}
         {review && <button aria-pressed={mode === 'density'} onClick={() => setMode('density')} title="Inspect where the needle penetrates most often"><ChartNoAxesColumn size={15} /> Density</button>}
         {!vector && <button aria-pressed={showProcessed} onClick={() => setShowProcessed(value => !value)} title="Show the artwork after cleanup">Processed</button>}
       </div>
@@ -299,7 +302,7 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
       {showProcessed && !displayUrl && mode !== 'stitches' && <p>{previewError || 'Preparing artwork preview…'}</p>}
       {plan && <>
         <h3 className="stitch-heading">{mode === 'density' ? 'Densest 1 mm² cells · DST preview' : 'Generated stitch paths'}</h3>
-        <svg aria-label="Generated stitches" viewBox={[-extent * 1.1, -extent * 1.1, extent * 2.2, extent * 2.2].join(' ')} className="digitizer-stitch-image">
+        <svg aria-label="Generated stitches" viewBox={[-extent * 1.1, -extent * 1.1, extent * 2.2, extent * 2.2].join(' ')} className={`digitizer-stitch-image ${mode === 'thread' ? 'digitizer-thread-view' : ''}`}>
           {mode === 'density' && review ? review.density.map(([x, y, count]) =>
             <rect key={x + ',' + y} x={x} y={y} width="1" height="1" fill="#6945A2"
               opacity={0.15 + 0.85 * count / (review.density[0]?.[2] || 1)}>

@@ -1,3 +1,4 @@
+import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { File, FilePlus, FolderOpen, Search } from 'lucide-react';
@@ -14,7 +15,7 @@ export function Library({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const match = query.trim().toLowerCase();
+
 
   useEffect(() => {
     let active = true;
@@ -64,9 +65,11 @@ export function Library({ onDone }: { onDone: () => void }) {
     });
   }
 
-  const visibleFiles = files.filter(file => file.toLowerCase().includes(match));
-  const visibleProjects = projects.filter(project => (project.name + ' ' + project.file).toLowerCase().includes(match))
-    .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : sort === 'stitches' ? b.stitches - a.stitches : b.modified - a.modified);
+  const visibleFiles = files.filter(file => matchesName(file,query)).sort(compareNames);
+  const visibleProjects = projects.filter(project => matchesName(project.name + ' ' + project.file,query))
+    .sort((a, b) => sort === 'name' ? compareNames(a.name,b.name) : sort === 'stitches' ? b.stitches - a.stitches : b.modified - a.modified);
+  const filePage=usePagedList(visibleFiles,query);
+  const projectPage=usePagedList(visibleProjects,JSON.stringify([query,sort]));
   return <section className="design-library">
     <div className="studio-tools" role="group" aria-label="Design library sources">
       <button aria-pressed={tab === 'embroidery'} onClick={() => { setTab('embroidery'); setQuery(''); }}>Embroidery files</button>
@@ -91,21 +94,21 @@ export function Library({ onDone }: { onDone: () => void }) {
       {files.length === 0 && <p>Import machine files in DST, PES, PEC, EXP or JEF format to use them here.</p>}
       {files.length > 0 && visibleFiles.length === 0 && <p>No files match your search.</p>}
       <div className="font-list">
-        {visibleFiles.map(file => <article key={file}>
+        {filePage.items.map(file => <article key={file}>
           <File size={20} /><div><strong>{file}</strong></div>
           <button disabled={busy} onClick={() => insert(file)} aria-label={`Insert ${file}`}>Insert design</button>
         </article>)}
-      </div>
+      </div><ListNavigation {...filePage}/>
     </> : <>
       <p>{visibleProjects.length} projects found</p>
       <div className="font-list">
-        {visibleProjects.map(project => <article key={project.file}>
+        {projectPage.items.map(project => <article key={project.file}>
           <File size={20} /><div><strong>{project.name}</strong>
             <small>{project.stitches.toLocaleString()} points · {project.colors} color blocks · {project.width} × {project.height} mm hoop</small>
           </div>
           <button disabled={busy} onClick={() => open(project)}>Open project</button>
         </article>)}
-      </div>
+      </div><ListNavigation {...projectPage}/>
     </>}
   </section>;
 }

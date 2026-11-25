@@ -62,7 +62,11 @@ For installation, open the DMG and copy the app into Applications. Local packagi
 - **Template Library** includes built-in bow, sports, botanical, animal, monogram and patch artwork. Filter by category, favorites or recent designs. **Preview design** generates a stitch preview before you open the template.
 - **Design Library** imports compatible embroidery files or scans a folder for editable Stitch Studio projects. Search for a machine file and choose **Insert design** to add its stitch paths to the workspace.
 - Choose disk files or a folder that you have permission to use. Keep original machine files for reference. Current machine-file insertion creates a stitch-based combined design.
-- Open **View** to adjust the Layers and Inspector widths. The workspace remembers both widths. Use the canvas toolbar to hide either panel. In the Inspector, choose **Hoop**, **Stitches**, or **Size** for the task at hand.
+- In the editor, open **Workspace options** to adjust the Layers and Inspector widths. The workspace remembers both widths. Use the top toolbar to toggle either panel. Press **F11** or choose **Focus canvas** to enter full-screen editing. Press **Esc** to return. In the Inspector, choose **Hoop**, **Stitches**, or **Size** for the task at hand.
+
+## Find commands and fonts
+
+Press **Ctrl+K** or **Cmd+K** to search pages and available editing actions. Type part of a name, then press **Enter** to run the first result. Font Manager and the lettering font picker show short pages of results. Where a name includes inches, centimeters, or millimeters, versions in the same family are sorted by physical size. Font Manager also filters by format and favorites. Template, project, character, profile, and thread lists use the same page controls.
 
 ## Developer checks
 

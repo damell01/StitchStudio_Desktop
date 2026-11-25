@@ -1,12 +1,14 @@
+import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
+import {CommandPalette,type Command} from './command-palette';
 import {CharacterGallery} from './character-gallery';
 import {templates,TemplateLibrary} from './templates';
 import {confirmAction,toast} from './dialogs';
 import {ExportCenter} from './export-center';
 import {readThreads} from './threads';
 import {StitchPicker} from './stitch-guide';
-import {useState,useEffect,useRef} from 'react';
-import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SlidersHorizontal,ChevronDown,SquareDashed,Scissors,RotateCcw} from 'lucide-react';
-import {invoke} from '@tauri-apps/api/core';
+import {useState,useEffect,useRef,useMemo} from 'react';
+import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward} from 'lucide-react';
+import {invoke,isTauri} from '@tauri-apps/api/core';
 type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
 type EditableObject={uid:number;label:string;color:number[];kind:string};
 type Profile={id:string;name:string;width:number;height:number;format?:string};
@@ -15,48 +17,126 @@ function panelWidth(key: string, fallback: number, min: number, max: number) {
   const value = Number(localStorage.getItem(key));
   return value >= min && value <= max ? value : fallback;
 }
-export function Editor({beginner=true}:{beginner?:boolean}){const insertDialog=useRef<HTMLDialogElement>(null);const [personal,setPersonal]=useState<string[]>([]),[personalQuery,setPersonalQuery]=useState(''),[galleryTab,setGalleryTab]=useState('built-in'),[libraryBusy,setLibraryBusy]=useState(false),[libraryMessage,setLibraryMessage]=useState('');async function refreshPersonal(){try{setPersonal(await invoke<string[]>('personal_designs'))}catch(e){setLibraryMessage(String(e))}}async function importPersonal(folder:boolean){setLibraryBusy(true);try{const n=await invoke<number>('import_personal_designs',{folder});setLibraryMessage(n+' new designs imported');await refreshPersonal()}catch(e){setLibraryMessage(String(e))}finally{setLibraryBusy(false)}}const [insertSize,setInsertSize]=useState(2),[insertX,setInsertX]=useState(0),[insertY,setInsertY]=useState(0);const [left,setLeft]=useState(true),[right,setRight]=useState(true),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",220,160,340)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,180,360));useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(100),[pan,setPan]=useState([0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
+export function Editor({beginner=true,navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const [personal,setPersonal]=useState<string[]>([]),[personalQuery,setPersonalQuery]=useState(''),[galleryTab,setGalleryTab]=useState('built-in'),[libraryBusy,setLibraryBusy]=useState(false),[libraryMessage,setLibraryMessage]=useState('');async function refreshPersonal(){try{setPersonal(await invoke<string[]>('personal_designs'))}catch(e){setLibraryMessage(String(e))}}async function importPersonal(folder:boolean){setLibraryBusy(true);try{const n=await invoke<number>('import_personal_designs',{folder});setLibraryMessage(n+' new designs imported');await refreshPersonal()}catch(e){setLibraryMessage(String(e))}finally{setLibraryBusy(false)}}const [insertSize,setInsertSize]=useState(2),[insertX,setInsertX]=useState(0),[insertY,setInsertY]=useState(0);const [focusCanvas,setFocusCanvas]=useState(false);
+const fullscreenRequested=useRef(false);
+useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
+const [left,setLeft]=useState(false),[right,setRight]=useState(false),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",220,160,340)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,180,360));useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(100),[pan,setPan]=useState([0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
+const personalPage=usePagedList(personal.filter(name=>matchesName(name,personalQuery)).sort(compareNames),personalQuery);
 const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'>('hoop');
-const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(''),[hoop,setHoop]=useState('');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[progress,setProgress]=useState(100),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
+const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(''),[hoop,setHoop]=useState('');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
-async function edit(command:string,args:Record<string,unknown>){setBusy(true);setMessage('');try{setPlan(await invoke<Plan>(command,args));setProgress(100)}catch(e){setMessage(String(e))}finally{setBusy(false)}}
+async function edit(command:string,args:Record<string,unknown>){setBusy(true);setMessage('');try{setPlan(await invoke<Plan>(command,args));setPlayhead(null)}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 useEffect(()=>{if(!plan||busy)return;const save=()=>{invoke('recovery_save',{width,height,format}).then(()=>setRecoveryStatus('Recovery copy saved')).catch(e=>setRecoveryStatus('Recovery save failed: '+String(e)))};const timer=setTimeout(save,1500);return()=>clearTimeout(timer)},[plan,width,height,format,busy]);
-async function recover(){if(plan&&!await confirmAction('Replace the current design with the recovery copy?'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string}|null>('recovery_open');if(p){setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setProgress(100);setMessage('Recovery copy opened. Save as a project to keep it.')}else setMessage('No recovery copy found.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
+async function recover(){if(plan&&!await confirmAction('Replace the current design with the recovery copy?'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string}|null>('recovery_open');if(p){setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null);setMessage('Recovery copy opened. Save as a project to keep it.')}else setMessage('No recovery copy found.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
 function fit(){if(!points.length)return;const maxX=points.reduce((m,p)=>Math.max(m,Math.abs(p[0])),0),maxY=points.reduce((m,p)=>Math.max(m,Math.abs(p[1])),0);const s=Math.min(width*.45/Math.max(maxX,.01),height*.45/Math.max(maxY,.01),10);if(s>=.1)void transform(s,0,0,0);else setMessage('Design is too large for a single fit operation.')}
 useEffect(()=>{try{const raw=sessionStorage.getItem('studio-open-project-settings');if(raw){const p=JSON.parse(raw);setWidth(p.width);setHeight(p.height);setFormat(p.format);sessionStorage.removeItem('studio-open-project-settings')}}catch{}let active=true;invoke<Plan|null>('current_preview').then(p=>{if(active&&p)setPlan(p)}).catch(()=>{});return ()=>{active=false}},[]);
 useEffect(()=>{let active=true;invoke<EditableObject[]>('editable_objects').then(items=>{if(active){setObjects(items);setSelectedObject(old=>items.some(o=>o.uid===old)?old:null)}}).catch(()=>{if(active)setObjects([])});return()=>{active=false}},[plan]);
-useEffect(()=>{if(!playing)return;const timer=setInterval(()=>setProgress(p=>Math.min(100,p+1)),80);return ()=>clearInterval(timer)},[playing]);
-useEffect(()=>{if(progress===100)setPlaying(false)},[progress]);
-const points=plan?.blocks.flatMap(b=>b.runs.flat())??[];const outside=points.some(p=>Math.abs(p[0])>width/2||Math.abs(p[1])>height/2);let remaining=Math.floor(points.length*progress/100);
-async function open(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);setMessage('');try{const p=await invoke<Plan|null>('open_svg',{widthMm:artWidth,colors,removeBackground,detail});if(p){setPlan(p);setHidden([]);setProgress(100)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
+const points=useMemo(()=>plan?.blocks.flatMap(block=>block.runs.flat())??[],[plan]);
+const outside=points.some(point=>Math.abs(point[0])>width/2||Math.abs(point[1])>height/2);
+const stitchIndex=Math.min(points.length,playhead??points.length);
+let remaining=stitchIndex;
+useEffect(()=>{
+  if(!playing)return;
+  const interval=window.setInterval(()=>{
+    setPlayhead(previous=>Math.min(points.length,(previous??0)+playbackSpeed));
+  },100);
+  return()=>window.clearInterval(interval);
+},[playing,playbackSpeed,points.length]);
+useEffect(()=>{if(stitchIndex>=points.length)setPlaying(false);},[stitchIndex,points.length]);
+
+function stepStitch(delta:number) {
+  setPlaying(false);
+  setPlayhead(Math.max(0,Math.min(points.length,stitchIndex+delta)));
+}
+
+function fitArtwork() {
+  if (!points.length) return;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for (const [x,y] of points) {
+    minX=Math.min(minX,x); minY=Math.min(minY,y);
+    maxX=Math.max(maxX,x); maxY=Math.max(maxY,y);
+  }
+  setZoom(Math.max(25,Math.min(400,Math.min(width/Math.max(1,maxX-minX),height/Math.max(1,maxY-minY))*88)));
+  setPan([(minX+maxX)/2,(minY+maxY)/2]);
+}
+
+function changeFocus(next: boolean) {
+  fullscreenRequested.current=next;
+  setFocusCanvas(next);
+  if (isTauri()) void invoke('set_canvas_fullscreen',{fullscreen:next}).catch(()=>{});
+  if (next) {
+    setLeft(false);
+    setRight(false);
+  }
+}
+
+function toggleFocus() {
+  changeFocus(!focusCanvas);
+}
+
+async function open(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);setMessage('');try{const p=await invoke<Plan|null>('open_svg',{widthMm:artWidth,colors,removeBackground,detail});if(p){setPlan(p);setHidden([]);setPlayhead(null)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 async function projectSave(){setBusy(true);try{if(await invoke<boolean>('save_project',{width,height,format}))toast('Project saved.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
-async function projectOpen(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string}|null>('open_project');if(p){setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setProgress(100)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
+async function projectOpen(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string}|null>('open_project');if(p){setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 async function save(){setBusy(true);try{if(await invoke<boolean>('export_design',{format,width,height}))toast('Embroidery file saved. Test sew before production.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
-useEffect(()=>{const key=(e:KeyboardEvent)=>{if((e.target as HTMLElement)?.closest("input,select,textarea")||busy)return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format]);return <><dialog ref={insertDialog} className="insert-design-dialog"><div className="insert-heading"><h2>Insert design</h2><button onClick={()=>insertDialog.current?.close()}>Close</button></div><p>Add stitches to the current project. Templates and character artwork stay editable in artwork projects. Machine-file insertion currently combines stitch paths.</p><div className="insert-dimensions"><label>Width (in)<input type="number" min=".2" max="9.8" step=".1" value={insertSize} onChange={e=>setInsertSize(Number(e.target.value))}/></label><label>Horizontal offset (in)<input type="number" step=".1" value={insertX} onChange={e=>setInsertX(Number(e.target.value))}/></label><label>Vertical offset (in)<input type="number" step=".1" value={insertY} onChange={e=>setInsertY(Number(e.target.value))}/></label></div><button disabled={busy} onClick={async()=>{insertDialog.current?.close();setBusy(true);setMessage('');try{const result=await invoke<Plan|null>('insert_embroidery',{file:null,xMm:insertX*25.4,yMm:insertY*25.4});if(result){setPlan(result);setProgress(100);setHidden([])}}catch(e){setMessage(String(e))}finally{setBusy(false)}}}><FolderOpen size={16}/> Import my embroidery design (PES, DST, PEC, EXP, JEF)</button><p className="muted">Imported machine files retain their original size. Placement offsets above apply; width applies to built-in and character artwork.</p><div className="studio-tools"><button aria-pressed={galleryTab==='built-in'} onClick={()=>setGalleryTab('built-in')}>Built-in designs</button><button aria-pressed={galleryTab==='personal'} onClick={()=>{setGalleryTab('personal');void refreshPersonal()}}>My designs ({personal.length})</button><button aria-pressed={galleryTab==='characters'} onClick={()=>setGalleryTab('characters')}>Character artwork</button></div>{galleryTab==='characters'?<CharacterGallery onArt={async a=>{if(busy)return;insertDialog.current?.close();await edit('insert_character',{bytes:a.bytes,name:a.name,widthMm:insertSize*25.4,xMm:insertX*25.4,yMm:insertY*25.4})}}/>:galleryTab==='personal'?<section><div className="studio-tools"><button disabled={libraryBusy} onClick={()=>void importPersonal(false)}>Import files</button><button disabled={libraryBusy} onClick={()=>void importPersonal(true)}>Import folder</button></div><input aria-label="Search personal designs" placeholder="Search my designs" value={personalQuery} onChange={e=>setPersonalQuery(e.target.value)}/><p role="status">{libraryBusy?'Importing designs…':libraryMessage}</p>{personal.length===0&&<p>No personal designs yet. Import embroidery files or a folder.</p>}<div className="personal-design-list">{personal.filter(n=>n.toLowerCase().includes(personalQuery.toLowerCase())).map(n=><button key={n} disabled={busy||libraryBusy} onClick={async()=>{insertDialog.current?.close();setBusy(true);try{const result=await invoke<Plan|null>('insert_embroidery',{file:n,xMm:insertX*25.4,yMm:insertY*25.4});if(result){setPlan(result);setProgress(100);setHidden([])}}catch(e){setMessage(String(e))}finally{setBusy(false)}}}><FolderOpen size={16}/>{n} · Insert</button>)}</div></section>:<TemplateLibrary insert widthMm={insertSize*25.4} onChoose={async id=>{const t=templates.find(t=>t.id===id);if(!t||busy)return;insertDialog.current?.close();await edit('insert_template',{id,art:t.art,widthMm:insertSize*25.4,xMm:insertX*25.4,yMm:insertY*25.4})}}/>}</dialog><div className="workspace-titlebar">
-  <div className="workspace-title"><span className="workspace-title-icon"><Layers3 size={19}/></span>
-    <h1>{plan?.name || 'Untitled design'}</h1>
+useEffect(()=>{const key=(e:KeyboardEvent)=>{if (document.querySelector('dialog[open]')||busy) return;
+if(e.key==='Escape'&&focusCanvas){changeFocus(false);return;}
+if((e.target as HTMLElement)?.closest("input,select,textarea")||e.repeat)return;
+if(e.key==='F11'){e.preventDefault();toggleFocus();return;}
+if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas]);return <><dialog ref={insertDialog} className="insert-design-dialog"><div className="insert-heading"><h2>Insert design</h2><button onClick={()=>insertDialog.current?.close()}>Close</button></div><p>Add stitches to the current project. Templates and character artwork stay editable in artwork projects. Machine-file insertion currently combines stitch paths.</p><div className="insert-dimensions"><label>Width (in)<input type="number" min=".2" max="9.8" step=".1" value={insertSize} onChange={e=>setInsertSize(Number(e.target.value))}/></label><label>Horizontal offset (in)<input type="number" step=".1" value={insertX} onChange={e=>setInsertX(Number(e.target.value))}/></label><label>Vertical offset (in)<input type="number" step=".1" value={insertY} onChange={e=>setInsertY(Number(e.target.value))}/></label></div><button disabled={busy} onClick={async()=>{insertDialog.current?.close();setBusy(true);setMessage('');try{const result=await invoke<Plan|null>('insert_embroidery',{file:null,xMm:insertX*25.4,yMm:insertY*25.4});if(result){setPlan(result);setPlayhead(null);setHidden([])}}catch(e){setMessage(String(e))}finally{setBusy(false)}}}><FolderOpen size={16}/> Import my embroidery design (PES, DST, PEC, EXP, JEF)</button><p className="muted">Imported machine files retain their original size. Placement offsets above apply; width applies to built-in and character artwork.</p><div className="studio-tools"><button aria-pressed={galleryTab==='built-in'} onClick={()=>setGalleryTab('built-in')}>Built-in designs</button><button aria-pressed={galleryTab==='personal'} onClick={()=>{setGalleryTab('personal');void refreshPersonal()}}>My designs ({personal.length})</button><button aria-pressed={galleryTab==='characters'} onClick={()=>setGalleryTab('characters')}>Character artwork</button></div>{galleryTab==='characters'?<CharacterGallery onArt={async a=>{if(busy)return;insertDialog.current?.close();await edit('insert_character',{bytes:a.bytes,name:a.name,widthMm:insertSize*25.4,xMm:insertX*25.4,yMm:insertY*25.4})}}/>:galleryTab==='personal'?<section><div className="studio-tools"><button disabled={libraryBusy} onClick={()=>void importPersonal(false)}>Import files</button><button disabled={libraryBusy} onClick={()=>void importPersonal(true)}>Import folder</button></div><input aria-label="Search personal designs" placeholder="Search my designs" value={personalQuery} onChange={e=>setPersonalQuery(e.target.value)}/><p role="status">{libraryBusy?'Importing designs…':libraryMessage}</p>{personal.length===0&&<p>No personal designs yet. Import embroidery files or a folder.</p>}<div className="personal-design-list">{personalPage.items.map(n=><button key={n} disabled={busy||libraryBusy} onClick={async()=>{insertDialog.current?.close();setBusy(true);try{const result=await invoke<Plan|null>('insert_embroidery',{file:n,xMm:insertX*25.4,yMm:insertY*25.4});if(result){setPlan(result);setPlayhead(null);setHidden([])}}catch(e){setMessage(String(e))}finally{setBusy(false)}}}><FolderOpen size={16}/>{n} · Insert</button>)}</div><ListNavigation {...personalPage}/></section>:<TemplateLibrary insert widthMm={insertSize*25.4} onChoose={async id=>{const t=templates.find(t=>t.id===id);if(!t||busy)return;insertDialog.current?.close();await edit('insert_template',{id,art:t.art,widthMm:insertSize*25.4,xMm:insertX*25.4,yMm:insertY*25.4})}}/>}</dialog><div className={`studio-edit-bar ${focusCanvas?'studio-focus-active':''}`} role="group" aria-label="Design commands">
+  <div className="studio-document">
+    <Layers3 size={17} aria-hidden="true"/>
+    <h1 title={plan?.name || 'Untitled design'}>{plan?.name || 'Untitled design'}</h1>
   </div>
-  <div className="workspace-primary-actions">
-    <button title="Open a new artwork or embroidery file" onClick={open} disabled={busy}><FolderOpen size={17}/> Open artwork</button><button disabled={busy} onClick={()=>{insertDialog.current?.showModal();void refreshPersonal()}} title="Add another design to the workspace"><FilePlus size={16}/> Insert design</button><button className="primary" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={17}/> Export design</button>
+  <div className="studio-command-group">
+    <button className="studio-tool-icon" title="Open artwork" aria-label="Open artwork" disabled={busy} onClick={open}><FolderOpen size={18}/></button>
+    <button className="studio-tool-icon" title="Insert design" aria-label="Insert design" disabled={busy} onClick={()=>{insertDialog.current?.showModal();void refreshPersonal()}}><FilePlus size={18}/></button>
+    <button className="studio-tool-icon" title="Save project (Ctrl+S or Cmd+S)" aria-label="Save project" disabled={!plan||busy} onClick={projectSave}><Save size={17}/></button>
   </div>
-</div>
-<div className="workspace-tools" role="group" aria-label="Design commands">
-  <div className="workspace-tool-group"><button title="Open an editable .stitchstudio project" disabled={busy} onClick={projectOpen}><FolderOpen size={16}/> Open project</button><button title="Save editable artwork and stitches (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={16}/> Save project</button><button disabled={!plan||busy} title="Undo the last design change (Ctrl+Z or Cmd+Z)" onClick={()=>edit("history_step",{redo:false})}><Undo2 size={16}/> Undo</button><button disabled={!plan||busy} title="Redo the last design change (Shift+Ctrl+Z or Shift+Cmd+Z)" onClick={()=>edit("history_step",{redo:true})}><Redo2 size={16}/> Redo</button></div>
-  <button disabled={!plan||busy} title="Move the design to the center of the hoop" onClick={()=>edit("center_design",{})}><Scan size={16}/> Center</button>
-  <button disabled={!plan} title="Open placement and sizing controls" onClick={()=>{setRight(true);setInspectorTab('transform')}}><Move size={16}/> Transform</button>
-  <button disabled={!plan} title="Review stitch settings and quality checks" onClick={()=>{setRight(true);setInspectorTab('stitches')}}><Scissors size={16}/> Stitch tools</button>
+  <div className="studio-command-group">
+    <button className="studio-tool-icon" title="Undo" aria-label="Undo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:false})}><Undo2 size={17}/></button>
+    <button className="studio-tool-icon" title="Redo" aria-label="Redo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:true})}><Redo2 size={17}/></button>
+  </div>
+  <div className="studio-command-group studio-design-tools">
+    <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/></button>
+    <button className="studio-tool-icon" title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('transform')}}><Move size={17}/></button>
+    <button className="studio-tool-icon" title="Stitch tools" aria-label="Stitch tools" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('stitches')}}><Scissors size={17}/></button>
+  </div>
+  <div className="studio-command-group studio-view-tools">
+    <button className="studio-tool-icon" title="Layers" aria-label="Layers" aria-pressed={left} onClick={()=>setLeft(value=>!value)}><PanelLeft size={18}/></button>
+    <button className="studio-tool-icon" title="Inspector" aria-label="Inspector" aria-pressed={right} onClick={()=>setRight(value=>!value)}><PanelRight size={18}/></button>
+    <button className="studio-tool-icon" title={focusCanvas?'Exit focus view (Esc)':'Full-screen canvas (F11)'} aria-label={focusCanvas?'Exit focus view':'Focus canvas'} aria-pressed={focusCanvas} onClick={toggleFocus}>{focusCanvas?<Minimize size={18}/>:<Maximize size={18}/>}</button>
+  </div>
+  <CommandPalette commands={[
+    {label:'Fit artwork',group:'View',run:fitArtwork,disabled:!plan},
+    {label:'Fit hoop',group:'View',run:()=>{setZoom(100);setPan([0,0])}},
+    {label:focusCanvas?'Exit focus view':'Focus canvas',group:'View',run:toggleFocus},
+    {label:'Layers',group:'View',run:()=>setLeft(value=>!value)},
+    {label:'Hoop and machine',group:'Inspector',run:()=>{setRight(true);setInspectorTab('hoop')}},
+    {label:'Transform and resize',group:'Inspector',run:()=>{setRight(true);setInspectorTab('transform')},disabled:!plan},
+    {label:'Stitch tools and quality',group:'Inspector',run:()=>{setRight(true);setInspectorTab('stitches')},disabled:!plan},
+    {label:'Open artwork',group:'File',run:()=>void open(),disabled:busy},
+    {label:'Open project',group:'File',run:()=>void projectOpen(),disabled:busy},
+    {label:'Save project',group:'File',run:()=>void projectSave(),disabled:busy||!plan},
+    {label:'Recover last design',group:'File',run:()=>void recover(),disabled:busy},
+    {label:'Next stitch',group:'Playback',run:()=>stepStitch(1),disabled:stitchIndex===points.length},
+    {label:'Previous stitch',group:'Playback',run:()=>stepStitch(-1),disabled:stitchIndex===0},
+    {label:'Center design',group:'Edit',run:()=>void edit('center_design',{}),disabled:busy||!plan},
+    ...navigation,
+  ]}/>
   <details className="workspace-options">
-    <summary><SlidersHorizontal size={16}/> View <ChevronDown size={13}/></summary>
+    <summary title="Workspace options" aria-label="Workspace options"><Menu size={18}/></summary>
     <div className="workspace-options-panel">
+      <button disabled={busy} onClick={projectOpen}>Open project</button>
+      <button disabled={busy} onClick={recover}>Recover last design</button>
       <label><span>Layers panel width</span><input aria-label="Left panel width" type="range" min="160" max="340" value={leftWidth} onChange={e=>setLeftWidth(Number(e.target.value))}/></label>
       <label><span>Inspector width</span><input aria-label="Right panel width" type="range" min="180" max="360" value={rightWidth} onChange={e=>setRightWidth(Number(e.target.value))}/></label>
-      <button disabled={busy} onClick={recover}>Recover last design</button>
     </div>
   </details>
+  <button className="primary studio-export" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
-{busy&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid ${left?"":"hide-left"} ${right?"":"hide-right"}`} style={{gridTemplateColumns:`${left?`min(${leftWidth}px, 24vw)`:"0px"} minmax(0,1fr) ${right?`min(${rightWidth}px, 27vw)`:"0px"}`}}>
-<article className="workspace-sidebar">
+{busy&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:'minmax(0,1fr)'}}>
+<article className="workspace-sidebar studio-layers-dock" style={{width:`min(${leftWidth}px, 36vw)`}}>
   <h2>Layers</h2>
   <div className="workspace-segments" role="group" aria-label="Layers">
     <button aria-pressed={layerTab==='objects'} onClick={()=>setLayerTab('objects')}>Objects</button>
@@ -74,35 +154,35 @@ useEffect(()=>{const key=(e:KeyboardEvent)=>{if((e.target as HTMLElement)?.close
   </details>
 </article>
 <article className="canvas-panel">
-<div className="canvas-tools">
-<div className="canvas-tool-group">
-  <button title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(z=>Math.max(25,z-25))}><ZoomOut size={16}/></button>
-  <span className="canvas-zoom" aria-label="Zoom percentage">{zoom}%</span>
-  <button title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(z=>Math.min(400,z+25))}><ZoomIn size={16}/></button>
-</div>
-<button title="Show the entire hoop at the default zoom" onClick={()=>{setZoom(100);setPan([0,0])}}>Fit hoop view</button>
-<button title="Zoom to the design on the canvas" disabled={!points.length} onClick={()=>{let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const p of points){minX=Math.min(minX,p[0]);minY=Math.min(minY,p[1]);maxX=Math.max(maxX,p[0]);maxY=Math.max(maxY,p[1])}setZoom(Math.max(25,Math.min(400,Math.min(width/Math.max(1,maxX-minX),height/Math.max(1,maxY-minY))*100)));setPan([(minX+maxX)/2,(minY+maxY)/2])}}>Fit artwork</button>
-<div className="canvas-tool-group canvas-visibility">
-  <button onClick={()=>setLeft(v=>!v)} title="Show or hide Layers" aria-label="Layers" aria-pressed={left}><PanelLeft size={16}/></button>
-  <button onClick={()=>setRight(v=>!v)} title="Show or hide Inspector" aria-label="Inspector" aria-pressed={right}><PanelRight size={16}/></button>
-  <button title="Show or hide the hoop grid" aria-label="Grid" aria-pressed={grid} onClick={()=>setGrid(v=>!v)}><Grid size={16}/></button>
-  <button title="Show thicker thread strokes on the canvas" aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}>Thread view</button>
-</div>
-</div>
 <div className="workspace-canvas">
-<svg aria-label="Stitch preview; drag to pan" onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);setDrag({x:e.clientX,y:e.clientY,px:pan[0],py:pan[1]})}} onPointerMove={e=>{if(drag){const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const inverse=matrix.inverse();const start=new DOMPoint(drag.x,drag.y).matrixTransform(inverse);const now=new DOMPoint(e.clientX,e.clientY).matrixTransform(inverse);setPan([drag.px-(now.x-start.x),drag.py-(now.y-start.y)])}}} onPointerUp={()=>setDrag(null)} onPointerCancel={()=>setDrag(null)} viewBox={[pan[0]-width*.6*100/zoom,pan[1]-height*.6*100/zoom,width*1.2*100/zoom,height*1.2*100/zoom].join(' ')} className="design-canvas" onWheel={e=>{const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const anchor=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());const next=Math.max(25,Math.min(400,zoom*(e.deltaY<0?1.1:1/1.1)));if(next===zoom)return;const ratio=zoom/next;setPan([anchor.x+(pan[0]-anchor.x)*ratio,anchor.y+(pan[1]-anchor.y)*ratio]);setZoom(next)}} style={{width:'100%',background:'var(--lav-bg,var(--canvas,#edf1ed))'}}><defs><pattern id="hoop-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#d8cce6" strokeWidth=".75" vectorEffect="non-scaling-stroke"/></pattern></defs><rect x={-width/2} y={-height/2} width={width} height={height} fill="#fffdf5" stroke="#9b7ac4" strokeWidth="1.25" vectorEffect="non-scaling-stroke"/><rect x={-width/2} y={-height/2} width={width} height={height} fill={grid?"url(#hoop-grid)":"none"}/>{!plan&&<text x="0" y="0" textAnchor="middle" fontSize="4" fill="#526258">Import artwork to begin</text>}{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=r.slice(0,Math.max(0,remaining));remaining-=visible.length;return <polyline key={j} points={visible.map(p=>p.join(',')).join(' ')} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .35 : 1}/>})}</g>)}</svg>{!plan&&<div className="workspace-empty">
+<svg aria-label="Stitch preview; drag to pan" onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);setDrag({x:e.clientX,y:e.clientY,px:pan[0],py:pan[1]})}} onPointerMove={e=>{if(drag){const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const inverse=matrix.inverse();const start=new DOMPoint(drag.x,drag.y).matrixTransform(inverse);const now=new DOMPoint(e.clientX,e.clientY).matrixTransform(inverse);setPan([drag.px-(now.x-start.x),drag.py-(now.y-start.y)])}}} onPointerUp={()=>setDrag(null)} onPointerCancel={()=>setDrag(null)} viewBox={[pan[0]-width*.6*100/zoom,pan[1]-height*.6*100/zoom,width*1.2*100/zoom,height*1.2*100/zoom].join(' ')} className="design-canvas" onWheel={e=>{const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const anchor=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());const next=Math.max(25,Math.min(400,zoom*(e.deltaY<0?1.1:1/1.1)));if(next===zoom)return;const ratio=zoom/next;setPan([anchor.x+(pan[0]-anchor.x)*ratio,anchor.y+(pan[1]-anchor.y)*ratio]);setZoom(next)}} style={{width:'100%',background:'var(--lav-bg,var(--canvas,#edf1ed))'}}><defs><pattern id="hoop-fabric" width="1.4" height="1.4" patternUnits="userSpaceOnUse"><path d="M0 .2H1.4 M.2 0V1.4" fill="none" stroke="#967a68" strokeWidth=".075" opacity=".18"/></pattern><pattern id="hoop-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#d8cce6" strokeWidth=".75" vectorEffect="non-scaling-stroke"/></pattern></defs><rect x={-width/2} y={-height/2} width={width} height={height} fill="#fffdf5" stroke="#aa90b1" strokeWidth="1.6" rx={2} vectorEffect="non-scaling-stroke" className="studio-hoop"/><rect x={-width/2} y={-height/2} width={width} height={height} fill="url(#hoop-fabric)" rx={2}/><rect x={-width/2} y={-height/2} width={width} height={height} fill={grid?"url(#hoop-grid)":"none"}/>{grid&&<g stroke="#896d98" opacity=".6" pointerEvents="none">
+<path d={`M ${-width/2} 0 H ${width/2} M 0 ${-height/2} V ${height/2}`} strokeDasharray="4 5" strokeWidth=".6" vectorEffect="non-scaling-stroke"/>
+</g>}{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=r.slice(0,Math.max(0,remaining));remaining-=visible.length;return <polyline key={j} points={visible.map(p=>p.join(',')).join(' ')} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .42 : 1} className={realistic?'studio-thread-path':undefined}/>})}</g>)}</svg><div className="studio-camera" role="group" aria-label="Canvas view">
+  <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>
+  <span>{Math.round(zoom)}%</span>
+  <button className="studio-tool-icon" title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(value=>Math.min(400,value+25))}><ZoomIn size={17}/></button>
+  <button title="Fit artwork" disabled={!points.length} onClick={fitArtwork}>Fit artwork</button>
+  <button title="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}>Hoop</button>
+  <button className="studio-tool-icon" title="Hoop grid" aria-label="Hoop grid" aria-pressed={grid} onClick={()=>setGrid(value=>!value)}><Grid size={16}/></button>
+  <button title="Thread view" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}>Thread</button>
+</div>{!plan&&<div className="workspace-empty">
   <SquareDashed size={31}/>
   <strong>Start with a design</strong>
   <p>Open artwork or insert a library template.</p>
   <button onClick={()=>{insertDialog.current?.showModal();void refreshPersonal()}}><FilePlus size={16}/> Browse designs</button>
 </div>}</div>
 <div className="playback-tools">
-  <button disabled={!plan} onClick={()=>{if(progress===100)setProgress(0);setPlaying(!playing)}}>{playing?<Pause size={15}/>:<Play size={15}/>} {playing?"Pause":"Play"}</button>
-  <button aria-label="Restart simulation" title="Restart simulation" disabled={!plan} onClick={()=>{setPlaying(false);setProgress(0)}}><RotateCcw size={15}/></button>
-  <label><span className="screen-reader-only">Stitch simulation progress</span><input type="range" min="0" max="100" disabled={!plan} value={progress} onChange={e=>setProgress(Number(e.target.value))}/></label>
-  <span>{progress}%</span>
+  <button disabled={!points.length} onClick={()=>{if(stitchIndex===points.length)setPlayhead(0);setPlaying(!playing)}}>{playing?<Pause size={15}/>:<Play size={15}/>} {playing?"Pause":"Play"}</button>
+  <button aria-label="Restart simulation" title="Restart simulation" disabled={!points.length} onClick={()=>{setPlaying(false);setPlayhead(0)}}><RotateCcw size={15}/></button>
+  <button title="Previous stitch" aria-label="Previous stitch" disabled={stitchIndex===0} onClick={()=>stepStitch(-1)}><StepBack size={15}/></button>
+  <button title="Next stitch" aria-label="Next stitch" disabled={stitchIndex===points.length} onClick={()=>stepStitch(1)}><StepForward size={15}/></button>
+  <label><span className="screen-reader-only">Planned stitch position</span><input type="range" min="0" max={points.length} disabled={!points.length} value={stitchIndex} onChange={e=>{setPlaying(false);setPlayhead(Number(e.target.value))}}/></label>
+  <select aria-label="Playback speed" value={playbackSpeed} onChange={event=>setPlaybackSpeed(Number(event.target.value))}>
+    <option value={1}>1×</option><option value={4}>4×</option><option value={16}>16×</option>
+  </select>
+  <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>
 </div>
-</article><article className="workspace-sidebar workspace-inspector">
+</article><article className="workspace-sidebar workspace-inspector studio-inspector-dock" style={{width:`min(${rightWidth}px, 38vw)`}}>
   <h2>Inspector</h2>
   <div className="workspace-segments" role="group" aria-label="Inspector">
     <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}>Hoop</button>
