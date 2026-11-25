@@ -228,6 +228,12 @@ const designBounds=useMemo(()=>{
   for(const [x,y] of points){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
   return {left,top,width:right-left,height:bottom-top};
 },[points]);
+const sizePreview=useMemo(()=>{
+ const b=movementBounds;
+ if(b&&resizePreview)return {w:b[2]*resizePreview.sx,h:b[3]*resizePreview.sy,active:true};
+ if(b&&groupScalePreview.some(v=>v!==1))return {w:b[2]*groupScalePreview[0],h:b[3]*groupScalePreview[1],active:true};
+ return designBounds?{w:designBounds.width,h:designBounds.height,active:false}:null;
+},[movementBounds,resizePreview,groupScalePreview,designBounds]);
 const selectedMachine=machines.find(m=>m.id===machine);const machineExceeded=!!selectedMachine&&(width>selectedMachine.width+.001||height>selectedMachine.height+.001);const incompatibleHoop=!!selectedMachine&&!!hoop&&!hoops.some(h=>h.id===hoop&&hoopFits(h,selectedMachine));const invalidField=!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0;const compatibleHoops=hoops.filter(h=>hoopFits(h,selectedMachine));const outside=!!designBounds&&(designBounds.left < -width/2||designBounds.left+designBounds.width>width/2||designBounds.top < -height/2||designBounds.top+designBounds.height>height/2);
 const stitchIndex=Math.min(points.length,playhead??points.length);
 const directionSamples=useMemo(()=>{
@@ -637,6 +643,16 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button title="Thread view" aria-label="Thread view" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}><Eye size={16}/><span className="camera-label">Thread</span></button>
 <button title="Show sampled stitch directions" aria-label="Show stitch directions" aria-pressed={showDirections} onClick={()=>setShowDirections(v=>!v)}><Waypoints size={16}/><span className="camera-label">Direction</span></button>
 </div>
+{plan&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'4px 10px',flexWrap:'wrap',fontSize:12,borderBottom:'1px solid var(--border,#ddd)'}}><span title="Current artwork or live resize dimensions">{sizePreview?.active?'Resizing':'Design'}: <strong>{sizePreview?(sizePreview.w/25.4).toFixed(2)+' × '+(sizePreview.h/25.4).toFixed(2)+' in':'—'}</strong>{sizePreview&&<span> · {Math.round(sizePreview.w)} × {Math.round(sizePreview.h)} mm</span>}{sizePreview&&(sizePreview.w>width||sizePreview.h>height)&&<strong style={{color:'#b45309'}}> · Exceeds hoop size</strong>}</span>{selected&&canvasMode==='select'&&<div className="studio-selection-docked" style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4,flexWrap:"wrap"}} role="group" aria-label="Selected object actions">
+  <span style={{fontSize:12,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{layerNames[selected.uid]||selected.label||'Object '+selected.uid}</span>
+  <button className="studio-tool-icon" title="Move left" aria-label="Move selected object left" disabled={busy} onClick={()=>nudge(-nudgeStep,0)}><ArrowLeft size={16}/></button>
+  <button className="studio-tool-icon" title="Move up" aria-label="Move selected object up" disabled={busy} onClick={()=>nudge(0,-nudgeStep)}><ArrowUp size={16}/></button>
+  <button className="studio-tool-icon" title="Move down" aria-label="Move selected object down" disabled={busy} onClick={()=>nudge(0,nudgeStep)}><ArrowDown size={16}/></button>
+  <button className="studio-tool-icon" title="Move right" aria-label="Move selected object right" disabled={busy} onClick={()=>nudge(nudgeStep,0)}><ArrowRight size={16}/></button>
+  <button className="studio-tool-icon" title="Rotate selection 90°" aria-label="Rotate selection 90 degrees" disabled={busy} onClick={()=>editSelection({kind:'rotate'})}><RotateCw size={16}/></button>
+  <button className="studio-tool-icon" title="Duplicate selection" aria-label="Duplicate selection" disabled={busy} onClick={()=>editSelection({kind:'duplicate'})}><Copy size={16}/></button>
+  <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={16}/></button>
+</div>}</div>}
 <div className="workspace-canvas">
 <svg aria-label="Stitch preview; drag empty space to select objects in Objects mode, or use Pan to move the canvas" data-mode={canvasMode}
  onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerLeave={()=>setHoverUid(null)}
@@ -677,17 +693,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
    <title>{handle.dx&&handle.dy?'Drag corner to stretch · Shift keeps proportions':'Drag side to resize'}</title>
  </circle>)}
 <line x1={selected.bounds[0]+selected.bounds[2]/2} x2={selected.bounds[0]+selected.bounds[2]/2} y1={selected.bounds[1]} y2={selected.bounds[1]-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke"/><circle cx={selected.bounds[0]+selected.bounds[2]/2} cy={selected.bounds[1]-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" pointerEvents={busy?'none':'all'} style={{cursor:'grab'}}><title>Rotate object · Shift snaps to 15°</title></circle>
-</g>}</svg>{selected&&canvasMode==='select'&&<div className="studio-selection-actions" role="group" aria-label="Selected object actions">
-  <span>{selected.label||'Object '+selected.uid}</span>
-  <button className="studio-tool-icon" title="Move left" aria-label="Move selected object left" disabled={busy} onClick={()=>nudge(-nudgeStep,0)}><ArrowLeft size={16}/></button>
-  <button className="studio-tool-icon" title="Move up" aria-label="Move selected object up" disabled={busy} onClick={()=>nudge(0,-nudgeStep)}><ArrowUp size={16}/></button>
-  <button className="studio-tool-icon" title="Move down" aria-label="Move selected object down" disabled={busy} onClick={()=>nudge(0,nudgeStep)}><ArrowDown size={16}/></button>
-  <button className="studio-tool-icon" title="Move right" aria-label="Move selected object right" disabled={busy} onClick={()=>nudge(nudgeStep,0)}><ArrowRight size={16}/></button>
-  <button className="studio-tool-icon" title="Rotate selection 90°" aria-label="Rotate selection 90 degrees" disabled={busy} onClick={()=>editSelection({kind:'rotate'})}><RotateCw size={16}/></button>
-  <button className="studio-tool-icon" title="Duplicate selection" aria-label="Duplicate selection" disabled={busy} onClick={()=>editSelection({kind:'duplicate'})}><Copy size={16}/></button>
-  <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={16}/></button>
-</div>}
-{!plan&&<div className="workspace-empty">
+</g>}</svg>{!plan&&<div className="workspace-empty">
   <SquareDashed size={31}/>
   <strong>Start with a design</strong>
   <p>Open artwork or insert a library template.</p>
@@ -743,7 +749,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>{plan&&<span className="simulation-fit" data-outside={outside}>{outside?"Outside hoop":"Fits hoop"}</span>}
 </div><footer className="workspace-status">{inlineWork&&<span className="inline-work-status" role="status"><span className="inline-work-spinner"/>{inlineWork}</span>}
   <span><SquareDashed size={16}/>{width>0&&height>0?`Hoop ${(width/25.4).toFixed(2)} × ${(height/25.4).toFixed(2)} in`:'Set a hoop size'}</span>
-  {plan&&<div className="status-metrics"><span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span title="Unique RGB thread colors">{uniqueColors} colors</span><span><Scissors size={16}/>{plan.trims} trims</span><button className="sewing-estimate" title={'Estimated machine time at '+sewingSpm+' stitches/min, '+trimSeconds+' seconds per trim and '+changeSeconds+' seconds per block transition. Excludes hooping, setup and interruptions.'} onClick={()=>{setRight(true);setInspectorTab('hoop')}}><Clock3 size={15}/> Est. {sewingDuration}</button></div>}
+  {plan&&<div className="status-metrics">{designBounds&&<span title="Sewn design dimensions">{(designBounds.width/25.4).toFixed(2)} × {(designBounds.height/25.4).toFixed(2)} in</span>}<span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span title="Unique RGB thread colors">{uniqueColors} colors</span><span><Scissors size={16}/>{plan.trims} trims</span><button className="sewing-estimate" title={'Estimated machine time at '+sewingSpm+' stitches/min, '+trimSeconds+' seconds per trim and '+changeSeconds+' seconds per block transition. Excludes hooping, setup and interruptions.'} onClick={()=>{setRight(true);setInspectorTab('hoop')}}><Clock3 size={15}/> Est. {sewingDuration}</button></div>}
   <span className="workspace-fit-status" data-outside={outside}>{outside?'Outside hoop':plan?'Fits hoop · '+recoveryStatus:recoveryStatus}</span>
 </footer>
 {exportOpen&&plan&&<ExportCenter assignments={threadAssignments} plan={plan} width={width} height={height} format={format} setFormat={setFormat} machine={machines.find(m=>m.id===machine)?.name||""} blocked={outside||machineExceeded||incompatibleHoop||invalidField} busy={busy} onExport={save} onClose={()=>setExportOpen(false)}/>}{message&&<p role="status">{message}</p>}</>}
