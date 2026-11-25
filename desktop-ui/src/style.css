@@ -1608,3 +1608,11 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 @media(prefers-reduced-motion:reduce){.inline-work-spinner{animation:none}}
 .editor-workspace .workspace-sidebar{overflow-x:hidden;min-width:0}
 .editor-workspace .workspace-inspector .workspace-segments button{overflow-wrap:normal;font-size:clamp(9px,.72vw,11px);letter-spacing:-.2px}
+
+/* Contextual selection tools */
+.studio-context-menu{position:fixed;z-index:90;display:grid;gap:3px;width:180px;padding:6px;background:var(--workspace-surface,#fff);border:1px solid var(--workspace-border,#ded3ed);border-radius:10px;box-shadow:0 8px 28px #29183f33}
+.studio-context-menu button{justify-content:flex-start;text-align:left;border:0;background:transparent;font-size:12px;padding:7px 9px;color:inherit}
+.studio-context-menu button:hover,.studio-context-menu button:focus-visible{background:var(--brand-soft);color:var(--brand)}
+.multi-align{display:grid;gap:6px;border-bottom:1px solid var(--workspace-border);padding-bottom:10px!important}
+.multi-align label:has(input[type=checkbox]){display:flex;align-items:center;gap:7px}
+.multi-align small{font-size:11px;letter-spacing:normal}
