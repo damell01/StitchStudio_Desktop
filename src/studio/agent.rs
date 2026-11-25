@@ -1317,6 +1317,19 @@ impl Studio {
         if self.agent.prompt.trim().is_empty() || self.agent.running() {
             return;
         }
+        // Common exact commands bypass external inference and process startup.
+        if let Some(action) = quick_action(&self.agent.prompt) {
+            let prompt = std::mem::take(&mut self.agent.prompt);
+            self.agent.log.push(Entry::You(prompt));
+            if self.action_enabled(action) {
+                self.run_action(action);
+                self.agent.log.push(Entry::Done("Applied locally.".into()));
+            } else {
+                self.agent.log.push(Entry::Error("Action unavailable in the current selection or document.".into()));
+            }
+            ctx.request_repaint();
+            return;
+        }
         let addr = self.mcp.as_ref().map(|m| m.addr);
         self.agent.send(addr, ctx);
         if self.agent.running() {
@@ -2006,5 +2019,38 @@ mod tests {
             Entry::Tool(String::new(), String::new(), Some(true)),
         );
         assert_eq!(a.status(), "Thinking");
+    }
+}
+
+ 
+/// Deliberately exact allowlist: never interpret a negated or compound
+/// instruction as a mutation. More complex prompts go to the configured agent.
+fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
+    use crate::commands::Action as A;
+    let normalized = prompt.trim().trim_end_matches(['.', '!']).to_ascii_lowercase();
+    Some(match normalized.as_str() {
+        "undo" | "undo last change" => A::Undo,
+        "redo" | "redo last change" => A::Redo,
+        "select all" | "select all objects" => A::SelectAll,
+        "deselect all" | "clear selection" => A::Deselect,
+        "center in hoop" | "center design in hoop" | "center the design" => A::CenterInHoop,
+        "fit to hoop" | "fit design to hoop" => A::FitToHoop,
+        "zoom to fit" | "zoom fit" => A::ZoomFit,
+        "check design" | "show design issues" => A::ShowIssues,
+        "group colors" | "group thread colors" => A::GroupColors,
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod quick_action_tests {
+    use super::quick_action;
+    use crate::commands::Action;
+    #[test]
+    fn routes_exact_local_commands_only() {
+        assert_eq!(quick_action(" Center the design! "), Some(Action::CenterInHoop));
+        assert_eq!(quick_action("undo"), Some(Action::Undo));
+        assert_eq!(quick_action("do not undo"), None);
+        assert_eq!(quick_action("undo and export"), None);
     }
 }
