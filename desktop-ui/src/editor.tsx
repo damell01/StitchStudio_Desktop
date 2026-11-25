@@ -100,9 +100,11 @@ useEffect(()=>{
 },[playing,playbackSpeed,points.length]);
 useEffect(()=>{if(stitchIndex>=points.length)setPlaying(false);},[stitchIndex,points.length]);
 
+const selectionRequest=useRef(0);
 function selectObject(object:EditableObject|null) {
+  const request=++selectionRequest.current;
   setSelectedObject(object?.uid??null);
-  if(object){setObjectKind(object.kind);setRight(true);setInspectorTab(object.kind==="manual"?"transform":"stitches");void invoke<unknown>("lettering_settings",{uid:object.uid}).then(settings=>{if(settings)setSelectedObject(current=>{if(current===object.uid){openText(object.uid)}return current})}).catch(()=>{});}
+  if(object){setObjectKind(object.kind);setRight(true);setInspectorTab(object.kind==="manual"?"transform":"stitches");void invoke<unknown>("lettering_settings",{uid:object.uid}).then(settings=>{if(settings&&request===selectionRequest.current)openText(object.uid)}).catch(()=>{});}
 }
 
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
@@ -474,7 +476,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button aria-pressed={inspectorTab==='threads'} onClick={()=>setInspectorTab('threads')}><Palette size={19}/>Threads</button>
     <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={19}/>Text</button><button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={19}/>Properties</button>
   </div>
-  {inspectorTab==='text'&&<InlineLettering key={textSession} uid={textTarget} disabled={busy} onBusy={setBusy} onDone={()=>{void invoke<Plan|null>('current_preview').then(p=>{if(p){setPlan(p);setPlayhead(null);setPlaying(false);setHidden([])}}).catch(e=>setMessage(String(e)))}}/>}
+  {inspectorTab==='text'&&<InlineLettering key={textSession} uid={textTarget} disabled={busy} onBusy={setBusy} onDone={uid=>{if(uid!==null){setSelectedObject(uid);setLayerTab('objects')}void invoke<Plan|null>('current_preview').then(p=>{if(p){if(p.blocks.length!==plan?.blocks.length||p.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(',')))setThreadAssignments({});setPlan(p);setPlayhead(null);setPlaying(false);setHidden([])}}).catch(e=>setMessage(String(e)))}}/>}
   {inspectorTab==='hoop'&&<section className="workspace-inspector-group">
     <h3><SquareDashed size={18}/> Machine setup</h3><label>Machine<select value={machine} onChange={e=>{setMachine(e.target.value);const m=machines.find(p=>p.id===e.target.value);if(m){setWidth(m.width);setHeight(m.height);setHoop("");if(m.format)setFormat(m.format.toLowerCase())}}}><option value="">Manual setup</option>{machines.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label><label>Saved hoop<select value={hoop} onChange={e=>{setHoop(e.target.value);const h=hoops.find(p=>p.id===e.target.value);if(h){setWidth(h.width);setHeight(h.height)}}}><option value="">Custom dimensions</option>{hoops.map(h=><option key={h.id} value={h.id}>{h.name} — {h.width} × {h.height}</option>)}</select></label><div className="workspace-hoop-fields"><label>Width (in) <small>({width.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((width/25.4).toFixed(3))} onChange={e=>{setHoop("");setWidth(Number(e.target.value)*25.4)}}/></label><label>Height (in) <small>({height.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((height/25.4).toFixed(3))} onChange={e=>{setHoop("");setHeight(Number(e.target.value)*25.4)}}/></label></div>
     <label>Export format<select value={format} onChange={e=>setFormat(e.target.value)}>
