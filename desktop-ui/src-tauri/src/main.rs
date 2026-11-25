@@ -138,6 +138,16 @@ async fn recolor_block(index: usize, color: [u8; 3], app: tauri::AppHandle) -> R
         thread_recolor::apply(&mut workspace, index, color)
     }).await.map_err(|err| err.to_string())?
 }
+#[tauri::command]
+async fn replace_design_color(previous:[u8;3],color:[u8;3],app:tauri::AppHandle)->Result<Preview,String>{
+ use tauri::Manager;
+ tauri::async_runtime::spawn_blocking(move||{let state=app.state::<Mutex<Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;thread_recolor::replace_color(&mut w,previous,color)}).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+fn center_design_axis(horizontal:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+ let mut w=state.lock().map_err(|e|e.to_string())?;let bounds=w.current.as_ref().ok_or("Open artwork first")?.bounds();if bounds.is_empty(){return Err("No stitches to center".into())}let c=bounds.center();
+ place_design(&mut w,[1.0,0.0,0.0,1.0,if horizontal{-c.x}else{0.0},if horizontal{0.0}else{-c.y}])
+}
 fn load_design_document(
     path: &std::path::Path,
     options: &zigzag::trace::TraceOptions,
@@ -1340,4 +1350,4 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
     window.set_fullscreen(fullscreen).map_err(|error| error.to_string())
 }
 
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
