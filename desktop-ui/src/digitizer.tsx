@@ -1,3 +1,4 @@
+import {readThreads} from './threads';
 import {FabricPicker} from './fabric-picker';
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -23,7 +24,7 @@ type Review = {
 };
 
 const defaults = {
-  widthMm: 80, colors: 0, detail: 60, fabric: 'standard',
+  widthMm: 80, colors: 0, useOwnedThreads: localStorage.getItem('studio-use-owned-threads') === 'true', detail: 60, fabric: 'standard',
   removeBackground: true, cleanup: true, tolerance: 32, thinLines: false,
 };
 // All imports use the same automatic pipeline; gallery metadata must not force a palette.
@@ -76,7 +77,8 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       pendingGeneration = pendingGeneration.then(async () => {
         if (!active) return;
         try {
-          const result = await invoke<Review>('digitize_artwork', { name:art.name, mime:art.mime, bytes:art.bytes, ...settings });
+          const threadPalette = settings.useOwnedThreads ? readThreads().filter(t=>t.stock>0).map(t=>[1,3,5].map(i=>parseInt(t.color.slice(i,i+2),16))) : [];
+          const result = await invoke<Review>('digitize_artwork', { name:art.name, mime:art.mime, bytes:art.bytes, ...settings, threadPalette });
           if (active) setGenerated({ art, settings, review: result });
         } catch (err) {
           if (active) setFailed({ art, settings, message: String(err) });
@@ -109,7 +111,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const acceptArtwork = useCallback((next: Art) => {
     setArt(next);
     setOriginal(next);
-    setSettings(defaults);
+    setSettings({...defaults,useOwnedThreads:localStorage.getItem('studio-use-owned-threads')==='true'});
     setShowProcessed(next.mime === 'image/tiff');
     setError('');
     setGenerated(null);
@@ -234,6 +236,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
             onChange={event => update('widthMm', Number(event.target.value) * 25.4)} />
         </label>}
         <FabricPicker value={settings.fabric} disabled={busy} onChange={fabric => update('fabric', fabric)}/>
+        {!vector && <label><input type="checkbox" checked={settings.useOwnedThreads} disabled={!readThreads().some(t=>t.stock>0)} onChange={e=>{localStorage.setItem('studio-use-owned-threads',String(e.target.checked));update('useOwnedThreads',e.target.checked)}}/> Match my in-stock threads ({readThreads().filter(t=>t.stock>0).length})</label>}
         {!vector && <button type="button" aria-pressed={settings.cleanup&&settings.colors===4}
           onClick={()=>setSettings(previous=>({...previous,cleanup:true,colors:4}))}>
           Simplify embroidered mockup
