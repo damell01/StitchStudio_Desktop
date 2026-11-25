@@ -2038,6 +2038,24 @@ fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
         "zoom to fit" | "zoom fit" => A::ZoomFit,
         "check design" | "show design issues" => A::ShowIssues,
         "group colors" | "group thread colors" => A::GroupColors,
+        "duplicate selection" | "duplicate selected objects" => A::Duplicate,
+        "flip horizontally" | "flip horizontal" => A::FlipH,
+        "flip vertically" | "flip vertical" => A::FlipV,
+        "rotate left" | "rotate left 90 degrees" => A::RotateLeft,
+        "rotate right" | "rotate right 90 degrees" => A::RotateRight,
+        "make selection fill" | "convert selection to fill" => A::Kind(zigzag::params::Kind::Fill),
+        "make selection satin" | "convert selection to satin" => A::Kind(zigzag::params::Kind::Satin),
+        "make selection run" | "convert selection to running stitch" => A::Kind(zigzag::params::Kind::Run),
+        "reverse stitch direction" => A::ReversePath,
+        "sew selection first" => A::SendToBack,
+        "sew selection last" => A::BringToFront,
+        "copy stitch settings" => A::CopySettings,
+        "paste stitch settings" => A::PasteSettings,
+        "select same stitch type" => A::SelectSameKind,
+        "zoom in" => A::ZoomIn,
+        "zoom out" => A::ZoomOut,
+        "reset panels" => A::ResetPanels,
+        "add text" => A::AddText,
         _ => return None,
     })
 }
@@ -2052,5 +2070,8 @@ mod quick_action_tests {
         assert_eq!(quick_action("undo"), Some(Action::Undo));
         assert_eq!(quick_action("do not undo"), None);
         assert_eq!(quick_action("undo and export"), None);
+        assert_eq!(quick_action("convert selection to satin"), Some(Action::Kind(zigzag::params::Kind::Satin)));
+        assert_eq!(quick_action("sew selection first"), Some(Action::SendToBack));
+        assert_eq!(quick_action("don't flip horizontally"), None);
     }
 }
