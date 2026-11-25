@@ -24,6 +24,19 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": "all",
+    "license": "Apache-2.0",
+    "licenseFile": "../../LICENSE",
+    "resources": {
+      "../../LICENSE": "licenses/LICENSE",
+      "../../NOTICE": "licenses/NOTICE",
+      "../../THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md"
+    },
+    "icon": [
+      "../../packaging/macos/AppIcon.png",
+      "../../packaging/macos/AppIcon.icns",
+      "../../packaging/windows/AppIcon.ico"
+    ]
   }
 }
