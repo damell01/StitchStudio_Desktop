@@ -19,9 +19,14 @@ struct Preview { name: String, blocks: Vec<PreviewBlock>, stitches: usize, trims
 struct PreviewBlock { color: [u8;3], runs: Vec<Vec<[f64;2]>> }
 fn preview(design: &Design) -> Preview { Preview { name: design.name.clone(), stitches: design.blocks.iter().flat_map(|b| &b.runs).map(|r| r.pts.len()).sum(), trims: design.blocks.iter().flat_map(|b| &b.runs).filter(|r| r.trim_before).count(), blocks: design.blocks.iter().map(|b| PreviewBlock { color:b.color, runs:b.runs.iter().map(|r| r.pts.iter().map(|p| [p.x/10.0,p.y/10.0]).collect()).collect() }).collect() } }
 #[tauri::command]
-fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview,String> {
+async fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, app: tauri::AppHandle) -> Result<Preview,String> {
     if ![scale,rotation,dx,dy].iter().all(|v| v.is_finite()) || !(0.1..=10.0).contains(&scale) || dx.abs()>500.0 || dy.abs()>500.0 { return Err("Invalid transformation".into()); }
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+    let state=app.state::<Mutex<Workspace>>();
     let mut guard=state.lock().map_err(|e|e.to_string())?;
+    // Translation preserves the stitch geometry and sequence; no replanning needed.
+    if scale==1.0 && rotation==0.0 {return place_design(&mut guard,[1.0,0.0,0.0,1.0,dx*10.0,dy*10.0]);}
     let (s,c)=rotation.to_radians().sin_cos();
     if let Some(mut doc)=guard.source.clone(){
         let indices:Vec<usize>=(0..doc.shapes.len()).collect();
@@ -38,6 +43,7 @@ fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, state: tauri::S
         p.y=scale*(x*s+y*c)+dy*10.0;
     }
     Ok(preview(d))
+    }).await.map_err(|e|e.to_string())?
 }
 #[derive(serde::Serialize)]
 struct StitchAudit {
@@ -776,9 +782,13 @@ fn apply_object_edit(workspace: &mut Workspace, uid: usize, operation: ObjectEdi
 }
 
 #[tauri::command]
-fn edit_artwork_object(uid: usize, operation: ObjectEdit, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview, String> {
-    let mut workspace = state.lock().map_err(|error| error.to_string())?;
-    apply_object_edit(&mut workspace, uid, operation)
+async fn edit_artwork_object(uid: usize, operation: ObjectEdit, app: tauri::AppHandle) -> Result<Preview, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state=app.state::<Mutex<Workspace>>();
+        let mut workspace=state.lock().map_err(|error| error.to_string())?;
+        apply_object_edit(&mut workspace,uid,operation)
+    }).await.map_err(|error|error.to_string())?
 }
 #[tauri::command]
 fn set_object_kind(uid:usize,kind:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
