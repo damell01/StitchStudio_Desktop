@@ -84,7 +84,7 @@ impl Studio {
                 let mut favorites = ui.ctx().data(|d| d.get_temp::<Vec<Action>>(favorites_id)).unwrap_or_else(|| {
                     let names: Vec<String> = file.as_ref().and_then(|f| std::fs::read_to_string(f).ok())
                         .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-                    registry.iter().filter(|(_, label, _)| names.iter().any(|n| n == label)).map(|(a, _, _)| *a).collect()
+                    registry.iter().filter(|(_, label, _)| names.iter().any(|n| n.as_str() == *label)).map(|(a, _, _)| *a).collect()
                 });
                 let save_favorites = |favorites: &[Action]| {
                     if let Some(f) = &file {
