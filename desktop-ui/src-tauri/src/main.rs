@@ -831,12 +831,12 @@ async fn delete_artwork_objects(uids:Vec<usize>,all:bool,app:tauri::AppHandle)->
  tauri::async_runtime::spawn_blocking(move||{
  let state=app.state::<Mutex<Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;
  if w.current.is_none(){return Err("No design open".into())}
- let mut doc=if all{Document::empty()}else{w.source.clone().ok_or("No editable artwork")?};
+ let mut doc=if all{zigzag::document::Document::empty()}else{w.source.clone().ok_or("No editable artwork")?};
  if !all{
  let selected:std::collections::HashSet<_>=uids.into_iter().collect();
  let indices:Vec<_>=doc.shapes.iter().enumerate().filter(|(_,s)|selected.contains(&s.uid)).map(|(i,_)|i).collect();
  if indices.is_empty()||indices.len()!=selected.len(){return Err("Selection changed; select the design again".into())}
- if indices.len()==doc.shapes.len(){doc=Document::empty()}else{doc.delete_many(&indices).map_err(|e|e.to_string())?;}
+ if indices.len()==doc.shapes.len(){doc=zigzag::document::Document::empty()}else{doc.delete_many(&indices).map_err(|e|e.to_string())?;}
  }
  let design=doc.plan_cached(&mut w.plan_cache);
  let result=preview(&design);w.checkpoint();w.source=Some(doc);w.current=Some(design);Ok(result)
