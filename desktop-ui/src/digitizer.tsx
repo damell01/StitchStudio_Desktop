@@ -211,6 +211,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     (runMax, run) => run.reduce((pointMax, [x, y]) => Math.max(pointMax, Math.abs(x), Math.abs(y)), runMax), max), 1) ?? 1;
   const colors = new Set(plan?.blocks.map(block => block.color.join(',')));
   const displayUrl = showProcessed ? processedUrl : artworkUrl;
+  const stitchPaths=useMemo(()=>plan?.blocks.map(b=>b.runs.map(run=>run.map(p=>p.join(',')).join(' ')))??[],[plan]);
 
   return <div
     className={`lower digitizer-layout digitizer-stage-${art ? 3 : 0}`}
@@ -233,7 +234,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       {art && <p>Artwork is digitized automatically. Settings below are optional overrides.</p>}
       {art && settings !== defaults && <button type="button" onClick={()=>setSettings(defaults)}>Restore automatic settings</button>}
       <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
-        <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image or PDF' : 'Choose or drop an image'}</strong>
+        <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image or PDF' : 'Choose or drop an image'}</strong>{!art&&<span>Browse your computer to get started</span>}
       </button>
       {!art && <p>PNG, JPEG, SVG, WebP, BMP, TIFF, GIF or PDF. Digitizing starts automatically.</p>}
       {(!art || pdf) && <PdfArtwork onArt={acceptArtwork} droppedFile={pdf} />}
@@ -342,8 +343,8 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       </>}
     </article>
     <article className={`artwork-preview review-${mode === 'density' || mode === 'thread' ? 'stitches' : mode}`}>
-      <div className="preview-heading"><strong title={art?.name}>{art?.name}</strong></div>
-      <div className="review-switch" role="group" aria-label="Preview options">
+      <div className="preview-heading"><div><small>DESIGN REVIEW</small><strong title={art?.name}>{art?.name}</strong></div><span className="digitizer-preview-state" role="status">{processing?"Generating":review?"Preview ready":"Artwork"}</span></div>
+      {plan&&<div className="digitizer-preview-metrics"><div><small>Stitch points</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Unique colors</small><strong>{colors.size}</strong></div><div><small>Color blocks</small><strong>{plan.blocks.length}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div></div>}<div className="review-switch" role="group" aria-label="Preview options">
         {(['compare', 'stitches', 'original'] as const).map(view =>
           <button key={view} aria-pressed={mode === view} onClick={() => setMode(view)}>
             {view === 'compare'
@@ -378,7 +379,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
               opacity={0.15 + 0.85 * count / (review.density[0]?.[2] || 1)}>
               <title>{count} needle penetrations in this square millimeter</title>
             </rect>) : plan.blocks.map((block, index) => <g key={index} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth=".3">
-            {block.runs.map((run, i) => <polyline key={i} points={run.map(point => point.join(',')).join(' ')} />)}
+            {block.runs.map((_, i) => <polyline key={i} points={stitchPaths[index]?.[i]} />)}
           </g>)}
         </svg>
       </>}
