@@ -144,6 +144,8 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
   const [garmentName,setGarment] = useState<GarmentName>('shirt');
   const [sizeName,setSizeName] = useState<SizeName>('adult');
   const [angle,setAngle]=useState(0);
+  const [zoom,setZoom]=useState(1);
+  const [interaction,setInteraction]=useState<'move'|'rotate'>('move');
   const [hoodieMode,setHoodieMode]=useState<'3d'|'flat'>('3d');
   const [unavailable,setUnavailable]=useState(false);
   const turn=useRef<{id:number;x:number;angle:number}|null>(null);
@@ -183,17 +185,23 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
           <div className="garment-preview-stage" data-rotatable={is3d}
             onPointerDown={event=>{
               if(!is3d||event.button!==0)return;
+              if(interaction==='move'&&!event.shiftKey){
+                drag.current={id:event.pointerId,x:event.clientX,y:event.clientY,ox:xOffset,oy:yOffset};
+                event.currentTarget.setPointerCapture(event.pointerId);setDragging(true);return;
+              }
               turn.current={id:event.pointerId,x:event.clientX,angle};
               event.currentTarget.setPointerCapture(event.pointerId);
             }}
             onPointerMove={event=>{
+              const d=drag.current;
+              if(is3d&&d?.id===event.pointerId){const factor=event.currentTarget.clientHeight*zoom/(1000*garmentSize.ratio);if(factor>0){const clamp=(v:number)=>Math.max(-8,Math.min(8,v/25.4)).toFixed(3);setX(clamp(d.ox+(event.clientX-d.x)/factor));setY(clamp(d.oy+(event.clientY-d.y)/factor));}return;}
               const start=turn.current;
               if(start?.id===event.pointerId)setAngle((((start.angle+(event.clientX-start.x)*.5)+180)%360+360)%360-180);
             }}
-            onLostPointerCapture={()=>{turn.current=null;}}>
+            onLostPointerCapture={()=>{turn.current=null;drag.current=null;setDragging(false);}}>
             {is3d?<Suspense fallback={<p role="status">Loading hoodie…</p>}>
               <HoodieView angle={angle} color={color} blocks={blocks} placement={placementIndex}
-                xMm={xOffset} yMm={yOffset} sizeRatio={garmentSize.ratio} onUnavailable={()=>setUnavailable(true)}/>
+                xMm={xOffset} yMm={yOffset} sizeRatio={garmentSize.ratio} zoom={zoom} onUnavailable={()=>setUnavailable(true)}/>
             </Suspense>:<canvas ref={canvas} width={size.width*2} height={size.height*2} role="img" tabIndex={0} style={{cursor:dragging?'grabbing':'grab',touchAction:'none'}}
               onPointerDown={event=>{
                 if(event.button!==0)return;
@@ -235,12 +243,13 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
                 <button aria-pressed={is3d} onClick={()=>setHoodieMode('3d')}>3D view</button>
                 <button aria-pressed={!is3d} onClick={()=>setHoodieMode('flat')}>Flat view</button>
               </div>
+              {is3d&&<><div className="garment-view-switch" role="group" aria-label="Preview interaction"><button aria-pressed={interaction==='move'} onClick={()=>setInteraction('move')}>Move design</button><button aria-pressed={interaction==='rotate'} onClick={()=>setInteraction('rotate')}>Rotate garment</button></div><label>Zoom · {Math.round(zoom*100)}%<input type="range" min=".7" max="2.5" step=".05" value={zoom} onChange={e=>setZoom(Number(e.target.value))}/></label><button onClick={()=>{setZoom(1);setAngle(0)}}>Reset view</button></>}
               {is3d&&<label>Rotate hoodie <input type="range" min="-180" max="180" value={angle}
                 onChange={event=>setAngle(Number(event.target.value))}/></label>}
             </>}
             {garmentName==='hoodie'&&unavailable&&<p role="status">3D is unavailable here. Showing the flat mockup.</p>}
             <label className="garment-color">Fabric color<input type="color" value={color} onChange={event=>setColor(event.target.value)}/></label>
-            <p className="muted">{is3d?'Switch to Flat view to drag the design.':'Drag the design on the garment, or use arrow keys on the preview.'}</p>
+            <p className="muted">{is3d?'Drag to move the design or select Rotate garment. Hold Shift to rotate.':'Drag the design on the garment, or use arrow keys on the preview.'}</p>
             <button onClick={()=>{setX('');setY('');}}>Reset placement</button>
             <details><summary>Precise placement (optional)</summary><fieldset>
               <legend>Adjust placement (in)</legend>
