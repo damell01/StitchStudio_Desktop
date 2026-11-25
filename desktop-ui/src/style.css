@@ -382,3 +382,12 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .digitizer-options fieldset { display: grid; gap: 8px; border: 0; padding: 10px 0 0; margin: 0; }
 .digitizer-controls > label { display: grid; gap: 4px; margin-top: 12px; }
 .digitizer-controls progress { width: 100%; margin-bottom: 4px; accent-color: var(--brand-accent); }
+.digitizer-layout .preview-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.digitizer-layout .review-switch { align-self: start; justify-self: start; flex-wrap: wrap; max-width: 100%; }
+.digitizer-layout .review-switch button { padding: 6px 9px; }
+.digitizer-layout .artwork-preview h3 { margin: 0; font-size: 13px; }
+.digitizer-options summary:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 3px; }
+.editor-workspace .canvas-tools button[aria-pressed="true"] { border-color: var(--brand-accent); background: var(--brand-soft); }
+@media (prefers-reduced-motion: reduce) {
+  .digitizer-layout *, .editor-workspace * { transition-duration: 0s; }
+}

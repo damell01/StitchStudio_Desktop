@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ImagePlus } from 'lucide-react';
+import { ArrowRight, ChartNoAxesColumn, Columns2, Image as ArtworkIcon, ImagePlus, Layers2 } from 'lucide-react';
 import { ArtworkEdit } from './artwork-edit';
 import { CharacterGallery } from './character-gallery';
 import { PdfArtwork } from './pdf-artwork';
@@ -217,7 +217,7 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
     <article className="digitizer-controls">
       <h2>{art ? 'Digitizing settings' : 'Choose artwork'}</h2>
       <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
-        <ImagePlus size={art ? 16 : 28} /> {art ? 'Choose another image' : 'Choose or drop an image'}
+        <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image' : 'Choose or drop an image'}</strong>
       </button>
       {!art && <p>PNG, JPEG, SVG, WebP, BMP, TIFF, GIF or PDF. Digitizing starts automatically.</p>}
       {(!art || pdf) && <PdfArtwork onArt={acceptArtwork} droppedFile={pdf} />}
@@ -276,18 +276,22 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
         <div className="review-palette" aria-label="Generated thread colors">
           {Array.from(colors, rgb => <span key={rgb} title={`RGB ${rgb}`} style={{ background: `rgb(${rgb})` }} />)}
         </div>
-        <div className="wizard-actions"><button className="primary" disabled={busy} onClick={openDraft}>Open in design studio</button></div>
+        <div className="wizard-actions"><button className="primary" disabled={busy} onClick={openDraft}>Open in design studio <ArrowRight size={16} /></button></div>
       </>}
     </article>
     <article className={`artwork-preview review-${mode === 'density' ? 'stitches' : mode}`}>
-      <div className="preview-heading"><strong>{art?.name}</strong></div>
-      <div className="review-switch">
+      <div className="preview-heading"><strong title={art?.name}>{art?.name}</strong></div>
+      <div className="review-switch" role="group" aria-label="Preview options">
         {(['compare', 'stitches', 'original'] as const).map(view =>
           <button key={view} aria-pressed={mode === view} onClick={() => setMode(view)}>
-            {view === 'compare' ? 'Compare' : view === 'stitches' ? 'Stitches' : 'Artwork'}
+            {view === 'compare'
+              ? <><Columns2 size={15} /> Compare</>
+              : view === 'stitches'
+                ? <><Layers2 size={15} /> Stitches</>
+                : <><ArtworkIcon size={15} /> Artwork</>}
           </button>)}
-        {review && <button aria-pressed={mode === 'density'} onClick={() => setMode('density')}>Density</button>}
-        {!vector && <button aria-pressed={showProcessed} onClick={() => setShowProcessed(value => !value)}>Processed</button>}
+        {review && <button aria-pressed={mode === 'density'} onClick={() => setMode('density')} title="Inspect where the needle penetrates most often"><ChartNoAxesColumn size={15} /> Density</button>}
+        {!vector && <button aria-pressed={showProcessed} onClick={() => setShowProcessed(value => !value)} title="Show the artwork after cleanup">Processed</button>}
       </div>
       <h3 className="source-heading">{showProcessed ? 'Processed artwork' : 'Original artwork'}</h3>
       {displayUrl && (showProcessed || original?.mime !== 'image/tiff') &&
