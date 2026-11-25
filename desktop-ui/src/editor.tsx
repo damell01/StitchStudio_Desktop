@@ -48,6 +48,10 @@ const designGesture=useRef<{pointer:number;x:number;y:number}|null>(null);
 const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchorX:number;anchorY:number}|null>(null);
 const objectGesture=useRef<{uid:number;x:number;y:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
+const [multi,setMulti]=useState<number[]>([]);const [snap,setSnap]=useState(false);const [context,setContext]=useState<{uid:number;x:number;y:number}|null>(null);
+const selectionIds=multi.filter(id=>objects.some(o=>o.uid===id));
+function toggleMulti(uid:number){setMulti(old=>{const base=old.length?old:selectedObject!==null?[selectedObject]:[];return base.includes(uid)?base.filter(i=>i!==uid):[...base,uid]});setRight(true);setInspectorTab('transform');setLayerTab('objects')}
+function snapped(dx:number,dy:number){return snap?[Math.round(dx),Math.round(dy)]:[dx,dy]}
 const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
 const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'>('hoop');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);setRight(true);setInspectorTab('text')};
 const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(''),[hoop,setHoop]=useState('');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
@@ -103,6 +107,7 @@ useEffect(()=>{if(stitchIndex>=points.length)setPlaying(false);},[stitchIndex,po
 
 const selectionRequest=useRef(0);
 function selectObject(object:EditableObject|null) {
+  setMulti([]);setContext(null);
   const request=++selectionRequest.current;
   setSelectedObject(object?.uid??null);
   if(object){setObjectKind(object.kind);setRight(true);setInspectorTab(object.kind==="manual"?"transform":"stitches");void invoke<unknown>("lettering_settings",{uid:object.uid}).then(settings=>{if(settings&&request===selectionRequest.current)openText(object.uid)}).catch(()=>{});}
@@ -153,6 +158,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
     return;
   }
   if(canvasMode==='select'&&event.button===0&&object&&position){
+    if(event.shiftKey){toggleMulti(object.uid);return;}
     selectObject(object);
     objectGesture.current={uid:object.uid,x:position.x,y:position.y,pointerId:event.pointerId};
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -176,7 +182,7 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   }
   const gesture=objectGesture.current;
   if(gesture&&gesture.pointerId===event.pointerId){
-    setObjectOffset([position.x-gesture.x,position.y-gesture.y]);
+    setObjectOffset(snapped(position.x-gesture.x,position.y-gesture.y) as [number,number]);
   }else if(drag){
     const matrix=event.currentTarget.getScreenCTM();
     if(!matrix)return;
@@ -211,7 +217,7 @@ function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boole
   if(!gesture){setDrag(null);return;}
   setDrag(null);
   if(gesture&&position){
-    const dx=position.x-gesture.x,dy=position.y-gesture.y;
+    const [dx,dy]=snapped(position.x-gesture.x,position.y-gesture.y);
     if(Math.hypot(dx,dy)>=0.05){setObjectOffset([dx,dy]);editSelection({kind:'move',dx,dy},gesture.uid);return;}
   }
   setObjectOffset([0,0]);
@@ -330,7 +336,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {plan&&<ThreadOrder assignments={threadAssignments} onAssign={(index,value)=>setThreadAssignments(old=>({...old,[index]:value}))} blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
   <button className="studio-save-design" title="Save editable Stitch Studio project (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={17}/> Save design</button><button className="primary studio-export" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
-{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:`clamp(48px,5vw,80px) ${left?`min(${leftWidth}px, 24vw)`:'0px'} minmax(0,1fr) ${right?`min(${rightWidth}px, 27vw)`:'0px'}`}}>
+{context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-210))}} role="group" aria-label="Object actions"><button onClick={()=>{openText(context.uid);setContext(null)}}>Text properties</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:`clamp(48px,5vw,80px) ${left?`min(${leftWidth}px, 24vw)`:'0px'} minmax(0,1fr) ${right?`min(${rightWidth}px, 27vw)`:'0px'}`}}>
 <div className="editor-toolrail" role="group" aria-label="Editor tools">
 <button aria-pressed={left} onClick={()=>setLeft(v=>!v)}><Layers3 size={24}/><small>Layers</small></button>
 <button disabled={busy} onClick={openInsertDialog}><FilePlus size={23}/><small>Insert</small></button>
@@ -358,7 +364,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <div className="layers-object-rows">
       {objectPage.items.map(object=>{
         const name=object.label||`Object ${object.uid+1}`;
-        return <button key={object.uid} aria-pressed={selectedObject===object.uid} onClick={()=>selectObject(object)} className="object-layer-row" title={name}>
+        return <button key={object.uid} aria-pressed={selectionIds.length?selectionIds.includes(object.uid):selectedObject===object.uid} onClick={e=>e.shiftKey?toggleMulti(object.uid):selectObject(object)} className="object-layer-row" title={name}>
           <span className="layers-swatch" style={{backgroundColor:`rgb(${object.color.join(',')})`}}/>
           <span className="layers-row-text"><strong>{name}</strong><small>{object.kind==='manual'?'Fixed stitch path':object.kind==='auto'?'Automatic stitch type':object.kind}</small></span>
         </button>;
@@ -413,11 +419,11 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   vectorEffect="non-scaling-stroke" strokeDasharray="5 4"><title>Drag to move the whole design</title></rect>}</g>
 {canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
  {objects.filter(object=>object.path).map(object=><path key={object.uid} d={object.path}
-   data-artwork-uid={object.uid} onDoubleClick={e=>{e.stopPropagation();void invoke<unknown>('lettering_settings',{uid:object.uid}).then(s=>{if(s){setSelectedObject(object.uid);openText(object.uid)}}).catch(()=>{})}} fill={object.fill_rule?'transparent':'none'}
+   data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();void invoke<unknown>('lettering_settings',{uid:object.uid}).then(s=>{if(s){setSelectedObject(object.uid);openText(object.uid)}}).catch(()=>{})}} fill={object.fill_rule?'transparent':'none'}
    fillRule={object.fill_rule} stroke={object.fill_rule?'none':'transparent'}
    strokeWidth={object.stroke_width} pointerEvents={object.fill_rule?'fill':'stroke'}/>)}
 </g>}
-{selected?.bounds&&canvasMode==='select'&&<g className="studio-selection" pointerEvents="none" transform={selectionTransform}>
+{selectionIds.length>0&&canvasMode==='select'&&<g pointerEvents="none">{objects.filter(o=>selectionIds.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="none" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke"/>)}</g>}{!selectionIds.length&&selected?.bounds&&canvasMode==='select'&&<g className="studio-selection" pointerEvents="none" transform={selectionTransform}>
  {(objectGesture.current||resizePreview||objectOffset.some(v=>v!==0))&&<path d={selected.path} fill={selected.fill_rule?'#8d53a333':'none'} fillRule={selected.fill_rule}
    stroke="#8d53a3" strokeWidth={selected.stroke_width||.3}/>}
  <rect x={selected.bounds[0]-.6} y={selected.bounds[1]-.6} width={selected.bounds[2]+1.2} height={selected.bounds[3]+1.2}
@@ -476,6 +482,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button aria-pressed={inspectorTab==='threads'} onClick={()=>setInspectorTab('threads')}><Palette size={19}/>Threads</button>
     <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={19}/>Text</button><button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={19}/>Properties</button>
   </div>
+  {inspectorTab==='transform'&&<section className="workspace-inspector-group multi-align"><h3>Alignment & snapping</h3><label><input type="checkbox" checked={snap} onChange={e=>setSnap(e.target.checked)}/> Snap movement to 1 mm</label><small>Shift-click objects or layers to select multiple.</small>{selectionIds.length>0&&<><strong>{selectionIds.length} selected</strong><div className="alignment-pair">{[{mode:'center_x',label:'Align X'},{mode:'center_y',label:'Align Y'},{mode:'distribute_x',label:'Distribute X'},{mode:'distribute_y',label:'Distribute Y'}].map(a=><button key={a.mode} disabled={busy||selectionIds.length<(a.mode.startsWith('distribute')?3:2)} onClick={()=>void edit('align_artwork_objects',{uids:selectionIds,mode:a.mode})}>{a.label}</button>)}</div><button onClick={()=>setMulti([])}>Clear selection</button></>}</section>}
   {inspectorTab==='text'&&<InlineLettering key={textSession} uid={textTarget} disabled={busy} onBusy={setBusy} onDone={uid=>{if(uid!==null){setSelectedObject(uid);setLayerTab('objects')}void invoke<Plan|null>('current_preview').then(p=>{if(p){if(p.blocks.length!==plan?.blocks.length||p.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(',')))setThreadAssignments({});setPlan(p);setPlayhead(null);setPlaying(false);setHidden([])}}).catch(e=>setMessage(String(e)))}}/>}
   {inspectorTab==='hoop'&&<section className="workspace-inspector-group">
     <h3><SquareDashed size={18}/> Machine setup</h3><label>Machine<select value={machine} onChange={e=>{setMachine(e.target.value);const m=machines.find(p=>p.id===e.target.value);if(m){setWidth(m.width);setHeight(m.height);setHoop("");if(m.format)setFormat(m.format.toLowerCase())}}}><option value="">Manual setup</option>{machines.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label><label>Saved hoop<select value={hoop} onChange={e=>{setHoop(e.target.value);const h=hoops.find(p=>p.id===e.target.value);if(h){setWidth(h.width);setHeight(h.height)}}}><option value="">Custom dimensions</option>{hoops.map(h=><option key={h.id} value={h.id}>{h.name} — {h.width} × {h.height}</option>)}</select></label><div className="workspace-hoop-fields"><label>Width (in) <small>({width.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((width/25.4).toFixed(3))} onChange={e=>{setHoop("");setWidth(Number(e.target.value)*25.4)}}/></label><label>Height (in) <small>({height.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((height/25.4).toFixed(3))} onChange={e=>{setHoop("");setHeight(Number(e.target.value)*25.4)}}/></label></div>
