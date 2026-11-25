@@ -457,15 +457,27 @@ fn fill_runs(
     opt: &PlanOptions,
 ) -> Vec<Vec<Piece>> {
     let p = &shape.params;
-    let f = &opt.fabric;
     // Independent islands can use their own fill direction and density.
     // Preserve explicit settings and the original ordering outside auto mode.
     if opt.hat_order && p.angle.is_none() && p.spacing.is_none() {
         let islands = satin::components(rings, rule);
         if islands.len() > 1 {
-            return islands.iter().flat_map(|comp| fill_runs(comp, FillRule::EvenOdd, shape, opt)).collect();
+            return islands.iter().flat_map(|comp| fill_runs_connected(comp, FillRule::EvenOdd, shape, opt)).collect();
         }
     }
+    fill_runs_connected(rings, rule, shape, opt)
+}
+
+// The normalized islands are processed once. Do not recursively normalize
+// geometry during automatic fill planning (particularly complex SVG paths).
+fn fill_runs_connected(
+    rings: &[Polyline],
+    rule: FillRule,
+    shape: &Shape,
+    opt: &PlanOptions,
+) -> Vec<Vec<Piece>> {
+    let p = &shape.params;
+    let f = &opt.fabric;
     let mut angle = p.fill_angle().to_radians();
     // Sample the dominant outline orientation as well as fixed angles.
     // Score disconnected row transitions separately from stitch count:
@@ -485,11 +497,13 @@ fn fill_runs(
             }
         }
         candidates.extend([dominant, dominant+std::f64::consts::FRAC_PI_2]);
+        // Treat 0 and 180 degrees as the same axis. Always keep the
+        // authored/default angle first so ties preserve the old result.
         let mut seen:Vec<f64>=Vec::new();
         let mut best = f64::INFINITY;
         for candidate in candidates {
             let candidate=candidate.rem_euclid(std::f64::consts::PI);
-            if seen.iter().any(|a| (a-candidate).abs()<0.015){continue}
+            if seen.iter().any(|a| {let d=(a-candidate).abs();d.min(std::f64::consts::PI-d)<0.015}){continue}
             seen.push(candidate);
             let probe = FillParams {
                 angle: candidate, spacing: mm(p.fill_spacing(f)).max(6.0),
@@ -500,16 +514,18 @@ fn fill_runs(
             if rows.is_empty() { continue; }
             let mut travel=0.0;
             let mut exposed=0usize;
+            let mut disconnected=0usize;
             for pair in rows.windows(2) {
                 if let (Some(a),Some(b))=(pair[0].last(),pair[1].first()) {
                     let gap=a.dist(*b);
                     travel+=gap.min(500.0);
                     if gap>opt.max_jump_no_trim && !segment_inside(rings,rule,*a,*b,2.0) {exposed+=1;}
+                    else if gap>opt.travel_inside {disconnected+=1;}
                 }
             }
             let cost = rows.len() as f64 * 8.0
                 + rows.iter().map(Vec::len).sum::<usize>() as f64
-                + travel * 0.12 + exposed as f64 * 24.0;
+                + travel * 0.12 + exposed as f64 * 36.0 + disconnected as f64 * 24.0;
             if cost < best { best = cost; angle = candidate; }
         }
     }
