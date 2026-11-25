@@ -30,6 +30,7 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .editor-workspace .editor-grid.studio-canvas-layout > .studio-inspector-dock { padding: 8px; }
 .editor-workspace .studio-edit-bar .studio-toolbar-text { white-space: nowrap; }
 .editor-workspace .studio-edit-bar .studio-toolbar-text svg { flex: none; }
+.editor-workspace .design-canvas { user-select: none; -webkit-user-select: none; }
 .editor-workspace .studio-inspector-dock > .layers-dock-title { padding: 0 3px; }
 .editor-workspace .studio-inspector-dock .workspace-segments {
   display: grid;
@@ -91,6 +92,9 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
   .editor-workspace .studio-edit-bar .studio-toolbar-text span { display: none; }
 }
 
+.editor-workspace .studio-canvas-layout .studio-camera.studio-camera-docked {
+  justify-content: safe center;
+}
 .editor-workspace .studio-canvas-layout .studio-camera.studio-camera-bottom {
   order: 3;
   border-radius: 0 0 8px 8px;

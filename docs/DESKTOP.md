@@ -25,6 +25,13 @@ Get-ChildItem .\src-tauri\target\release\bundle\nsis\*.exe
 
 Run the resulting setup executable to install the app. Use Windows **Installed apps** to uninstall. To run the release executable before installing, use `& .\src-tauri\target\release\stitch-studio-desktop.exe`. The local installer is unsigned unless you configure a Windows signing identity. Build dependencies can require network access. The installed app processes designs locally.
 
+## Design and editing shortcuts
+
+- Choose **Insert design** or press Ctrl+I on Windows or Cmd+I on macOS to add to the current workspace. Machine import accepts DST, PES, PEC, EXP, JEF and VP3. Save as `.stitchstudio` to keep editable geometry and layer properties.
+- Open **Layers** or **Inspector** from the editor toolbar. Smaller windows open one panel at a time. Press F11 for focus view. Drag the camera toolbar grip up or down to dock it above or below the canvas.
+- Select an object. Choose **Edit artwork nodes** or **Edit stitch points** to move, add, or erase individual points. Applying changes creates one undo step.
+- Open **Garment mockup** to choose clothing, fabric color and placement. Choose **Save mockup PNG** to save the flat preview or the current 3D hoodie view.
+
 ## macOS development and packaging
 
 Use macOS with Xcode Command Line Tools, Node.js 22 or newer, and Rust 1.95 or newer.

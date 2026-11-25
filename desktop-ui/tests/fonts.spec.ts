@@ -21,7 +21,7 @@ test('commands find Font Manager and fonts sort by physical size and stay paged'
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading',{name:'Font Manager'})).toBeVisible();
   const list=page.locator('.font-list article');
-  await expect(list).toHaveCount(10);
+  await expect(list).toHaveCount(12);
   await page.getByRole('button',{name:'Next page'}).click();
   await expect(page.getByText('Page 2 of 3')).toBeVisible();
   await page.getByRole('textbox',{name:'Search fonts'}).fill('prairie');

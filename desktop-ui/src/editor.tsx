@@ -349,6 +349,7 @@ function movedOnScreen(event: ReactPointerEvent<SVGSVGElement>, origin: {clientX
 
 function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   if(busy||event.button!==0&&event.button!==1)return;
+  event.preventDefault();
   const target=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;
   let object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))&&!lockedObjects.includes(item.uid)):undefined;
   const position=pointerPosition(event);

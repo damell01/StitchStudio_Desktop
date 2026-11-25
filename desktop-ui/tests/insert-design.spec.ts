@@ -43,7 +43,7 @@ test('previews and places a template without leaving the current project', async
   await dialog.getByRole('button', { name: 'Insert design', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Existing design' })).toBeVisible();
-  await expect(page.locator('.design-canvas polyline')).toHaveCount(2);
+  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(2);
   const args = await page.evaluate(() =>
     (window as unknown as { insertCalls: { command: string; args: object }[] }).insertCalls
       .find(call => call.command === 'insert_template')?.args);
@@ -61,7 +61,7 @@ test('keeps the saved file selected when insertion fails and allows a retry', as
   await expect(dialog.getByRole('button', { name: 'leaf.dst' })).toHaveAttribute('aria-pressed', 'true');
   await dialog.getByRole('button', { name: 'Insert design', exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.locator('.design-canvas polyline')).toHaveCount(2);
+  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(2);
 });
 
 test('finds published character artwork by tag and shows its license before insertion', async ({ page }) => {

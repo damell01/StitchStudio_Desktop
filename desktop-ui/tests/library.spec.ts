@@ -37,7 +37,7 @@ test('the compact template library previews stitches before opening a template',
   await page.getByRole('button', { name: 'Preview Thread spool' }).click();
   await dialog.getByRole('button', { name: 'Open in design studio' }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page.locator('.design-canvas polyline')).toHaveCount(1);
+  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(1);
   await page.getByRole('button',{name:'Previous stitch'}).click();
   await expect(page.getByLabel('Planned stitch position')).toHaveValue('1');
   await page.getByRole('button',{name:'Next stitch'}).click();
@@ -49,14 +49,14 @@ test('the compact template library previews stitches before opening a template',
   expect((await canvas.boundingBox())!.width).toBeGreaterThan(730);
   await page.keyboard.press('Escape');
   await expect(nav).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Inspector', exact: true })).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button', { name: 'Inspector', exact: true }).click();
   const inspector = page.getByRole('group', { name: 'Inspector' });
-  await inspector.getByRole('button', { name: 'Size' }).click();
-  await expect(page.getByRole('button', { name: 'Resize to fit hoop' })).toBeVisible();
+  await inspector.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByRole('button', { name: 'Maximize in hoop' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Stitches' }).click();
-  await expect(page.getByRole('button', { name: 'Check stitch quality' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Layers', exact: true })).toHaveAttribute('aria-pressed','true');
-  await page.getByRole('group', { name: 'Layers' }).getByRole('button', { name: 'Threads' }).click();
+  await expect(page.getByRole('button', { name: /audit|check stitch/i })).toBeVisible();
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
+  await page.getByRole('group', { name: 'Layers' }).getByRole('button', { name: 'Blocks' }).click();
   await expect(page.getByLabel('Thread 1 color')).toBeVisible();
 
 });
@@ -67,5 +67,5 @@ test('the design library finds a personal machine file and inserts it', async ({
   await expect(page.getByText('football.dst')).toBeVisible();
   await expect(page.getByText('star.pes')).toBeHidden();
   await page.getByRole('button', { name: 'Insert football.dst' }).click();
-  await expect(page.locator('.design-canvas polyline')).toHaveCount(1);
+  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(1);
 });

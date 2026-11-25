@@ -30,5 +30,5 @@ test('imports a ZIP into editable templates and opens a selected layout in the s
   await page.getByRole('button',{name:'Use as new design'}).click();
   await page.getByRole('button',{name:'Continue',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Birthday layout'})).toBeVisible();
-  await expect(page.locator('.design-canvas polyline')).toHaveCount(1);
+  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(1);
 });

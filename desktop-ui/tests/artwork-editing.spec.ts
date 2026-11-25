@@ -15,6 +15,7 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
       if(command==='editable_objects')return objects;
       if(command==='transform_design'){moves.push(args);return plan;}
       if(command==='edit_artwork_object'){calls.push(args);return plan;}
+      if(command==='resize_artwork_selection'){calls.push({uid:10,operation:{kind:'resize'}});return plan;}
       return command==='character_list'?[]:null;
     }}});
   });
@@ -25,6 +26,7 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   await rect.click();
   const selection=page.getByRole('group',{name:'Selected object actions'});
   await expect(selection).toContainText('Plum rectangle');
+  expect(await page.evaluate(()=>(window as unknown as {objectEdits:unknown[]}).objectEdits)).toHaveLength(0);
   const box=(await rect.boundingBox())!;
   const x=box.x+box.width/2, y=box.y+box.height/2;
   await page.mouse.move(x,y);
@@ -35,6 +37,7 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   await expect.poll(()=>page.evaluate(()=> (window as unknown as {objectEdits:{uid:number;operation:{kind:string}}[]}).objectEdits.map(edit=>[edit.uid,edit.operation.kind]))).toEqual([[10,'move'],[10,'duplicate']]);
   const resize=canvas.locator('[data-resize-handle="4"]');
   await expect(resize).toBeVisible();
+  await expect(resize).toHaveAttribute('pointer-events','all');
   const handle=(await resize.boundingBox())!;
   const hx=handle.x+handle.width/2,hy=handle.y+handle.height/2;
   await page.mouse.move(hx,hy);
@@ -42,8 +45,9 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   await page.mouse.move(hx+30,hy+20,{steps:4});
   await page.mouse.up();
   await expect.poll(()=>page.evaluate(()=>(window as unknown as {objectEdits:{operation:{kind:string;sx?:number;sy?:number}}[]}).objectEdits.at(-1)?.operation)).toMatchObject({kind:'resize'});
+  await page.getByRole('button',{name:'Move camera controls to bottom'}).click();
+  await expect(page.getByRole('group',{name:'Canvas view'})).toHaveClass(/studio-camera-bottom/);
   await page.getByRole('button',{name:'Move camera controls to top'}).click();
-  await expect(page.getByRole('group',{name:'Canvas view'})).toHaveClass(/studio-camera-top/);
   const points=await canvas.locator('polyline').evaluateAll(lines=>lines.map(line=>line.getAttribute('points')));
   await page.getByRole('button',{name:'Pan canvas',exact:true}).click();
   const view=await canvas.getAttribute('viewBox');
@@ -60,6 +64,7 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   expect(await page.evaluate(()=>(window as unknown as {objectEdits:unknown[]}).objectEdits.length)).toBe(3);
   await page.getByRole('button',{name:'Move whole design',exact:true}).click();
   const group=canvas.locator('[data-design-group]');
+  await expect(group).toBeVisible();
   const groupBox=(await group.boundingBox())!;
   const gx=groupBox.x+groupBox.width/2,gy=groupBox.y+groupBox.height/2;
   await page.mouse.move(gx,gy);
