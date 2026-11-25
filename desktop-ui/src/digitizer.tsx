@@ -207,8 +207,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   }
 
   const plan = review?.plan;
-  const extent = plan?.blocks.reduce((max, block) => block.runs.reduce(
-    (runMax, run) => run.reduce((pointMax, [x, y]) => Math.max(pointMax, Math.abs(x), Math.abs(y)), runMax), max), 1) ?? 1;
+  const previewBox=useMemo(()=>{let l=Infinity,t=Infinity,r=-Infinity,b=-Infinity;for(const block of plan?.blocks??[])for(const run of block.runs)for(const [x,y] of run){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);b=Math.max(b,y)}if(!Number.isFinite(l))return [-1,-1,2,2];const padding=Math.max(2,Math.max(r-l,b-t)*.06);return [l-padding,t-padding,Math.max(1,r-l)+padding*2,Math.max(1,b-t)+padding*2]},[plan]);
   const colors = new Set(plan?.blocks.map(block => block.color.join(',')));
   const displayUrl = showProcessed ? processedUrl : artworkUrl;
   const stitchPaths=useMemo(()=>plan?.blocks.map(b=>b.runs.map(run=>run.map(p=>p.join(',')).join(' ')))??[],[plan]);
@@ -228,7 +227,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       setEditing(false);
     }} />}
     <article className="digitizer-controls">
-      <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2>
+      <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2>{!art&&<div className="digitizer-start-steps"><span><b>1</b> Import artwork</span><span><b>2</b> Review stitches</span><span><b>3</b> Open editor</span></div>}
       {art && <div className="digitizer-inspector-tabs" role="group" aria-label="Inspector view">{(['settings','quality','threads'] as const).map(t=><button key={t} aria-pressed={inspector===t} disabled={t!=='settings'&&!review} onClick={()=>setInspector(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div>}
       <div hidden={!!art&&inspector!=='settings'} className="digitizer-inspector-content">
       {art && <p>Artwork is digitized automatically. Settings below are optional overrides.</p>}
@@ -373,12 +372,12 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       </>}
       {!processing && plan && <>
         <h3 className="stitch-heading">{mode === 'density' ? 'Densest 1 mm² cells · DST preview' : 'Generated stitch paths'}</h3>
-        <svg aria-label="Generated stitches" viewBox={[-extent * 1.1, -extent * 1.1, extent * 2.2, extent * 2.2].join(' ')} className={`digitizer-stitch-image ${mode === 'thread' ? 'digitizer-thread-view' : ''}`}>
+        <svg aria-label="Generated stitches" viewBox={previewBox.join(' ')} className={`digitizer-stitch-image ${mode === 'thread' ? 'digitizer-thread-view' : ''}`}>
           {mode === 'density' && review ? review.density.map(([x, y, count]) =>
             <rect key={x + ',' + y} x={x} y={y} width="1" height="1" fill="#6945A2"
               opacity={0.15 + 0.85 * count / (review.density[0]?.[2] || 1)}>
               <title>{count} needle penetrations in this square millimeter</title>
-            </rect>) : plan.blocks.map((block, index) => <g key={index} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth=".3">
+            </rect>) : plan.blocks.map((block, index) => <g key={index} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth={mode==="thread"?".43":".3"} strokeLinecap="round" strokeLinejoin="round">
             {block.runs.map((_, i) => <polyline key={i} points={stitchPaths[index]?.[i]} />)}
           </g>)}
         </svg>
