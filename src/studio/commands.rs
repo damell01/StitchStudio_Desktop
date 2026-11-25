@@ -87,6 +87,7 @@ pub enum Action {
     /// Type › Type on a Path: the selected text onto the selected path.
     TypeOnPath,
     CleanUp,
+    OptimizeStitches,
     ToggleStitchLines,
     TogglePoints,
     ToggleJumps,
@@ -242,6 +243,7 @@ pub fn menus() -> Vec<(&'static str, Vec<Entry>)> {
                         Item(Action::ReversePath, "Reverse Direction", None),
                         Sep,
                         Item(Action::CleanUp, "Clean Up…", None),
+                        Item(Action::OptimizeStitches, "Optimize Automatic Stitch Settings", None),
                     ],
                 ),
                 Sub(
@@ -442,7 +444,7 @@ impl Studio {
                         == 1
             }
             Action::Paste => !self.layout.clipboard.is_empty(),
-            Action::SelectAll | Action::GroupColors | Action::FitToHoop | Action::CleanUp => {
+            Action::SelectAll | Action::GroupColors | Action::FitToHoop | Action::CleanUp | Action::OptimizeStitches => {
                 !self.doc.shapes.is_empty()
             }
             Action::Export(_) => has_design && !self.planner.pending
@@ -652,6 +654,31 @@ impl Studio {
             Action::ReleaseCompound => self.release_compound_selected(),
             Action::SimplifyPath => self.open_simplify_dialog(),
             Action::CleanUp => self.open_cleanup_dialog(),
+            Action::OptimizeStitches => {
+                let mut indices = self.sel_indices();
+                if indices.is_empty() { indices = (0..self.doc.shapes.len()).collect(); }
+                let mut changed = 0;
+                let result = self.structural(|d| {
+                    for i in indices {
+                        let shape = &mut d.shapes[i];
+                        // Never override explicitly authored stitch types or manual settings.
+                        if shape.params.kind.is_some() { continue; }
+                        let mut candidate = shape.clone();
+                        zigzag::design::auto_stitch_types(std::slice::from_mut(&mut candidate));
+                        let kind = candidate.params.kind.filter(|k| crate::widgets::allowed_kinds(shape).contains(k));
+                        if kind != shape.params.kind || candidate.params.angle != shape.params.angle {
+                            shape.params.kind = kind;
+                            shape.params.angle = candidate.params.angle;
+                            changed += 1;
+                        }
+                    }
+                    Ok(())
+                });
+                self.status = match result {
+                    Ok(()) => format!("Optimized {changed} automatic objects; manual settings preserved."),
+                    Err(e) => format!("Optimization failed: {e}"),
+                };
+            }
             Action::CopySettings => {
                 if let Some(i) = self.sel_index() {
                     self.layout.settings_clip = Some(self.doc.shapes[i].params.clone());
