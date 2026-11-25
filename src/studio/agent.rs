@@ -1312,6 +1312,20 @@ impl Studio {
             line.center().y,
             Stroke::new(1.0, p.separator),
         );
+        if !a.running() && !a.prompt.trim().is_empty() {
+            let suggestions = command_suggestions(&a.prompt);
+            if !suggestions.is_empty() {
+                caption(ui, "Suggested commands");
+                ui.horizontal_wrapped(|ui| {
+                    for suggestion in suggestions {
+                        if ui.small_button(suggestion).clicked() {
+                            a.prompt = suggestion.to_owned();
+                            a.focus = true;
+                        }
+                    }
+                });
+            }
+        }
         // The prompt: one line (it grows with Shift-Enter), Send beside it.
         let field_id = ui.make_persistent_id("agent-prompt");
         // (Above it, its own space; below, the panel's padding is enough.)
@@ -2149,6 +2163,48 @@ mod tests {
  
 /// Deliberately exact allowlist: never interpret a negated or compound
 /// instruction as a mutation. More complex prompts go to the configured agent.
+const COMMAND_ALIASES: &[&str] = &["undo", "undo last change", "redo", "redo last change", "select all", "select all objects", "deselect all", "clear selection", "center in hoop", "center design in hoop", "center the design", "center", "center design", "center my design", "center it", "center this design", "center the design in the hoop", "center it in the hoop", "centre the design", "centre it", "move design to center", "move it to the center", "center artwork", "center the artwork", "fit to hoop", "fit design to hoop", "fit the design to the hoop", "fit it to the hoop", "resize to fit hoop", "zoom to fit", "zoom fit", "check design", "show design issues", "group colors", "group thread colors", "optimize stitches", "optimize automatic stitch settings", "repair design", "clean up design", "duplicate selection", "duplicate selected objects", "flip horizontally", "flip horizontal", "flip vertically", "flip vertical", "rotate left", "rotate left 90 degrees", "rotate right", "rotate right 90 degrees", "make selection fill", "convert selection to fill", "make selection satin", "convert selection to satin", "make selection run", "convert selection to running stitch", "reverse stitch direction", "sew selection first", "sew selection last", "copy stitch settings", "paste stitch settings", "select same stitch type", "zoom in", "zoom out", "reset panels", "add text", "add lettering", "insert text", "toggle grid", "toggle smart guides", "toggle stitch lines", "toggle stitch points", "toggle jumps", "toggle density view", "toggle sewing order", "toggle simulation", "play or pause simulation", "simplify selected paths", "simplify selection", "round selected corners", "create outlines", "convert selection to text", "repeat last transform", "bring selection forward", "send selection backward", "bring selection to front", "send selection to back", "center this", "centre my design", "put it in the middle", "align it to the hoop center", "center everything", "make it fit inside the hoop", "fit inside hoop", "optimise stitches", "reduce stitch count", "fix design", "clean up artwork"];
+
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut older = prev.clone();
+    for (i, x) in a.iter().enumerate() {
+        let mut row = vec![i + 1; b.len() + 1];
+        for (j, y) in b.iter().enumerate() {
+            row[j+1] = (row[j]+1).min(prev[j+1]+1).min(prev[j]+usize::from(x != y));
+            if i > 0 && j > 0 && *x == b[j-1] && a[i-1] == *y {
+                row[j+1] = row[j+1].min(older[j-1]+1);
+            }
+        }
+        older = prev;
+        prev = row;
+    }
+    prev[b.len()]
+}
+
+fn command_suggestions(prompt: &str) -> Vec<&'static str> {
+    let q = prompt.trim().to_ascii_lowercase();
+    if q.is_empty() || q.len() > 100 { return Vec::new(); }
+    let mut ranked: Vec<_> = COMMAND_ALIASES.iter().copied().filter_map(|s| {
+        let score = if s.starts_with(&q) { 0 } else if s.contains(&q) { 1 } else {
+            let d = edit_distance(&q, s);
+            if d > (q.len()/5).clamp(1, 3) { return None; }
+            d + 2
+        };
+        Some((score, s.len(), s))
+    }).collect();
+    ranked.sort_unstable();
+    let mut seen = Vec::new();
+    ranked.into_iter().filter_map(|(_, _, s)| {
+        let action = quick_action(s)?;
+        if seen.contains(&action) { return None; }
+        seen.push(action);
+        Some(s)
+    }).take(4).collect()
+}
+
 fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
     use crate::commands::Action as A;
     let normalized = prompt.trim().trim_end_matches(['.', '!', '?']).to_ascii_lowercase();
@@ -2168,13 +2224,13 @@ fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
         | "center" | "center design" | "center my design" | "center it"
         | "center this design" | "center the design in the hoop" | "center it in the hoop"
         | "centre the design" | "centre it" | "move design to center" | "move it to the center"
-        | "center artwork" | "center the artwork" => A::CenterInHoop,
-        "fit to hoop" | "fit design to hoop" | "fit the design to the hoop" | "fit it to the hoop" | "resize to fit hoop" => A::FitToHoop,
+        | "center artwork" | "center the artwork" | "center this" | "centre my design" | "put it in the middle" | "align it to the hoop center" | "center everything" => A::CenterInHoop,
+        "fit to hoop" | "fit design to hoop" | "fit the design to the hoop" | "fit it to the hoop" | "resize to fit hoop" | "make it fit inside the hoop" | "fit inside hoop" => A::FitToHoop,
         "zoom to fit" | "zoom fit" => A::ZoomFit,
         "check design" | "show design issues" => A::ShowIssues,
         "group colors" | "group thread colors" => A::GroupColors,
-        "optimize stitches" | "optimize automatic stitch settings" => A::OptimizeStitches,
-        "repair design" | "clean up design" => A::CleanUp,
+        "optimize stitches" | "optimize automatic stitch settings" | "optimise stitches" | "reduce stitch count" => A::OptimizeStitches,
+        "repair design" | "clean up design" | "fix design" | "clean up artwork" => A::CleanUp,
         "duplicate selection" | "duplicate selected objects" => A::Duplicate,
         "flip horizontally" | "flip horizontal" => A::FlipH,
         "flip vertically" | "flip vertical" => A::FlipV,
@@ -2218,6 +2274,12 @@ fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
 mod quick_action_tests {
     use super::quick_action;
     use crate::commands::Action;
+    #[test]
+    fn suggests_transposed_and_partial_commands() {
+        assert!(super::command_suggestions("cneter my design").iter().any(|s| quick_action(s) == Some(Action::CenterInHoop)));
+        assert!(super::command_suggestions("optimi").iter().any(|s| quick_action(s) == Some(Action::OptimizeStitches)));
+        assert_eq!(quick_action("cneter my design"), None);
+    }
     #[test]
     fn routes_exact_local_commands_only() {
         assert_eq!(quick_action(" Center the design! "), Some(Action::CenterInHoop));
