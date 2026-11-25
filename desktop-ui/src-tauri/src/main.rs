@@ -220,7 +220,8 @@ fn validate_export(design: &Design, format: &str, width: f64, height: f64) -> Re
     let encoded_stream = match format {
         "dst" => Some(formats::dst::stream(design)),
         "pes" | "pec" => Some(formats::pes::stream(design)),
-        "exp" | "jef" | "vp3" => Some(formats::commands(design, &formats::StreamOptions { ties: true, max_step: 120.0 })),
+        "exp" | "jef" => Some(formats::commands(design, &formats::StreamOptions { ties: true, max_step: 127.0 })),
+        "vp3" => Some(formats::commands(design, &formats::StreamOptions { ties: true, max_step: 255.0 })),
         _ => None,
     };
     if encoded_stream.as_ref().is_some_and(|stream|stream.iter().any(|command|!fits(command.x,command.y))) {
