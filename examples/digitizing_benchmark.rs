@@ -1,10 +1,8 @@
 //! Repeatable, original raster fixtures for the automatic digitizer.
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
-use zigzag::design::auto_stitch_types;
-use zigzag::document::Document;
 use zigzag::formats::{self, Op, StreamOptions};
-use zigzag::trace::{TraceOptions, trace_prepared_bytes};
+use zigzag::trace::{TraceOptions, digitize_raster};
 
 const SIDE: u32 = 128;
 
@@ -52,10 +50,7 @@ fn main() -> anyhow::Result<()> {
     println!("fixture,ms,shapes,stitches,colors,blocks,trims,jumps,travel_mm,short_segments,long_segments,peak_penetrations_per_mm2,round_trip_formats");
     for (name, bytes, cleanup, tolerance) in fixtures {
         let started = Instant::now();
-        let trace = trace_prepared_bytes(&bytes, &TraceOptions::default(), tolerance, cleanup)?;
-        let mut document = Document::from_svg(&trace.svg, name, None)?;
-        auto_stitch_types(&mut document.shapes);
-        document.settings.hat_order = document.shapes.len() <= 1000;
+        let document = digitize_raster(&bytes, name, &TraceOptions::default(), tolerance, cleanup)?;
         let design = document.plan();
         let elapsed_ms = started.elapsed().as_millis();
         anyhow::ensure!(design.stitch_count() > 0, "{name} produced an empty stitch plan");

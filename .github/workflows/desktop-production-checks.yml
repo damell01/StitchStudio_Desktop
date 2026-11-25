@@ -25,6 +25,7 @@ jobs:
       - run: npm run build
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --locked --manifest-path ../Cargo.toml --test digitizer_formats
       - run: cargo run --locked --manifest-path ../Cargo.toml --example digitizing_benchmark
       - if: runner.os == 'Windows'
         run: npm run tauri build -- --bundles nsis -- --locked

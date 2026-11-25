@@ -243,6 +243,17 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     }
 }
 
+/// Trace raster artwork into editable geometry with automatic stitch parameters.
+pub fn digitize_raster(
+    bytes: &[u8], name: &str, options: &TraceOptions, tolerance: u8, cleanup: bool,
+) -> Result<crate::document::Document> {
+    let trace = trace_prepared_bytes(bytes, options, tolerance, cleanup)?;
+    let mut document = crate::document::Document::from_svg(&trace.svg, name, None)?;
+    crate::design::auto_stitch_types(&mut document.shapes);
+    document.settings.hat_order = document.shapes.len() <= 1000;
+    Ok(document)
+}
+
 /// Optional texture cleanup for photographed or rendered embroidery artwork.
 /// Median filtering suppresses isolated thread highlights without averaging edges.
 pub fn trace_cleaned_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {

@@ -143,6 +143,21 @@ impl Raster {
         }
         Self { width, height, rgba }
     }
+    fn decode_oriented(bytes: &[u8], mut limits: image::Limits) -> Result<image::RgbaImage, TraceError> {
+        use image::ImageDecoder as _;
+        let decode_err = |error: image::ImageError| TraceError::Decode(error.to_string());
+        let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+            .with_guessed_format().map_err(|error| TraceError::Decode(error.to_string()))?;
+        // Use the same bounded decoder for image data and EXIF orientation.
+        limits.max_alloc = limits.max_alloc.or(Some(512 << 20));
+        reader.limits(limits);
+        let mut decoder = reader.into_decoder().map_err(decode_err)?;
+        let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
+        let mut image = image::DynamicImage::from_decoder(decoder).map_err(decode_err)?;
+        image.apply_orientation(orientation);
+        Ok(image.into_rgba8())
+    }
+
     /// Decode PNG / JPEG / WebP / GIF bytes (at most [`MAX_PIXELS`], checked before decoding).
     pub fn decode(bytes: &[u8]) -> Result<Self, TraceError> {
         let decode_err = |e: image::ImageError| TraceError::Decode(e.to_string());
@@ -154,7 +169,7 @@ impl Raster {
         if u64::from(w) * u64::from(h) > MAX_PIXELS {
             return Err(TraceError::TooLarge { width: w, height: h, max: MAX_PIXELS >> 20 });
         }
-        let img = image::load_from_memory(bytes).map_err(decode_err)?.to_rgba8();
+        let img = Self::decode_oriented(bytes, image::Limits::default())?;
         let (w, h) = img.dimensions();
         Ok(Self { width: w, height: h, rgba: img.into_raw() })
     }
@@ -178,11 +193,9 @@ impl Raster {
         }
         // Decoded within the allocation the source limit needs; the web keeps file import's 512 MB.
         // A deeper image (16 bits a channel) that needs more fails with a decode error.
-        let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|e| TraceError::Decode(e.to_string()))?;
         let mut limits = image::Limits::default();
         limits.max_alloc = Some(if cfg!(target_arch = "wasm32") { 512 << 20 } else { MAX_SOURCE_PIXELS * 4 });
-        reader.limits(limits);
-        let img = reader.decode().map_err(decode_err)?.into_rgba8();
+        let img = Self::decode_oriented(bytes, limits)?;
         let (w, h) = img.dimensions();
         let (nw, nh) = fit_size(w, h, MAX_PIXELS);
         // Box-filtered: every source pixel counts, so thin lines and anti-aliased edges survive.
