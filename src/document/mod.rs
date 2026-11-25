@@ -216,6 +216,18 @@ impl Document {
 
     /// Load SVG text, centering its artwork on the hoop.
     pub fn from_svg(xml: &str, name: &str, path: Option<PathBuf>) -> Result<Document> {
+        Self::from_svg_with_offset(xml, name, path, None)
+    }
+
+    /// Restore editable artwork in its saved hoop coordinate system.
+    pub fn restore_svg(xml: &str, name: &str, offset: P) -> Result<Document> {
+        anyhow::ensure!(offset.x.is_finite() && offset.y.is_finite(), "Invalid artwork offset");
+        Self::from_svg_with_offset(xml, name, None, Some(offset))
+    }
+
+    fn from_svg_with_offset(
+        xml: &str, name: &str, path: Option<PathBuf>, saved_offset: Option<P>,
+    ) -> Result<Document> {
         let (xml, _) = prepare_ids(xml, &mut 0)?;
         let settings = root_settings(&xml);
         let mut d = Document {
@@ -235,14 +247,17 @@ impl Document {
             rev: next_rev(),
         };
         d.import(&HashMap::new())?;
-        let b = svg::shapes_bounds(&d.shapes);
-        if !b.is_empty() {
-            // On a whole 0.1 mm unit, so points on the machine's grid stay
-            // on it (an opened stitch file exports unchanged).
-            let c = b.center();
-            d.offset = P::new(c.x.round(), c.y.round());
-            translate(&mut d.shapes, -d.offset);
-        }
+        let bounds = svg::shapes_bounds(&d.shapes);
+        d.offset = saved_offset.unwrap_or_else(|| {
+            if bounds.is_empty() {
+                P::default()
+            } else {
+                // Stay on the 0.1 mm machine grid when first importing.
+                let center = bounds.center();
+                P::new(center.x.round(), center.y.round())
+            }
+        });
+        translate(&mut d.shapes, -d.offset);
         d.adopt_foreign_lettering()?;
         Ok(d)
     }
@@ -1043,6 +1058,17 @@ mod tests {
         // Copying one piece of a group doesn't make a new group.
         let one = d.duplicate(&[0], P::new(30.0, 30.0)).unwrap();
         assert!(d.shapes[one[0]].groups.is_empty());
+    }
+
+    #[test]
+    fn restore_svg_preserves_position_after_hoop_edits() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="30mm" viewBox="0 0 40 30"><rect id="art" x="10" y="5" width="20" height="15" fill="purple"/></svg>"#;
+        let mut doc = Document::from_svg(svg, "test", None).unwrap();
+        doc.transform(&[0], [1.0, 0.0, 0.0, 1.0, 125.0, -50.0]).unwrap();
+        let restored = Document::restore_svg(&doc.to_svg().unwrap(), "test", doc.offset).unwrap();
+        let original = crate::formats::write_format(&doc.plan(), "dst").unwrap();
+        let reopened = crate::formats::write_format(&restored.plan(), "dst").unwrap();
+        assert_eq!(original, reopened);
     }
 
     #[test]

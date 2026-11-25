@@ -376,3 +376,9 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .digitizer-stage-3 .review-compare .digitizer-source-image{grid-column:1;grid-row:4}
 .digitizer-stage-3 .review-compare .digitizer-stitch-image{grid-column:2;grid-row:4}
 .digitizer-stage-3 .review-compare :is(.digitizer-source-image,.digitizer-stitch-image){height:clamp(220px,48vh,620px)}
+
+.digitizer-options { margin: 12px 0; }
+.digitizer-options summary { cursor: pointer; font-weight: 600; }
+.digitizer-options fieldset { display: grid; gap: 8px; border: 0; padding: 10px 0 0; margin: 0; }
+.digitizer-controls > label { display: grid; gap: 4px; margin-top: 12px; }
+.digitizer-controls progress { width: 100%; margin-bottom: 4px; accent-color: var(--brand-accent); }

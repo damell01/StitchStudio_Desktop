@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::sync::Mutex;
 #[derive(Default)]
-struct Workspace { source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)> }
+struct Workspace { digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)> }
 impl Workspace { fn checkpoint(&mut self) { if let Some(d)=self.current.clone(){self.undo.push((d,self.source.clone()));if self.undo.len()>20{self.undo.remove(0);}self.redo.clear();} } }
 use zigzag::{design::Design, formats};
 #[derive(serde::Serialize)]
@@ -31,17 +31,33 @@ fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, state: tauri::S
     Ok(preview(d))
 }
 #[derive(serde::Serialize)]
-struct StitchAudit {short:usize,long:usize,zero:usize,segments:usize}
+struct StitchAudit {
+    short: usize,
+    long: usize,
+    zero: usize,
+    segments: usize,
+    sewn_mm: f64,
+}
+
+fn measure_stitches(design: &Design) -> StitchAudit {
+    let mut audit = StitchAudit { short: 0, long: 0, zero: 0, segments: 0, sewn_mm: 0.0 };
+    for run in design.blocks.iter().flat_map(|block| &block.runs) {
+        for pair in run.pts.windows(2) {
+            let mm = (pair[1].x - pair[0].x).hypot(pair[1].y - pair[0].y) / 10.0;
+            audit.segments += 1;
+            audit.sewn_mm += mm;
+            if mm < 0.05 { audit.zero += 1; }
+            else if mm < 0.3 { audit.short += 1; }
+            if mm > 12.0 { audit.long += 1; }
+        }
+    }
+    audit
+}
+
 #[tauri::command]
-fn audit_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<StitchAudit,String>{
- let w=state.lock().map_err(|e|e.to_string())?;
- let d=w.current.as_ref().ok_or("Open artwork first")?;
- let mut a=StitchAudit{short:0,long:0,zero:0,segments:0};
- for run in d.blocks.iter().flat_map(|b|&b.runs){for p in run.pts.windows(2){
- let mm=(p[1].x-p[0].x).hypot(p[1].y-p[0].y)/10.0;
- a.segments+=1;if mm<0.05{a.zero+=1;}else if mm<0.3{a.short+=1;}if mm>12.0{a.long+=1;}
- }}
- Ok(a)
+fn audit_stitches(state: tauri::State<'_, Mutex<Workspace>>) -> Result<StitchAudit, String> {
+    let workspace = state.lock().map_err(|err| err.to_string())?;
+    Ok(measure_stitches(workspace.current.as_ref().ok_or("Open artwork first")?))
 }
 #[tauri::command]
 fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
@@ -67,34 +83,53 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
  }
  w.checkpoint();w.source=None;let result=preview(&d);w.current=Some(d);Ok(result)
 }
-#[tauri::command]
-fn center_design(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
- let mut w=state.lock().map_err(|e|e.to_string())?;
- let d=w.current.as_ref().ok_or("Open artwork first")?;
- let mut bounds=[f64::INFINITY,f64::INFINITY,f64::NEG_INFINITY,f64::NEG_INFINITY];
- for p in d.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.pts){bounds[0]=bounds[0].min(p.x);bounds[1]=bounds[1].min(p.y);bounds[2]=bounds[2].max(p.x);bounds[3]=bounds[3].max(p.y);}
- if !bounds.iter().all(|v|v.is_finite()){return Err("No stitches to center".into())}
- let x=(bounds[0]+bounds[2])/2.0;let y=(bounds[1]+bounds[3])/2.0;
- w.checkpoint();w.source=None;let d=w.current.as_mut().unwrap();
- for p in d.blocks.iter_mut().flat_map(|b|&mut b.runs).flat_map(|r|&mut r.pts){p.x-=x;p.y-=y;}
- Ok(preview(d))
+fn place_design(workspace: &mut Workspace, matrix: [f64; 6]) -> Result<Preview, String> {
+    let [a, b, c, d, tx, ty] = matrix;
+    let apply = |point: &mut zigzag::geom::P| {
+        *point = zigzag::geom::P::new(a * point.x + c * point.y + tx, b * point.x + d * point.y + ty);
+    };
+    let mut design = workspace.current.clone().ok_or("Open artwork first")?;
+    let mut source = workspace.source.clone();
+    if let Some(document) = &mut source {
+        let indices: Vec<_> = (0..document.shapes.len()).collect();
+        document.transform(&indices, matrix).map_err(|err| err.to_string())?;
+    }
+    // Centering and mirroring preserve every stitch and command.
+    for point in design.blocks.iter_mut().flat_map(|block| &mut block.runs).flat_map(|run| &mut run.pts) {
+        apply(point);
+    }
+    let result = preview(&design);
+    workspace.checkpoint();
+    workspace.current = Some(design);
+    workspace.source = source;
+    Ok(result)
 }
+
 #[tauri::command]
-fn mirror_design(horizontal:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
- let mut w=state.lock().map_err(|e|e.to_string())?;
- if w.current.is_none(){return Err("Open artwork first".into())}
- w.checkpoint();w.source=None;
- let d=w.current.as_mut().unwrap();
- for p in d.blocks.iter_mut().flat_map(|b|&mut b.runs).flat_map(|r|&mut r.pts){if horizontal{p.x=-p.x}else{p.y=-p.y}}
- Ok(preview(d))
+fn center_design(state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview, String> {
+    let mut workspace = state.lock().map_err(|err| err.to_string())?;
+    let bounds = workspace.current.as_ref().ok_or("Open artwork first")?.bounds();
+    if bounds.is_empty() { return Err("No stitches to center".into()); }
+    let center = bounds.center();
+    place_design(&mut workspace, [1.0, 0.0, 0.0, 1.0, -center.x, -center.y])
+}
+
+#[tauri::command]
+fn mirror_design(horizontal: bool, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview, String> {
+    let mut workspace = state.lock().map_err(|err| err.to_string())?;
+    let (x, y) = if horizontal { (-1.0, 1.0) } else { (1.0, -1.0) };
+    place_design(&mut workspace, [x, 0.0, 0.0, y, 0.0, 0.0])
 }
 #[tauri::command]
 fn recolor_block(index: usize, color: [u8;3], state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview,String> {
     let mut guard=state.lock().map_err(|e|e.to_string())?;
+    if guard.current.as_ref().ok_or("Open artwork first")?.blocks.get(index).is_none() {
+        return Err("Invalid thread block".into());
+    }
     guard.checkpoint();
     guard.source=None;
     let d=guard.current.as_mut().ok_or("Open artwork first")?;
-    d.blocks.get_mut(index).ok_or("Invalid thread block")?.color=color;
+    d.blocks[index].color=color;
     Ok(preview(d))
 }
 #[tauri::command]
@@ -144,7 +179,7 @@ fn history_step(redo:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Pre
  Ok(preview(w.current.as_ref().ok_or("No design")?))
 }
 #[derive(serde::Serialize,serde::Deserialize)]
-struct Project { #[serde(default)] source_svg:Option<String>, version:u32,name:String,width:f64,height:f64,format:String,blocks:Vec<ProjectBlock> }
+struct Project { #[serde(default)] source_svg:Option<String>, #[serde(default)] source_offset:Option<[f64;2]>, version:u32,name:String,width:f64,height:f64,format:String,blocks:Vec<ProjectBlock> }
 #[derive(serde::Serialize,serde::Deserialize)]
 struct ProjectBlock {color:[u8;3],runs:Vec<ProjectRun>}
 #[derive(serde::Serialize,serde::Deserialize)]
@@ -154,7 +189,7 @@ struct OpenedProject {plan:Preview,width:f64,height:f64,format:String}
 #[tauri::command]
 async fn save_project(width:f64,height:f64,format:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<bool,String> {
  let project={let w=state.lock().map_err(|e|e.to_string())?;let d=w.current.as_ref().ok_or("No design")?;
- Project{source_svg:w.source.as_ref().map(|s|s.to_svg()).transpose().map_err(|e|e.to_string())?,version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
+ Project{source_svg:w.source.as_ref().map(|s|s.to_svg()).transpose().map_err(|e|e.to_string())?,source_offset:w.source.as_ref().map(|doc|[doc.offset.x,doc.offset.y]),version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
  let bytes=serde_json::to_vec(&project).map_err(|e|e.to_string())?;
  let Some(path)=rfd::AsyncFileDialog::new().add_filter("Stitch Studio project",&["stitchstudio"]).set_file_name("design.stitchstudio").save_file().await else{return Ok(false)};
  std::fs::write(path.path(),bytes).map_err(|e|e.to_string())?;Ok(true)
@@ -168,7 +203,10 @@ fn open_project_path(path:&std::path::Path,state:&Mutex<Workspace>)->Result<Open
  if std::fs::metadata(path).map_err(|e|e.to_string())?.len()>100_000_000{return Err("Project exceeds size limit".into())}
  let p:Project=serde_json::from_slice(&std::fs::read(path).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
  if p.version!=1 || !p.width.is_finite() || !p.height.is_finite() || p.width<=0.0 || p.height<=0.0 || !["dst","pes","jef","exp","vp3","pec"].contains(&p.format.as_str()) || p.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.points).flatten().any(|v|!v.is_finite()||v.abs()>1000000.0){return Err("Invalid project".into())}
- let source=p.source_svg.as_ref().map(|svg|zigzag::document::Document::from_svg(svg,&p.name,None)).transpose().map_err(|e|e.to_string())?;
+ let source = p.source_svg.as_ref().map(|svg| match p.source_offset {
+     Some([x, y]) => zigzag::document::Document::restore_svg(svg, &p.name, zigzag::geom::P::new(x, y)),
+     None => zigzag::document::Document::from_svg(svg, &p.name, None),
+ }).transpose().map_err(|err| err.to_string())?;
  let d=Design{name:p.name,blocks:p.blocks.into_iter().map(|b|zigzag::design::Block{color:b.color,runs:b.runs.into_iter().map(|r|zigzag::design::Run{pts:r.points.into_iter().map(|v|zigzag::geom::P::new(v[0],v[1])).collect(),trim_before:r.trim_before}).collect()}).collect(),..Default::default()};
  let result=OpenedProject{plan:preview(&d),width:p.width,height:p.height,format:p.format};
  *state.lock().map_err(|e|e.to_string())?=Workspace{source,current:Some(d),..Default::default()};Ok(result)
@@ -223,15 +261,48 @@ async fn insert_embroidery(x_mm:f64,y_mm:f64,file:Option<String>,app:tauri::AppH
  combined.blocks.extend(added.blocks);combined.per_shape.clear();combined.sew_order.clear();combined.notes.clear();combined.block_shapes.clear();combined.covered.clear();
  let p=preview(&combined);w.checkpoint();w.current=Some(combined);w.source=None;Ok(Some(p))
 }
+fn insert_editable_artwork(
+    workspace: &mut Workspace, xml: &str, name: &str, x: f64, y: f64, classify: bool,
+) -> Result<Option<Preview>, String> {
+    let mut document = match &workspace.source {
+        Some(source) => source.clone(),
+        None if workspace.current.is_none() => {
+            let mut empty = zigzag::document::Document::empty();
+            empty.name = name.to_string();
+            empty
+        }
+        None => return Ok(None),
+    };
+    let indices = document.add_svg(xml, zigzag::document::Placement {
+        center_mm: Some((x, y)), ..Default::default()
+    }).map_err(|err| err.to_string())?;
+    if indices.is_empty() { return Err("Artwork contains no editable objects".into()); }
+    if classify {
+        for index in indices {
+            zigzag::design::auto_stitch_types(std::slice::from_mut(&mut document.shapes[index]));
+        }
+    }
+    let design = document.plan();
+    if design.stitch_count() == 0 { return Err("Artwork contains no stitches".into()); }
+    let result = preview(&design);
+    workspace.checkpoint();
+    workspace.current = Some(design);
+    workspace.source = Some(document);
+    Ok(Some(result))
+}
+
 #[tauri::command]
 fn insert_template(id:String,art:String,width_mm:f64,x_mm:f64,y_mm:f64,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  if !["heart","star","leaf","football","bow","mountain","wildflower","sunrise","baseball","anchor","butterfly","laurel","bear","bunny","fox","penguin","dino","whale","ghost","rocket","puppy","mouse","turtle","gingerbread","duck","sailboat","mickey","minnie","bluey","bingo","stitch","coquette","bluebow","cherrybow","hello-kitty","pikachu","pooh","spongebob","snoopy","rainbow","cherries","strawberry","unicorn","bandit","chilli","muffin","socks","patrick","mario","my-melody","pumpkin","shell","frame"].contains(&id.as_str()) || art.len()>4096 || art.contains("href") || art.contains("<image") || art.contains("<script"){return Err("Invalid design".into())}
  if ![width_mm,x_mm,y_mm].iter().all(|v|v.is_finite()) || !(5.0..=250.0).contains(&width_mm) || x_mm.abs()>500.0 || y_mm.abs()>500.0{return Err("Invalid design dimensions".into())}
  let svg=format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width_mm}mm\" height=\"{width_mm}mm\" viewBox=\"0 0 100 100\">{art}</svg>");
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ if let Some(result) = insert_editable_artwork(&mut w, &svg, &id, x_mm, y_mm, false)? {
+     return Ok(result);
+ }
  let source=zigzag::document::Document::from_svg(&svg,&id,None).map_err(|e|e.to_string())?;
  let mut added=source.plan();if added.blocks.is_empty(){return Err("No stitches generated".into())}
  for block in &mut added.blocks {for run in &mut block.runs {for p in &mut run.pts {p.x+=x_mm*10.0;p.y+=y_mm*10.0;}}}
- let mut w=state.lock().map_err(|e|e.to_string())?;
  let mut combined=w.current.clone().unwrap_or_default();
  if combined.blocks.is_empty(){combined.name=id;} 
  combined.blocks.extend(added.blocks);combined.per_shape.clear();combined.sew_order.clear();combined.notes.clear();combined.block_shapes.clear();combined.covered.clear();
@@ -282,7 +353,7 @@ fn create_specialty(shape:String,style:String,width:f64,state:tauri::State<'_,Mu
 fn recovery_save(app:tauri::AppHandle,width:f64,height:f64,format:String,state:tauri::State<'_,Mutex<Workspace>>) -> Result<(),String>{
  use tauri::Manager;
  let project={let w=state.lock().map_err(|e|e.to_string())?;let Some(d)=w.current.as_ref() else{return Ok(())};
- Project{source_svg:w.source.as_ref().map(|s|s.to_svg()).transpose().map_err(|e|e.to_string())?,version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
+ Project{source_svg:w.source.as_ref().map(|s|s.to_svg()).transpose().map_err(|e|e.to_string())?,source_offset:w.source.as_ref().map(|doc|[doc.offset.x,doc.offset.y]),version:1,name:d.name.clone(),width,height,format,blocks:d.blocks.iter().map(|b|ProjectBlock{color:b.color,runs:b.runs.iter().map(|r|ProjectRun{points:r.pts.iter().map(|p|[p.x,p.y]).collect(),trim_before:r.trim_before}).collect()}).collect()}};
  let dir=app.path().app_local_data_dir().map_err(|e|e.to_string())?;
  std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
  let bytes=serde_json::to_vec(&project).map_err(|e|e.to_string())?;
@@ -300,7 +371,10 @@ fn recovery_open(app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>) -
  for name in ["recovery.stitchstudio","recovery.previous"]{let path=dir.join(name);if let Ok(meta)=std::fs::metadata(&path){if meta.len()<=100_000_000{if let Ok(bytes)=std::fs::read(path){if let Ok(p)=serde_json::from_slice::<Project>(&bytes){found=Some(p);break}}}}}
  let Some(p)=found else{return Ok(None)};
  if p.version!=1||!p.width.is_finite()||!p.height.is_finite()||p.width<=0.0||p.height<=0.0||!["dst","pes","jef","exp","vp3","pec"].contains(&p.format.as_str())||p.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.points).flatten().any(|v|!v.is_finite()||v.abs()>1000000.0){return Err("Invalid recovery project".into())}
- let source=p.source_svg.as_ref().map(|svg|zigzag::document::Document::from_svg(svg,&p.name,None)).transpose().map_err(|e|e.to_string())?;
+ let source = p.source_svg.as_ref().map(|svg| match p.source_offset {
+     Some([x, y]) => zigzag::document::Document::restore_svg(svg, &p.name, zigzag::geom::P::new(x, y)),
+     None => zigzag::document::Document::from_svg(svg, &p.name, None),
+ }).transpose().map_err(|err| err.to_string())?;
  let d=Design{name:p.name,blocks:p.blocks.into_iter().map(|b|zigzag::design::Block{color:b.color,runs:b.runs.into_iter().map(|r|zigzag::design::Run{pts:r.points.into_iter().map(|v|zigzag::geom::P::new(v[0],v[1])).collect(),trim_before:r.trim_before}).collect()}).collect(),..Default::default()};
  let result=OpenedProject{plan:preview(&d),width:p.width,height:p.height,format:p.format};
  *state.lock().map_err(|e|e.to_string())?=Workspace{source,current:Some(d),..Default::default()};Ok(Some(result))
@@ -380,19 +454,112 @@ async fn choose_artwork()->Result<Option<ArtworkInput>,String>{
  Ok(Some(ArtworkInput{name:path.file_stem().unwrap_or_default().to_string_lossy().into_owned(),mime:mime.into(),bytes:std::fs::read(path).map_err(|e|e.to_string())?}))
  }).await.map_err(|e|e.to_string())?
 }
+struct DigitizerDraft {
+    id: u64,
+    document: zigzag::document::Document,
+    design: Design,
+}
+
+#[derive(serde::Serialize)]
+struct DigitizerReview {
+    id: u64,
+    plan: Preview,
+    quality: StitchAudit,
+    warnings: Vec<String>,
+    density: Vec<[i32; 3]>,
+    jumps: usize,
+}
+
 #[tauri::command]
-async fn digitize_artwork(bytes:Vec<u8>,name:String,mime:String,width_mm:f64,colors:u32,remove_background:bool,detail:f64,fabric:String,cleanup:bool,tolerance:u8,thin_lines:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
- if bytes.is_empty()||bytes.len()>20_000_000||!width_mm.is_finite()||!(5.0..=300.0).contains(&width_mm)||!detail.is_finite()||!(0.0..=100.0).contains(&detail)||!(colors==0||(2..=10).contains(&colors))||zigzag::params::Fabric::by_id(&fabric).is_none(){return Err("Invalid artwork settings".into())}
- let (doc,d)=tauri::async_runtime::spawn_blocking(move||->Result<_,String>{
- let options=zigzag::trace::TraceOptions{width_mm,colors,remove_background,detail,lines:thin_lines,..Default::default()};
- let svg=if mime=="image/svg+xml" {String::from_utf8(bytes).map_err(|e|e.to_string())?}else{zigzag::trace::trace_prepared_bytes(&bytes,&options,tolerance,cleanup).map_err(|e|e.to_string())?.svg};
- let mut doc=zigzag::document::Document::from_svg(&svg,&name,None).map_err(|e|e.to_string())?;
- doc.settings.fabric=fabric;
- // Automatic raster artwork can use overlap-aware color grouping; preserve explicit SVG ordering.
- if mime!="image/svg+xml" {zigzag::design::auto_stitch_types(&mut doc.shapes);if doc.shapes.len()<=1000 {doc.settings.hat_order=true;}}
- let d=doc.plan();if d.blocks.is_empty(){return Err("No stitchable artwork found".into())}Ok((doc,d))
- }).await.map_err(|e|e.to_string())??;
- let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+async fn digitize_artwork(
+    bytes: Vec<u8>, name: String, mime: String, width_mm: f64, colors: u32,
+    remove_background: bool, detail: f64, fabric: String, cleanup: bool,
+    tolerance: u8, thin_lines: bool, state: tauri::State<'_, Mutex<Workspace>>,
+) -> Result<DigitizerReview, String> {
+    if bytes.is_empty() || bytes.len() > 20_000_000 || !(5.0..=300.0).contains(&width_mm)
+        || !(0.0..=100.0).contains(&detail) || !(colors == 0 || (2..=10).contains(&colors))
+        || zigzag::params::Fabric::by_id(&fabric).is_none()
+    {
+        return Err("Invalid artwork settings or file size".into());
+    }
+    static NEXT_DRAFT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let id = {
+        let mut workspace = state.lock().map_err(|err| err.to_string())?;
+        workspace.next_draft_id = NEXT_DRAFT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        workspace.digitizer_draft = None;
+        workspace.next_draft_id
+    };
+    let (document, design, review) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+        let options = zigzag::trace::TraceOptions {
+            width_mm, colors, remove_background, detail, lines: thin_lines, ..Default::default()
+        };
+        let vector = mime == "image/svg+xml";
+        let svg = if vector {
+            String::from_utf8(bytes).map_err(|err| err.to_string())?
+        } else {
+            zigzag::trace::trace_prepared_bytes(&bytes, &options, tolerance, cleanup)
+                .map_err(|err| err.to_string())?.svg
+        };
+        let mut document = zigzag::document::Document::from_svg(&svg, &name, None)
+            .map_err(|err| err.to_string())?;
+        document.settings.fabric = fabric;
+        if !vector {
+            zigzag::design::auto_stitch_types(&mut document.shapes);
+            document.settings.hat_order = document.shapes.len() <= 1000;
+        }
+        let design = document.plan();
+        let count = design.stitch_count();
+        if count == 0 { return Err("No stitchable artwork found".into()); }
+        if count > 2_000_000 { return Err("Design exceeds the two million stitch limit".into()); }
+        if design.blocks.iter().flat_map(|block| &block.runs).flat_map(|run| &run.pts)
+            .any(|point| !point.x.is_finite() || !point.y.is_finite() || point.x.abs() > 10_000.0 || point.y.abs() > 10_000.0)
+        {
+            return Err("Artwork exceeds the digitizer coordinate limits".into());
+        }
+        let mut density = std::collections::HashMap::new();
+        let commands = formats::dst::stream(&design);
+        let mut jumps = 0;
+        for command in &commands {
+            match command.op {
+                formats::Op::Stitch => {
+                    let cell = [(command.x / 10.0).floor() as i32, (command.y / 10.0).floor() as i32];
+                    *density.entry(cell).or_insert(0) += 1;
+                }
+                formats::Op::Jump => jumps += 1,
+                _ => {}
+            }
+        }
+        let mut density: Vec<_> = density.into_iter().map(|([x, y], count)| [x, y, count]).collect();
+        density.sort_unstable_by_key(|&[x, y, count]| (std::cmp::Reverse(count), y, x));
+        density.truncate(512);
+        let review = DigitizerReview {
+            id,
+            plan: preview(&design),
+            quality: measure_stitches(&design),
+            warnings: design.notes.iter().take(12)
+                .map(|(index, message)| format!("Object {}: {message}", index + 1)).collect(),
+            density,
+            jumps,
+        };
+        Ok((document, design, review))
+    }).await.map_err(|err| err.to_string())??;
+    let mut workspace = state.lock().map_err(|err| err.to_string())?;
+    if workspace.next_draft_id != id { return Err("A newer digitizing request replaced this draft".into()); }
+    workspace.digitizer_draft = Some(DigitizerDraft { id, document, design });
+    Ok(review)
+}
+
+#[tauri::command]
+fn apply_digitizer_draft(id: u64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
+    let mut workspace = state.lock().map_err(|err| err.to_string())?;
+    if workspace.digitizer_draft.as_ref().is_none_or(|draft| draft.id != id) {
+        return Err("This draft expired. Regenerate stitches before opening it.".into());
+    }
+    let draft = workspace.digitizer_draft.take().ok_or("No digitizing draft")?;
+    workspace.checkpoint();
+    workspace.current = Some(draft.design);
+    workspace.source = Some(draft.document);
+    Ok(())
 }
 #[derive(serde::Serialize)]
 struct LibraryEntry {file:String,name:String,stitches:usize,colors:usize,width:f64,height:f64,modified:u64}
@@ -466,19 +633,27 @@ async fn character_image(group:String,file:String)->Result<Vec<u8>,String>{
 #[tauri::command]
 async fn insert_character(bytes:Vec<u8>,name:String,width_mm:f64,x_mm:f64,y_mm:f64,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  if bytes.is_empty()||bytes.len()>20_000_000||![width_mm,x_mm,y_mm].iter().all(|v|v.is_finite())||!(5.0..=250.0).contains(&width_mm)||x_mm.abs()>500.0||y_mm.abs()>500.0{return Err("Invalid artwork or dimensions".into())}
- let mut added=tauri::async_runtime::spawn_blocking(move||->Result<_,String>{
- let options=zigzag::trace::TraceOptions{width_mm,remove_background:true,..Default::default()};
- let svg=zigzag::trace::trace_prepared_bytes(&bytes,&options,32,false).map_err(|e|e.to_string())?.svg;
- let mut doc=zigzag::document::Document::from_svg(&svg,&name,None).map_err(|e|e.to_string())?;
- doc.settings.hat_order=true;
- let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}Ok(d)
- }).await.map_err(|e|e.to_string())??;
- for block in &mut added.blocks{for run in &mut block.runs{for p in &mut run.pts{p.x+=x_mm*10.0;p.y+=y_mm*10.0;}}}
- let mut w=state.lock().map_err(|e|e.to_string())?;
+ let svg = tauri::async_runtime::spawn_blocking(move || {
+     let options = zigzag::trace::TraceOptions { width_mm, ..Default::default() };
+     zigzag::trace::trace_prepared_bytes(&bytes, &options, 32, false)
+         .map(|trace| trace.svg).map_err(|err| err.to_string())
+ }).await.map_err(|err| err.to_string())??;
+ let mut w = state.lock().map_err(|err| err.to_string())?;
+ if let Some(result) = insert_editable_artwork(&mut w, &svg, &name, x_mm, y_mm, true)? {
+     return Ok(result);
+ }
+ let mut doc = zigzag::document::Document::from_svg(&svg, &name, None).map_err(|err| err.to_string())?;
+ zigzag::design::auto_stitch_types(&mut doc.shapes);
+ let mut added = doc.plan();
+ if added.stitch_count() == 0 { return Err("Artwork contains no stitches".into()); }
+ for point in added.blocks.iter_mut().flat_map(|block| &mut block.runs).flat_map(|run| &mut run.pts) {
+     point.x += x_mm * 10.0;
+     point.y += y_mm * 10.0;
+ }
  let mut combined=w.current.clone().unwrap_or_default();
  if combined.blocks.is_empty(){combined.name=added.name.clone();}
  combined.blocks.extend(added.blocks);combined.per_shape.clear();combined.sew_order.clear();combined.notes.clear();combined.block_shapes.clear();combined.covered.clear();
  let p=preview(&combined);w.checkpoint();w.current=Some(combined);w.source=None;Ok(p)
 }
 
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,apply_stitch_properties,editable_objects,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}

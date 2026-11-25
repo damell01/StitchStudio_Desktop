@@ -1,12 +1,305 @@
-import {CharacterGallery} from './character-gallery';
-import {toast} from './dialogs';
-import {ArtworkEdit} from './artwork-edit';
-import {PdfArtwork} from './pdf-artwork';
-import {useEffect,useState,useRef} from 'react';
-import {invoke} from '@tauri-apps/api/core';
-import {ImagePlus,Check,ArrowRight} from 'lucide-react';
-type Art={name:string;mime:string;bytes:number[]};
-type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
-export function Digitizer({onDone}:{onDone:()=>void}){const [processing,setProcessing]=useState(false),[elapsed,setElapsed]=useState(0);useEffect(()=>{if(!processing)return;const start=Date.now();const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-start)/1000)),250);return()=>clearInterval(timer)},[processing]);const [editing,setEditing]=useState(false),[original,setOriginal]=useState<Art|null>(null),[step,setStep]=useState(0),[art,setArt]=useState<Art|null>(null),[url,setUrl]=useState(''),[width,setWidth]=useState(80),[colors,setColors]=useState(0),[detail,setDetail]=useState(60),[tolerance,setTolerance]=useState(32),[thinLines,setThinLines]=useState(false),[cleanup,setCleanup]=useState(false),[remove,setRemove]=useState(true),[fabric,setFabric]=useState('standard'),[plan,setPlan]=useState<Plan|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');useEffect(()=>{if(!art)return;const u=URL.createObjectURL(new Blob([new Uint8Array(art.bytes)],{type:art.mime}));setUrl(u);return()=>URL.revokeObjectURL(u)},[art]);const [processed,setProcessed]=useState(''),[previewBusy,setPreviewBusy]=useState(false),[previewError,setPreviewError]=useState(''),[showProcessed,setShowProcessed]=useState(true);
-useEffect(()=>{setProcessed('');setPreviewError('');if(!art||art.mime==='image/svg+xml'||(step!==1&&step!==2)){setPreviewBusy(false);return}let active=true;setPreviewBusy(true);const timer=setTimeout(async()=>{try{const p=await invoke<{width:number;height:number;rgba:number[]}>('preview_cleanup',{bytes:art.bytes,removeBackground:remove,tolerance,cleanup});if(!active)return;const canvas=document.createElement('canvas');canvas.width=p.width;canvas.height=p.height;const ctx=canvas.getContext('2d');if(!ctx)throw Error('Preview unavailable');ctx.putImageData(new ImageData(new Uint8ClampedArray(p.rgba),p.width,p.height),0,0);setProcessed(canvas.toDataURL('image/png'))}catch(e){if(active)setPreviewError(String(e))}finally{if(active)setPreviewBusy(false)}},350);return()=>{active=false;clearTimeout(timer)}},[art,remove,tolerance,cleanup,step]);
-const generationLock=useRef(false);async function acceptArtwork(a:Art){if(generationLock.current)return;setOriginal(a);setArt(a);setPlan(null);setWidth(80);setColors(0);setRemove(true);setDetail(60);setFabric('standard');setCleanup(false);setTolerance(32);setThinLines(false);setStep(2);await generate(a,true)}async function choose(){setBusy(true);setError('');try{const a=await invoke<Art|null>('choose_artwork');if(a){await acceptArtwork(a)}}catch(e){setError(String(e))}finally{setBusy(false)}}async function rotate(){if(!art||!url)return;setBusy(true);setError('');try{const img=new Image();img.src=url;await img.decode();if(img.naturalWidth*img.naturalHeight>16000000)throw Error('Artwork too large for editing');const c=document.createElement('canvas');c.width=img.naturalHeight;c.height=img.naturalWidth;const ctx=c.getContext('2d');if(!ctx)throw Error('Canvas unavailable');ctx.translate(c.width,0);ctx.rotate(Math.PI/2);ctx.drawImage(img,0,0);const blob=await new Promise<Blob>((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error('Image conversion failed')),'image/png'));setArt({...art,mime:'image/png',bytes:Array.from(new Uint8Array(await blob.arrayBuffer()))});setPlan(null)}catch(e){setError(String(e))}finally{setBusy(false)}}async function generate(input:Art|null=art,automatic=false){if(!input||generationLock.current)return;generationLock.current=true;setBusy(true);setProcessing(true);setElapsed(0);setError('');try{setPlan(await invoke<Plan>('digitize_artwork',{bytes:input.bytes,name:input.name,mime:input.mime,widthMm:automatic?80:width,colors:automatic?0:colors,removeBackground:automatic?true:remove,detail:automatic?60:detail,fabric:automatic?'standard':fabric,cleanup:automatic?false:cleanup,tolerance:automatic?32:tolerance,thinLines:automatic?false:thinLines}));setStep(3);toast('Embroidery design generated')}catch(e){setError(String(e));toast(String(e),true)}finally{generationLock.current=false;setBusy(false);setProcessing(false)}}const [reviewMode,setReviewMode]=useState<'compare'|'stitches'|'original'>('compare');const extent=plan?.blocks.reduce((m,b)=>b.runs.reduce((n,r)=>r.reduce((v,p)=>Math.max(v,Math.abs(p[0]),Math.abs(p[1])),n),m),1)??1;return <>{processing&&<div className="processing-overlay"><section role="status" aria-live="polite" className="processing-card"><div className="studio-spinner"/><h2>Digitizing your artwork</h2><p>Preparing artwork and generating embroidery stitches locally.</p><progress aria-label="Digitizing in progress"/><small>{elapsed}s elapsed</small><p className="muted">Complex designs may take longer.</p></section></div>}{editing&&art&&<ArtworkEdit art={art} onClose={()=>setEditing(false)} onApply={a=>{setArt(a);setPlan(null);setEditing(false)}}/>}<div className="wizard-steps">{['Import artwork','Optional cleanup','Stitch settings','Review design'].map((s,i)=><div key={s} aria-current={step===i?'step':undefined} className={step===i?'current':''}>{i<step?<Check size={16}/>:i+1} {s}</div>)}</div><div className={`lower digitizer-layout digitizer-stage-${step} ${step===1?"cleanup-workspace":""}`}><article className="digitizer-controls"><h2>{step===0?'Choose your artwork':step===1?'Prepare your artwork':step===2?'Configure embroidery':'Review your stitches'}</h2>{step===0&&<><p>Import PNG, JPEG, WebP, GIF, BMP, TIFF or SVG artwork. SVG uses its original vector geometry.</p><button className="artwork-import-zone" disabled={busy} onClick={choose}><ImagePlus size={30}/><strong>Choose artwork</strong><span>Browse files · digitizing starts automatically</span><small>PNG · JPG · SVG · WebP · TIFF</small></button><label>Character artwork collection<input type="file" accept="image/png,image/webp,image/jpeg" onChange={async e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>20000000){setError('Artwork exceeds 20 MB');return}try{const a={name:f.name,mime:f.type,bytes:Array.from(new Uint8Array(await f.arrayBuffer()))};await acceptArtwork(a)}catch(err){setError(String(err))}}}/><small>Choose artwork from your StitchStudio Artwork folder (Bluey, Disney or Pokémon).</small></label><CharacterGallery onArt={a=>{void acceptArtwork(a)}}/><PdfArtwork onArt={a=>{void acceptArtwork(a)}}/></>}{step===1&&<><p>Reduce unnecessary colors and background detail.</p>{art?.mime!=='image/svg+xml'&&art?.mime!=='image/tiff'&&<div className="wizard-actions"><button disabled={busy} onClick={()=>setEditing(true)}>Crop / erase background</button><button disabled={busy} onClick={rotate}>Rotate 90°</button><button disabled={busy||!original||art===original} onClick={()=>{setArt(original);setPlan(null)}}>Restore original</button></div>}<label><input type="checkbox" checked={cleanup} onChange={e=>setCleanup(e.target.checked)}/> Clean textured artwork / embroidery mockup</label><p className="muted">Reduces texture noise and small unwanted regions while retaining automatic palette selection.</p><label>Thread colors<select value={colors} onChange={e=>setColors(Number(e.target.value))}><option value={0}>Automatic</option>{[2,3,4,5,6,7,8,9,10].map(n=><option key={n}>{n}</option>)}</select></label><label><input type="checkbox" checked={remove} onChange={e=>setRemove(e.target.checked)}/> Remove connected background automatically</label>{remove&&<label>Background sensitivity: {tolerance}<input type="range" min="8" max="100" value={tolerance} onChange={e=>setTolerance(Number(e.target.value))}/><small>Increase for textured backgrounds; decrease if artwork disappears.</small></label>}<label><input type="checkbox" checked={thinLines} onChange={e=>setThinLines(e.target.checked)}/> Preserve thin lines (experimental)</label><small>Try for line art and narrow lettering. Uses centerline tracing rather than standard logo tracing.</small><label>Detail: {detail}%<input type="range" min="0" max="100" value={detail} onChange={e=>setDetail(Number(e.target.value))}/></label><p>Lower detail can reduce tiny regions and unnecessary trims. Settings take effect when generated.</p><button onClick={choose} disabled={busy}>Choose another image</button></>}{step===2&&<><p>Automatic background removal and color selection are enabled. Choose a preset matching your artwork for best results.</p><div className="digitizer-presets"><button aria-pressed={!cleanup&&!thinLines} onClick={()=>{setCleanup(false);setThinLines(false);setColors(0);setDetail(65)}}><strong>Clean illustration</strong><small>Logos, characters and flat artwork</small></button><button aria-pressed={cleanup&&!thinLines} onClick={()=>{setCleanup(true);setThinLines(false);setColors(0);setDetail(55)}}><strong>Textured artwork</strong><small>Embroidery photos and mockups</small></button><button aria-pressed={thinLines} onClick={()=>{setCleanup(false);setThinLines(true);setColors(0);setDetail(70)}}><strong>Fine line artwork</strong><small>Outlines and narrow lettering · experimental</small></button></div><button disabled={busy} onClick={()=>setStep(1)}>Advanced artwork options (optional)</button>{art?.mime==='image/svg+xml'?<p>Vector artwork retains its original dimensions. Resize it in the design studio. Raster cleanup settings do not apply.</p>:<label>Finished width (inches) — {width.toFixed(1)} mm<input type="number" min={5/25.4} max={300/25.4} step=".01" value={Number((width/25.4).toFixed(3))} onChange={e=>setWidth(Number(e.target.value)*25.4)}/></label>}<label>Fabric<select value={fabric} onChange={e=>setFabric(e.target.value)}><option value="standard">Stable woven / twill</option><option value="knit">Stretch knit</option><option value="thin-cap">Unstructured cap</option><option value="structured-cap">Structured cap</option></select></label><p>Choose a suitable stabilizer for your fabric. Confirm hoop fit in the editor.</p></>}{step===3&&plan&&<><div className="digitize-metrics"><div><strong>{plan.stitches.toLocaleString()}</strong><small>Stitches</small></div><div><strong>{plan.blocks.length}</strong><small>Color blocks</small></div><div><strong>{plan.trims}</strong><small>Trims</small></div></div>{plan.trims>50&&<p>Review excessive trims before exporting.</p>}<p>Compare the original with the generated stitch paths. Test sew before production.</p><p>{new Set(plan.blocks.map(b=>b.color.join(','))).size} distinct RGB colors</p><div className="review-palette" aria-label="Generated thread colors">{Array.from(new Set(plan.blocks.map(b=>b.color.join(",")))).map(rgb=><span key={rgb} title={`RGB ${rgb}`} style={{background:`rgb(${rgb})`}}/>)}</div><button disabled={busy} onClick={()=>setStep(1)}>Adjust artwork and regenerate</button></>}{error&&<p role="alert">{error}</p>}{busy&&<p role="status">Working… Please wait.</p>}<div className="wizard-actions">{step>0&&<button disabled={busy} onClick={()=>setStep(step===2?0:step-1)}>Back</button>}{step===1&&<button className="primary" onClick={()=>setStep(2)} disabled={busy}>Continue <ArrowRight size={16}/></button>}{step===2&&<button className="primary" disabled={busy||width<5||width>300} onClick={()=>void generate()}>Regenerate stitches</button>}{step===3&&<button className="primary" onClick={onDone}>Open in design studio</button>}</div></article><article className={`artwork-preview review-${step===3?reviewMode:"compare"}`}><div className="preview-heading"><small>DESIGN PREVIEW</small><span>{art?.name||"No artwork selected"}</span></div>{step===3&&<div className="review-switch">{(["compare","stitches","original"] as const).map(m=><button key={m} aria-pressed={reviewMode===m} onClick={()=>setReviewMode(m)}>{m==="compare"?"Compare":m==="stitches"?"Stitches":"Original"}</button>)}</div>}<h2 className="source-heading">{(step===1||step===2)&&showProcessed&&processed?"Processed artwork":"Original artwork"}</h2>{(step===1||step===2)&&<div className="wizard-actions"><button aria-pressed={!showProcessed} onClick={()=>setShowProcessed(false)}>Original</button><button aria-pressed={showProcessed} onClick={()=>setShowProcessed(true)}>Processed</button>{previewBusy&&<span role="status">Preparing preview…</span>}{previewError&&<span role="alert">{previewError}</span>}</div>}{art?.mime==='image/tiff'&&<p>TIFF can be digitized, but preview support varies by platform.</p>}{(step===1&&showProcessed&&processed||url&&art?.mime!=='image/tiff')&&<img src={step===1&&showProcessed&&processed?processed:url} alt={art?.name||'Artwork'} className="digitizer-source-image"/>}{step===3&&plan&&<><h2 className="stitch-heading">Generated stitch paths</h2><svg viewBox={[-extent*1.1,-extent*1.1,extent*2.2,extent*2.2].join(' ')} className="digitizer-stitch-image">{plan.blocks.map((b,i)=><g key={i} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".3">{b.runs.map((r,j)=><polyline key={j} points={r.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg></>}</article></div></>}
+import { useCallback, useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { ImagePlus } from 'lucide-react';
+import { ArtworkEdit } from './artwork-edit';
+import { CharacterGallery } from './character-gallery';
+import { PdfArtwork } from './pdf-artwork';
+
+type Art = { name: string; mime: string; bytes: number[] };
+type Plan = {
+  stitches: number;
+  trims: number;
+  blocks: { color: number[]; runs: number[][][] }[];
+};
+type Review = {
+  id: number;
+  plan: Plan;
+  quality: { short: number; long: number; zero: number; sewn_mm: number };
+  warnings: string[];
+  density: [number, number, number][];
+  jumps: number;
+};
+
+const defaults = {
+  widthMm: 80, colors: 0, detail: 60, fabric: 'standard',
+  removeBackground: true, cleanup: false, tolerance: 32, thinLines: false,
+};
+const artworkMimes: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml',
+  webp: 'image/webp', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', gif: 'image/gif',
+};
+
+// Serialize native tracing across mounts. An obsolete request can finish in Rust,
+// but it cannot update the visible draft or write to the design workspace.
+let pendingGeneration: Promise<void> = Promise.resolve();
+
+function useArtworkUrl(art: Art | null) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    if (!art) { setUrl(''); return; }
+    const next = URL.createObjectURL(new Blob([new Uint8Array(art.bytes)], { type: art.mime }));
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [art]);
+  return url;
+}
+
+export function Digitizer({ onDone }: { onDone: () => void }) {
+  const [art, setArt] = useState<Art | null>(null);
+  const [original, setOriginal] = useState<Art | null>(null);
+  const [pdf, setPdf] = useState<File | null>(null);
+  const [settings, setSettings] = useState(defaults);
+  const [generated, setGenerated] = useState<{ art: Art; settings: typeof defaults; review: Review } | null>(null);
+  const [failed, setFailed] = useState<{ art: Art; settings: typeof defaults; message: string } | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<'compare' | 'stitches' | 'original' | 'density'>('compare');
+  const [showProcessed, setShowProcessed] = useState(false);
+  const [processed, setProcessed] = useState<{ art: Art; settings: typeof defaults; url: string } | null>(null);
+  const [previewError, setPreviewError] = useState('');
+  const artworkUrl = useArtworkUrl(original);
+  const vector = art?.mime === 'image/svg+xml';
+  const review = generated?.art === art && generated?.settings === settings ? generated.review : null;
+  const generationError = failed?.art === art && failed?.settings === settings ? failed.message : '';
+  const valid = vector || (settings.widthMm >= 5 && settings.widthMm <= 300);
+  const processing = Boolean(art && valid && !review && !generationError);
+  const processedUrl = processed?.art === art && processed?.settings === settings ? processed.url : '';
+
+  useEffect(() => {
+    if (!art || !valid) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      pendingGeneration = pendingGeneration.then(async () => {
+        if (!active) return;
+        try {
+          const result = await invoke<Review>('digitize_artwork', { ...art, ...settings });
+          if (active) setGenerated({ art, settings, review: result });
+        } catch (err) {
+          if (active) setFailed({ art, settings, message: String(err) });
+        }
+      });
+    }, art === original ? (settings === defaults ? 0 : 450) : 450);
+    return () => { active = false; clearTimeout(timer); };
+  }, [art, original, settings, valid]);
+
+  useEffect(() => {
+    if (!showProcessed || !art || vector || processing || !valid || processedUrl) return;
+    let active = true;
+    setPreviewError('');
+    invoke<{ width: number; height: number; rgba: number[] }>('preview_cleanup', {
+      bytes: art.bytes, removeBackground: settings.removeBackground,
+      tolerance: settings.tolerance, cleanup: settings.cleanup,
+    }).then(result => {
+      if (!active) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = result.width;
+      canvas.height = result.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw Error('Preview unavailable');
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(result.rgba), result.width, result.height), 0, 0);
+      setProcessed({ art, settings, url: canvas.toDataURL('image/png') });
+    }).catch(err => { if (active) setPreviewError(String(err)); });
+    return () => { active = false; };
+  }, [art, settings, showProcessed, vector, processing, valid, processedUrl]);
+
+  const acceptArtwork = useCallback((next: Art) => {
+    setArt(next);
+    setOriginal(next);
+    setSettings(defaults);
+    setShowProcessed(next.mime === 'image/tiff');
+    setError('');
+    setGenerated(null);
+    setFailed(null);
+    setProcessed(null);
+    setMode('compare');
+    setPdf(null);
+  }, []);
+
+  async function chooseArtwork() {
+    setBusy(true);
+    setError('');
+    try {
+      const next = await invoke<Art | null>('choose_artwork');
+      if (next) acceptArtwork(next);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function readDrop(file: File) {
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (extension === 'pdf') { setPdf(file); setError(''); return; }
+    const mime = artworkMimes[extension];
+    if (!mime) { setError('Choose a supported image or PDF.'); return; }
+    if (!file.size || file.size > 20_000_000) { setError('Artwork must be between 1 byte and 20 MB.'); return; }
+    setBusy(true);
+    try {
+      acceptArtwork({ name: file.name, mime, bytes: Array.from(new Uint8Array(await file.arrayBuffer())) });
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rotateArtwork() {
+    if (!art) return;
+    setBusy(true);
+    setError('');
+    const url = URL.createObjectURL(new Blob([new Uint8Array(art.bytes)], { type: art.mime }));
+    try {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      if (image.naturalWidth * image.naturalHeight > 16_000_000) throw Error('Artwork exceeds editing size limit');
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalHeight;
+      canvas.height = image.naturalWidth;
+      const context = canvas.getContext('2d');
+      if (!context) throw Error('Canvas unavailable');
+      context.translate(canvas.width, 0);
+      context.rotate(Math.PI / 2);
+      context.drawImage(image, 0, 0);
+      const blob = await new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob(result => result ? resolve(result) : reject(Error('Image conversion failed')), 'image/png'));
+      setArt({ ...art, mime: 'image/png', bytes: Array.from(new Uint8Array(await blob.arrayBuffer())) });
+      setShowProcessed(true);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      URL.revokeObjectURL(url);
+      setBusy(false);
+    }
+  }
+
+  async function openDraft() {
+    if (!review) return;
+    setBusy(true);
+    try {
+      await invoke('apply_digitizer_draft', { id: review.id });
+      onDone();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function update<K extends keyof typeof defaults>(key: K, value: (typeof defaults)[K]) {
+    setSettings(previous => ({ ...previous, [key]: value }));
+  }
+
+  const plan = review?.plan;
+  const extent = plan?.blocks.reduce((max, block) => block.runs.reduce(
+    (runMax, run) => run.reduce((pointMax, [x, y]) => Math.max(pointMax, Math.abs(x), Math.abs(y)), runMax), max), 1) ?? 1;
+  const colors = new Set(plan?.blocks.map(block => block.color.join(',')));
+  const displayUrl = showProcessed ? processedUrl : artworkUrl;
+
+  return <div
+    className={`lower digitizer-layout digitizer-stage-${art ? 3 : 0}`}
+    onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
+    onDrop={event => {
+      event.preventDefault();
+      const file = event.dataTransfer.files[0];
+      if (file && !busy) void readDrop(file);
+    }}
+  >
+    {editing && art && <ArtworkEdit art={art} onClose={() => setEditing(false)} onApply={next => {
+      setArt(next);
+      setShowProcessed(true);
+      setEditing(false);
+    }} />}
+    <article className="digitizer-controls">
+      <h2>{art ? 'Digitizing settings' : 'Choose artwork'}</h2>
+      <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
+        <ImagePlus size={art ? 16 : 28} /> {art ? 'Choose another image' : 'Choose or drop an image'}
+      </button>
+      {!art && <p>PNG, JPEG, SVG, WebP, BMP, TIFF, GIF or PDF. Digitizing starts automatically.</p>}
+      {(!art || pdf) && <PdfArtwork onArt={acceptArtwork} droppedFile={pdf} />}
+      {!art && <CharacterGallery onArt={acceptArtwork} />}
+      {art && <>
+        {!vector && <label>Width (inches) · {settings.widthMm.toFixed(1)} mm
+          <input type="number" min={5 / 25.4} max={300 / 25.4} step=".01" disabled={busy}
+            value={Number((settings.widthMm / 25.4).toFixed(3))}
+            onChange={event => update('widthMm', Number(event.target.value) * 25.4)} />
+        </label>}
+        <label>Fabric<select value={settings.fabric} disabled={busy} onChange={event => update('fabric', event.target.value)}>
+          <option value="standard">Stable woven / twill</option>
+          <option value="knit">Stretch knit</option>
+          <option value="thin-cap">Unstructured cap</option>
+          <option value="structured-cap">Structured cap</option>
+        </select></label>
+        {!vector && <details className="digitizer-options">
+          <summary>Advanced artwork options</summary>
+          <fieldset disabled={busy}>
+            <label>Thread colors<select value={settings.colors} onChange={event => update('colors', Number(event.target.value))}>
+              <option value={0}>Automatic</option>
+              {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(count => <option key={count}>{count}</option>)}
+            </select></label>
+            <label><input type="checkbox" checked={settings.cleanup} onChange={event => update('cleanup', event.target.checked)} /> Clean textured artwork</label>
+            <label><input type="checkbox" checked={settings.removeBackground} onChange={event => update('removeBackground', event.target.checked)} /> Remove connected background</label>
+            {settings.removeBackground && <label>Background sensitivity · {settings.tolerance}
+              <input type="range" min="8" max="100" value={settings.tolerance} onChange={event => update('tolerance', Number(event.target.value))} />
+            </label>}
+            <label><input type="checkbox" checked={settings.thinLines} onChange={event => update('thinLines', event.target.checked)} /> Trace fine lines</label>
+            <label>Detail · {settings.detail}%<input type="range" min="0" max="100" value={settings.detail} onChange={event => update('detail', Number(event.target.value))} /></label>
+            {art.mime !== 'image/tiff' && <>
+              <button onClick={() => setEditing(true)}>Crop or erase</button>
+              <button onClick={rotateArtwork}>Rotate 90°</button>
+            </>}
+            {art !== original && <button onClick={() => setArt(original)}>Restore original</button>}
+          </fieldset>
+        </details>}
+      </>}
+      {processing && <p role="status"><progress aria-label="Digitizing artwork" /> Preparing artwork and generating stitches…</p>}
+      {!valid && <p role="alert">Width must be between 5 and 300 mm.</p>}
+      {(error || generationError) && <p role="alert">{error || generationError}</p>}
+      {review && <>
+        <h3>Stitch quality</h3>
+        <div className="digitize-metrics">
+          <div><strong>{review.plan.stitches.toLocaleString()}</strong><small>Stitch points</small></div>
+          <div><strong>{review.plan.blocks.length}</strong><small>Color blocks</small></div>
+          <div><strong>{review.plan.trims}</strong><small>Planned trims</small></div>
+        </div>
+        <p>{(review.quality.sewn_mm / 1000).toFixed(2)} m of sewn path · {review.jumps} DST jumps</p>
+        {(review.quality.short > 0 || review.quality.long > 0 || review.quality.zero > 0) &&
+          <p>{review.quality.short} short, {review.quality.long} long, and {review.quality.zero} near-zero segments.</p>}
+        {review.warnings.length > 0 && <ul>{review.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
+        <div className="review-palette" aria-label="Generated thread colors">
+          {Array.from(colors, rgb => <span key={rgb} title={`RGB ${rgb}`} style={{ background: `rgb(${rgb})` }} />)}
+        </div>
+        <div className="wizard-actions"><button className="primary" disabled={busy} onClick={openDraft}>Open in design studio</button></div>
+      </>}
+    </article>
+    <article className={`artwork-preview review-${mode === 'density' ? 'stitches' : mode}`}>
+      <div className="preview-heading"><strong>{art?.name}</strong></div>
+      <div className="review-switch">
+        {(['compare', 'stitches', 'original'] as const).map(view =>
+          <button key={view} aria-pressed={mode === view} onClick={() => setMode(view)}>
+            {view === 'compare' ? 'Compare' : view === 'stitches' ? 'Stitches' : 'Artwork'}
+          </button>)}
+        {review && <button aria-pressed={mode === 'density'} onClick={() => setMode('density')}>Density</button>}
+        {!vector && <button aria-pressed={showProcessed} onClick={() => setShowProcessed(value => !value)}>Processed</button>}
+      </div>
+      <h3 className="source-heading">{showProcessed ? 'Processed artwork' : 'Original artwork'}</h3>
+      {displayUrl && (showProcessed || original?.mime !== 'image/tiff') &&
+        <img src={displayUrl} alt={showProcessed ? 'Processed artwork' : 'Original artwork'} className="digitizer-source-image" />}
+      {showProcessed && !displayUrl && mode !== 'stitches' && <p>{previewError || 'Preparing artwork preview…'}</p>}
+      {plan && <>
+        <h3 className="stitch-heading">{mode === 'density' ? 'Densest 1 mm² cells · DST preview' : 'Generated stitch paths'}</h3>
+        <svg aria-label="Generated stitches" viewBox={[-extent * 1.1, -extent * 1.1, extent * 2.2, extent * 2.2].join(' ')} className="digitizer-stitch-image">
+          {mode === 'density' && review ? review.density.map(([x, y, count]) =>
+            <rect key={x + ',' + y} x={x} y={y} width="1" height="1" fill="#6945A2"
+              opacity={0.15 + 0.85 * count / (review.density[0]?.[2] || 1)}>
+              <title>{count} needle penetrations in this square millimeter</title>
+            </rect>) : plan.blocks.map((block, index) => <g key={index} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth=".3">
+            {block.runs.map((run, i) => <polyline key={i} points={run.map(point => point.join(',')).join(' ')} />)}
+          </g>)}
+        </svg>
+      </>}
+    </article>
+  </div>;
+}

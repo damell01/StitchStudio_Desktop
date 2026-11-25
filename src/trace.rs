@@ -25,7 +25,7 @@ pub fn is_image(ext: &str) -> bool {
 pub struct TraceOptions {
     /// How many thread colours, 2–10; 0 finds them.
     pub colors: u32,
-    /// Leave out the white background (and other white areas).
+    /// Remove the background during raster preprocessing.
     pub remove_background: bool,
     /// Trace lines no wider than `line_width_mm` as single lines (run or
     /// satin stitches) instead of thin filled shapes.
@@ -101,31 +101,75 @@ pub fn trace_bytes(bytes: &[u8], o: &TraceOptions) -> Result<Traced> {
 /// Remove only background connected to the image boundary, preserving enclosed
 /// white lettering and other interior details. Uses a robust border sample.
 pub fn remove_edge_background(r: &Raster, tolerance: u8) -> Raster {
-    let w=r.width as usize; let h=r.height as usize;
-    if w==0 || h==0 {return r.clone();}
-    let mut bins=std::collections::BTreeMap::<[u8;3],usize>::new();
-    for y in 0..h {for x in 0..w {
-        if x!=0 && y!=0 && x+1!=w && y+1!=h {continue}
-        let i=(y*w+x)*4;
-        if r.rgba[i+3]<32 {continue}
-        let key=[r.rgba[i]/16,r.rgba[i+1]/16,r.rgba[i+2]/16];
-        *bins.entry(key).or_default()+=1;
-    }}
-    let opaque_border:usize=bins.values().sum();
-    let border=w.saturating_mul(2).saturating_add(h.saturating_mul(2)).saturating_sub(4).max(1);
-    // Already transparent artwork must not lose opaque foreground touching an edge.
-    if opaque_border*2<border{return r.clone();}
-    let bg=bins.into_iter().filter(|(_,n)|*n*5>=opaque_border).max_by_key(|(_,n)|*n).map(|(c,_)|c.map(|v|v*16+8));
-    let mut seen=vec![false;w*h];let mut queue=std::collections::VecDeque::new();
-    let matches=|p:usize| {let i=p*4;r.rgba[i+3]<32 || bg.is_some_and(|c|(0..3).all(|k|r.rgba[i+k].abs_diff(c[k])<=tolerance))};
-    let mut push=|p:usize,seen:&mut Vec<bool>,q:&mut std::collections::VecDeque<usize>|{if !seen[p]&&matches(p){seen[p]=true;q.push_back(p)}};
-    for x in 0..w {push(x,&mut seen,&mut queue);push((h-1)*w+x,&mut seen,&mut queue)}
-    for y in 0..h {push(y*w,&mut seen,&mut queue);push(y*w+w-1,&mut seen,&mut queue)}
-    while let Some(p)=queue.pop_front(){let x=p%w;let y=p/w;
-        if x>0{push(p-1,&mut seen,&mut queue)}if x+1<w{push(p+1,&mut seen,&mut queue)}
-        if y>0{push(p-w,&mut seen,&mut queue)}if y+1<h{push(p+w,&mut seen,&mut queue)}
+    let width = r.width as usize;
+    let height = r.height as usize;
+    if width == 0 || height == 0 {
+        return r.clone();
     }
-    Raster::from_fn(r.width,r.height,|x,y|{let p=y as usize*w+x as usize;let i=p*4;[r.rgba[i],r.rgba[i+1],r.rgba[i+2],if seen[p]{0}else{r.rgba[i+3]}]})
+
+    let border = (0..width)
+        .chain((height > 1).then_some((height - 1) * width..height * width).into_iter().flatten())
+        .chain((1..height.saturating_sub(1)).map(|y| y * width))
+        .chain((1..height.saturating_sub(1)).filter(|_| width > 1).map(|y| (y + 1) * width - 1));
+    let mut bins = std::collections::BTreeMap::<[u8; 3], (usize, [usize; 3])>::new();
+    let mut opaque = 0;
+    let mut transparent = 0;
+    for position in border.clone() {
+        let pixel = &r.rgba[position * 4..][..4];
+        if pixel[3] < 32 {
+            transparent += 1;
+        } else if pixel[3] >= 224 {
+            opaque += 1;
+            let key = [pixel[0] / 16, pixel[1] / 16, pixel[2] / 16];
+            let (count, sums) = bins.entry(key).or_default();
+            *count += 1;
+            for channel in 0..3 {
+                sums[channel] += usize::from(pixel[channel]);
+            }
+        }
+    }
+
+    // Prefer the original alpha mask when a substantial part of the edge is clear.
+    if transparent > 0 && transparent * 4 >= opaque {
+        return r.clone();
+    }
+    let Some((count, sums)) = bins.into_values().max_by_key(|(count, _)| *count) else {
+        return r.clone();
+    };
+    if count * 5 < opaque {
+        return r.clone();
+    }
+    let background = sums.map(|total| (total / count) as u8);
+
+    let mut removed = vec![false; width * height];
+    let mut queue = std::collections::VecDeque::new();
+    let mut visit = |position: usize, queue: &mut std::collections::VecDeque<usize>| {
+        let pixel = &r.rgba[position * 4..][..4];
+        if !removed[position]
+            && (pixel[3] < 32 || (pixel[3] >= 224
+                && (0..3).all(|channel| pixel[channel].abs_diff(background[channel]) <= tolerance)))
+        {
+            removed[position] = true;
+            queue.push_back(position);
+        }
+    };
+    for position in border {
+        visit(position, &mut queue);
+    }
+    while let Some(position) = queue.pop_front() {
+        let x = position % width;
+        let y = position / width;
+        if x > 0 { visit(position - 1, &mut queue); }
+        if x + 1 < width { visit(position + 1, &mut queue); }
+        if y > 0 { visit(position - width, &mut queue); }
+        if y + 1 < height { visit(position + width, &mut queue); }
+    }
+
+    Raster::from_fn(r.width, r.height, |x, y| {
+        let position = y as usize * width + x as usize;
+        let i = position * 4;
+        [r.rgba[i], r.rgba[i + 1], r.rgba[i + 2], if removed[position] { 0 } else { r.rgba[i + 3] }]
+    })
 }
 
 // Shared preprocessing pipeline for tracing and future pixel preview.
@@ -145,6 +189,27 @@ fn preparation_preserves_enclosed_light_region(){
     let out=prepare_raster(&r,true,32,true);
     assert_eq!(out.rgba[3],0);
     assert_eq!(out.rgba[(20*40+20)*4+3],255);
+}
+
+#[test]
+fn edge_removal_uses_actual_sample_color_and_preserves_partial_alpha() {
+    let raster = Raster::from_fn(12, 12, |x, y| match (x, y) {
+        (5, 0..=6) => [180, 32, 30, 255],
+        (6, 0..=6) => [180, 32, 30, 180],
+        _ => [15, 31, 47, 255],
+    });
+    let result = remove_edge_background(&raster, 0);
+    assert_eq!(result.rgba[3], 0);
+    assert_eq!(result.rgba[5 * 4 + 3], 255);
+    assert_eq!(result.rgba[6 * 4 + 3], 180);
+}
+
+#[test]
+fn edge_removal_respects_transparent_artwork_touching_the_frame() {
+    let raster = Raster::from_fn(16, 16, |x, y| {
+        if x <= 9 || y <= 3 { [25, 25, 25, 255] } else { [0, 0, 0, 0] }
+    });
+    assert_eq!(remove_edge_background(&raster, 32).rgba, raster.rgba);
 }
 
 /// Return the same preprocessed pixels used by automatic tracing, before cropping.

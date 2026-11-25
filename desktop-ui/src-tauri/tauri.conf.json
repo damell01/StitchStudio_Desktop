@@ -12,6 +12,7 @@
     "windows": [
       {
         "title": "Stitch Studio",
+        "dragDropEnabled": false,
         "width": 1440,
         "height": 900,
         "minWidth": 900,
