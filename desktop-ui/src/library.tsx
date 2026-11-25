@@ -14,19 +14,25 @@ const thumbnailCache=new Map<string,{image:string;stitches:number;colors:number}
 function DesignThumbnail({file}:{file:string}){const [preview,setPreview]=useState(()=>thumbnailCache.get(file));useEffect(()=>{let active=true;const cached=thumbnailCache.get(file);setPreview(cached);if(!cached)void invoke<ThumbnailPlan>('library_thumbnail',{file}).then(plan=>{if(!active)return;const result={image:thumbnailOf(plan),stitches:plan.stitches,colors:plan.blocks.length};if(thumbnailCache.size>=100)thumbnailCache.delete(thumbnailCache.keys().next().value!);thumbnailCache.set(file,result);setPreview(result)}).catch(()=>{});return()=>{active=false}},[file]);return <><div className="library-thumb">{preview?.image?<img src={preview.image} alt="Stitch path preview"/>:<File size={30}/>}</div>{preview&&<small>{preview.stitches.toLocaleString()} points · {preview.colors} color blocks</small>}</>}
 
 
+function ProjectThumbnail({project}:{project:Project}) {
+  const [image,setImage]=useState(project.thumbnail||'');
+  useEffect(()=>{let active=true;setImage(project.thumbnail||'');if(!project.thumbnail)void invoke<ThumbnailPlan>('project_thumbnail',{file:project.file}).then(plan=>{if(active)setImage(thumbnailOf(plan))}).catch(()=>{});return()=>{active=false}},[project.file,project.modified,project.thumbnail]);
+  return <div className="library-thumb">{image?<img src={image} alt="Project stitch preview"/>:<File size={25}/>}</div>;
+}
 export function RecentProjects({onOpen}:{onOpen:()=>void}) {
   const [projects,setProjects]=useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
   const [error,setError]=useState('');
   async function scan(){try{const result=await invoke<Project[]|null>('scan_projects');if(result){const recent=result.sort((a,b)=>b.modified-a.modified).slice(0,5);recent.slice().reverse().forEach(rememberProject);setProjects(JSON.parse(localStorage.getItem('studio-recent-projects')||'[]'))}}catch(e){setError(String(e))}}
   async function open(project:Project){try{if(!await confirmAction('Open this project? Save existing work first.'))return;const settings=await invoke<{width:number;height:number;format:string}>('library_open',{file:project.file});sessionStorage.setItem('studio-open-project-settings',JSON.stringify(settings));onOpen()}catch(e){setError(String(e))}}
-  return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><div className="library-thumb">{p.thumbnail?<img src={p.thumbnail} alt="Project stitch preview"/>:<File size={25}/>}</div><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
+  return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><ProjectThumbnail project={p}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
 }
 
-export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: (art:Art)=>void }) {
-  const [tab, setTab] = useState<'embroidery' | 'projects' | 'artwork'>('embroidery');
+export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;initialTab?:'embroidery'|'projects'|'artwork' }) {
+  const [tab, setTab] = useState<'embroidery' | 'projects' | 'artwork'>(initialTab);
   const [files, setFiles] = useState<string[]>([]);
   const [projects, setProjects] = useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
   const [query, setQuery] = useState('');
+  const [layout,setLayout]=useState<'grid'|'list'>('grid');
   const [sort, setSort] = useState('recent');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -87,7 +93,7 @@ export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: 
     .sort((a, b) => sort === 'name' ? compareNames(a.name,b.name) : sort === 'stitches' ? b.stitches - a.stitches : b.modified - a.modified);
   const filePage=usePagedList(visibleFiles,query);
   const projectPage=usePagedList(visibleProjects,JSON.stringify([query,sort]));
-  return <section className="design-library">
+  return <section className={`design-library library-${layout}`}>
     <div className="studio-tools" role="group" aria-label="Design library sources">
       <button aria-pressed={tab === 'embroidery'} onClick={() => { setTab('embroidery'); setQuery(''); }}>Embroidery files</button>
       <button aria-pressed={tab === 'projects'} onClick={() => { setTab('projects'); setQuery(''); }}>Stitch Studio projects</button>
@@ -106,6 +112,7 @@ export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: 
           <option value="recent">Recently modified</option><option value="name">Name A–Z</option><option value="stitches">Stitch count</option>
         </select>
       </>}
+      <div className="library-view-switch" role="group" aria-label="Library view"><button aria-pressed={layout==='grid'} onClick={()=>setLayout('grid')}>Grid</button><button aria-pressed={layout==='list'} onClick={()=>setLayout('list')}>List</button></div>
     </div>
     {busy && <p role="status">Reading designs…</p>}
     {error && <p role="alert">{error}</p>}
@@ -126,7 +133,7 @@ export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: 
       <p>{visibleProjects.length} projects found</p>
       <div className="font-list">
         {projectPage.items.map(project => <article key={project.file}>
-          <div className="library-thumb">{project.thumbnail?<img src={project.thumbnail} alt="Project stitch preview"/>:<File size={25}/>}</div><div><strong>{project.name}</strong>
+          <ProjectThumbnail project={project}/><div><strong>{project.name}</strong>
             <small>{project.stitches.toLocaleString()} points · {project.colors} color blocks · {project.width} × {project.height} mm hoop</small>
           </div>
           <button disabled={busy} onClick={() => open(project)}>Open project</button>
