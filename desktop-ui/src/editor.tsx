@@ -269,7 +269,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <div className="studio-command-group">
     <button className="studio-tool-icon" title="Open artwork" aria-label="Open artwork" disabled={busy} onClick={open}><FolderOpen size={18}/></button>
     <button className="studio-insert-action" title="Insert design (Ctrl+I or Cmd+I)" aria-label="Insert design" disabled={busy} onClick={openInsertDialog}><FilePlus size={18}/><span>Insert design</span></button>
-    <button className="studio-tool-icon" title="Save project (Ctrl+S or Cmd+S)" aria-label="Save project" disabled={!plan||busy} onClick={projectSave}><Save size={17}/></button>
+    
   </div>
   <div className="studio-command-group">
     <button className="studio-tool-icon" title="Undo" aria-label="Undo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:false})}><Undo2 size={17}/></button>
@@ -319,7 +319,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </details>
   {plan&&<GarmentPreview blocks={plan.blocks}/>}
   {plan&&<ThreadOrder assignments={threadAssignments} onAssign={(index,value)=>setThreadAssignments(old=>({...old,[index]:value}))} blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
-  <button className="primary studio-export" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
+  <button className="studio-save-design" title="Save editable Stitch Studio project (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={17}/> Save design</button><button className="primary studio-export" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
 {busy&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:`clamp(48px,5vw,80px) ${left?`min(${leftWidth}px, 24vw)`:'0px'} minmax(0,1fr) ${right?`min(${rightWidth}px, 27vw)`:'0px'}`}}>
 <div className="editor-toolrail" role="group" aria-label="Editor tools">
@@ -460,7 +460,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </div>}</div>
 
 </article><article className="workspace-sidebar workspace-inspector studio-inspector-dock" style={{width:`min(${rightWidth}px, 30vw)`}}>
-  <h2 className="screen-reader-only">Inspector</h2>
+  <h2 className="editor-visually-hidden">Inspector</h2>
   <div className="workspace-segments" role="group" aria-label="Inspector">
     <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}><Layers3 size={19}/>Design</button>
     <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={19}/>Sequence</button>
