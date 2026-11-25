@@ -194,7 +194,7 @@ const [changeSeconds,setChangeSeconds]=useState(()=>{const n=Number(localStorage
 useEffect(()=>{localStorage.setItem('studio-sewing-spm',String(sewingSpm));localStorage.setItem('studio-trim-seconds',String(trimSeconds));localStorage.setItem('studio-change-seconds',String(changeSeconds))},[sewingSpm,trimSeconds,changeSeconds]);
 const uniqueColors=useMemo(()=>new Set((plan?.blocks??[]).map(b=>b.color.join(','))).size,[plan]);
 const sewingEstimate=useMemo(()=>plan?Math.ceil(plan.stitches/sewingSpm*60+plan.trims*trimSeconds+Math.max(0,plan.blocks.length-1)*changeSeconds):0,[plan,sewingSpm,trimSeconds,changeSeconds]);
-const sewingDuration=sewingEstimate>=3600?Math.floor(sewingEstimate/3600)+'h '+Math.ceil(sewingEstimate%3600/60)+'m':Math.ceil(sewingEstimate/60)+' min';
+const sewingMinutes=Math.max(plan?.stitches?1:0,Math.round(sewingEstimate/60));const sewingDuration=sewingMinutes>=60?Math.floor(sewingMinutes/60)+'h '+(sewingMinutes%60)+'m':sewingMinutes+' min';
 
 const designBounds=useMemo(()=>{
   if(!points.length)return null;
@@ -204,13 +204,16 @@ const designBounds=useMemo(()=>{
 },[points]);
 const selectedMachine=machines.find(m=>m.id===machine);const machineExceeded=!!selectedMachine&&(width>selectedMachine.width+.001||height>selectedMachine.height+.001);const incompatibleHoop=!!selectedMachine&&!!hoop&&!hoops.some(h=>h.id===hoop&&hoopFits(h,selectedMachine));const invalidField=!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0;const compatibleHoops=hoops.filter(h=>hoopFits(h,selectedMachine));const outside=!!designBounds&&(designBounds.left < -width/2||designBounds.left+designBounds.width>width/2||designBounds.top < -height/2||designBounds.top+designBounds.height>height/2);
 const stitchIndex=Math.min(points.length,playhead??points.length);
+const fullRenderedRuns=useMemo(()=>(plan?.blocks??[]).map(block=>block.runs.map(run=>run.length>1?run.map(p=>p.join(',')).join(' '):'')),[plan]);
 const renderedRuns=useMemo(()=>{
+  if(stitchIndex>=points.length)return fullRenderedRuns;
   let remaining=stitchIndex;
-  return (plan?.blocks??[]).map(block=>block.runs.map(run=>{
+  return (plan?.blocks??[]).map((block,i)=>block.runs.map((run,j)=>{
     const count=Math.max(0,Math.min(run.length,remaining));remaining-=count;
-    return count>1?run.slice(0,count).map(p=>p.join(',')).join(' '):'';
+    if(count<2)return '';
+    return count===run.length?fullRenderedRuns[i][j]:run.slice(0,count).map(p=>p.join(',')).join(' ');
   }));
-},[plan,stitchIndex]);
+},[plan,stitchIndex,points.length,fullRenderedRuns]);
 useEffect(()=>{
   if(!playing)return;
   const interval=window.setInterval(()=>{
@@ -357,14 +360,12 @@ function stepStitch(delta:number) {
 }
 
 function fitArtwork() {
-  if (!points.length) return;
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  for (const [x,y] of points) {
-    minX=Math.min(minX,x); minY=Math.min(minY,y);
-    maxX=Math.max(maxX,x); maxY=Math.max(maxY,y);
-  }
-  setZoom(Math.max(25,Math.min(400,Math.min(width/Math.max(1,maxX-minX),height/Math.max(1,maxY-minY))*88)));
-  setPan([(minX+maxX)/2,(minY+maxY)/2]);
+  if(!designBounds||invalidField)return;
+  const {left,top,width:w,height:h}=designBounds;
+  // The bounds are already cached for the current plan. Avoid scanning every
+  // penetration again whenever the user changes the camera.
+  setZoom(Math.max(25,Math.min(400,Math.min(width/Math.max(1,w),height/Math.max(1,h))*88)));
+  setPan([left+w/2,top+h/2]);
 }
 
 function changeFocus(next: boolean) {
