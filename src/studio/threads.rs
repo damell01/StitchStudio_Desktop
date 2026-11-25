@@ -605,6 +605,31 @@ impl Studio {
             }
         });
         caption(ui, format!("{} selected · Shift-click colors to combine", self.sel_indices().len()));
+        // Keep an in-session colorway baseline, keyed by object identity.
+        let baseline_id = ui.make_persistent_id("colorway-baseline");
+        let baseline = ui.ctx().data(|d| d.get_temp::<Vec<(u64, [u8; 3])>>(baseline_id));
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(colors > 0, egui::Button::new("Save colorway")).clicked() {
+                let snapshot: Vec<(u64, [u8; 3])> = self.doc.shapes.iter()
+                    .map(|s| (s.uid as u64, s.color)).collect();
+                ui.ctx().data_mut(|d| d.insert_temp(baseline_id, snapshot));
+                self.status = "Colorway saved for this session.".into();
+            }
+            if ui.add_enabled(baseline.is_some(), egui::Button::new("Restore colorway")).clicked() {
+                if let Some(saved) = &baseline {
+                    for s in &mut self.doc.shapes {
+                        if let Some((_, color)) = saved.iter().find(|(uid, _)| *uid == s.uid as u64) {
+                            s.color = *color;
+                        }
+                    }
+                    self.status = "Saved colorway restored.".into();
+                }
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Fabric preview");
+            ui.color_edit_button_srgb(&mut self.doc.settings.cloth);
+        });
         ui.add_space(crate::theme::space::S);
         ui.horizontal(|ui| {
             if ui
