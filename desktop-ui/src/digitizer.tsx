@@ -53,6 +53,8 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const [original, setOriginal] = useState<Art | null>(initialArtwork??null);
   const [pdf, setPdf] = useState<File | null>(null);
   const [settings, setSettings] = useState(defaults);
+  const [outputFormat,setOutputFormat]=useState(()=>{const saved=localStorage.getItem('studio-digitizer-format')||'dst';return ['dst','pes','pec','jef','exp','vp3'].includes(saved)?saved:'dst'});
+  const [started,setStarted]=useState(false);
   const [inspector,setInspector] = useState<'settings'|'quality'|'threads'>('settings');
   const [generated, setGenerated] = useState<{ art: Art; settings: typeof defaults; review: Review } | null>(null);
   const [failed, setFailed] = useState<{ art: Art; settings: typeof defaults; message: string } | null>(null);
@@ -73,11 +75,11 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   },[review]);
   const generationError = failed?.art === art && failed?.settings === settings ? failed.message : '';
   const valid = vector || (settings.widthMm >= 5 && settings.widthMm <= 300);
-  const processing = Boolean(art && valid && !review && !generationError);
+  const processing = Boolean(started && art && valid && !review && !generationError);
   const processedUrl = processed?.art === art && processed?.settings === settings ? processed.url : '';
 
   useEffect(() => {
-    if (!art || !valid) return;
+    if (!started || !art || !valid) return;
     let active = true;
     const timer = setTimeout(() => {
       pendingGeneration = pendingGeneration.then(async () => {
@@ -92,7 +94,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       });
     }, art === original ? (settings === defaults ? 0 : 450) : 450);
     return () => { active = false; clearTimeout(timer); };
-  }, [art, original, settings, valid]);
+  }, [art, original, settings, valid, started]);
 
   useEffect(() => {
     if (!showProcessed || !art || vector || processing || !valid || processedUrl) return;
@@ -116,6 +118,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
 
   const acceptArtwork = useCallback((next: Art) => {
     setInspector('settings');
+    setStarted(false);
     setArt(next);
     setOriginal(next);
     setSettings({...defaults,useOwnedThreads:localStorage.getItem('studio-use-owned-threads')==='true'});
@@ -194,6 +197,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     setBusy(true);
     try {
       await invoke('apply_digitizer_draft', { id: review.id });
+      sessionStorage.setItem('studio-digitizer-output-format',outputFormat);
       onDone();
     } catch (err) {
       setError(String(err));
@@ -230,15 +234,16 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2>{!art&&<div className="digitizer-start-steps"><span><b>1</b> Import artwork</span><span><b>2</b> Review stitches</span><span><b>3</b> Open editor</span></div>}
       {art && <div className="digitizer-inspector-tabs" role="group" aria-label="Inspector view">{(['settings','quality','threads'] as const).map(t=><button key={t} aria-pressed={inspector===t} disabled={t!=='settings'&&!review} onClick={()=>setInspector(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div>}
       <div hidden={!!art&&inspector!=='settings'} className="digitizer-inspector-content">
-      {art && <p>Artwork is digitized automatically. Settings below are optional overrides.</p>}
+      {art && <p>Choose the machine file format and review your settings before digitizing.</p>}
       {art && settings !== defaults && <button type="button" onClick={()=>setSettings(defaults)}>Restore automatic settings</button>}
       <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
         <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image or PDF' : 'Choose or drop an image'}</strong>{!art&&<span>Browse your computer to get started</span>}
       </button>
-      {!art && <p>PNG, JPEG, SVG, WebP, BMP, TIFF, GIF or PDF. Digitizing starts automatically.</p>}
+      {!art && <p>PNG, JPEG, SVG, WebP, BMP, TIFF, GIF or PDF. Choose a machine format before generating stitches.</p>}
       {(!art || pdf) && <PdfArtwork onArt={acceptArtwork} droppedFile={pdf} />}
       {!art && <CharacterGallery onArt={acceptArtwork} />}
       {art && <>
+        <label>Target embroidery format<select value={outputFormat} disabled={busy||processing} onChange={e=>{setOutputFormat(e.target.value);localStorage.setItem('studio-digitizer-format',e.target.value)}}>{[['dst','DST · Poolin / Tajima'],['pes','PES · Brother / Baby Lock'],['pec','PEC · Brother'],['jef','JEF · Janome'],['exp','EXP · Melco / compatible machines'],['vp3','VP3 · Husqvarna Viking / Pfaff']].map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></label><small>{outputFormat==='dst'||outputFormat==='exp'?'Keep the native project and thread sequence for intended colors.':'Check format compatibility with your machine.'}</small>
         {!vector && <label>Width (inches) · {settings.widthMm.toFixed(1)} mm
           <input type="number" min={5 / 25.4} max={300 / 25.4} step=".01" disabled={busy}
             value={Number((settings.widthMm / 25.4).toFixed(3))}
@@ -274,6 +279,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
             {art !== original && <button onClick={() => setArt(original)}>Restore original</button>}
           </fieldset>
         </details>}
+        {!started&&<button className="primary" disabled={busy||!valid} onClick={()=>setStarted(true)}>Start digitizing · {outputFormat.toUpperCase()}</button>}
       </>}
       </div>
       {processing && <p>Digitizing in progress…</p>}
@@ -338,7 +344,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
             const link=document.createElement('a');link.href=url;link.download=(art?.name||'design')+'-thread-sequence.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
           }}>Download thread sequence CSV</button>
         </section></div>
-        <div className="wizard-actions"><button className="primary" disabled={busy} onClick={openDraft}>Open in design studio <ArrowRight size={16} /></button></div>
+        <div className="wizard-actions"><button className="primary" disabled={busy} onClick={openDraft}>Open in design studio · {outputFormat.toUpperCase()} <ArrowRight size={16} /></button></div>
       </>}
     </article>
     <article className={`artwork-preview review-${mode === 'density' || mode === 'thread' ? 'stitches' : mode}`}>
