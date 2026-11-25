@@ -1,3 +1,5 @@
+import {Lettering} from './lettering';
+import {Type} from 'lucide-react';
 import {GarmentPreview} from './garment-preview';
 import {ThreadOrder} from './thread-order';
 import {FabricPicker} from './fabric-picker';
@@ -22,7 +24,7 @@ function panelWidth(key: string, fallback: number, min: number, max: number) {
   const value = Number(localStorage.getItem(key));
   return value >= min && value <= max ? value : fallback;
 }
-export function Editor({beginner=true,navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const [focusCanvas,setFocusCanvas]=useState(false);
+export function Editor({beginner=true,navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const textDialog=useRef<HTMLDialogElement>(null);const [focusCanvas,setFocusCanvas]=useState(false);
 const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
@@ -86,7 +88,7 @@ useEffect(()=>{if(stitchIndex>=points.length)setPlaying(false);},[stitchIndex,po
 
 function selectObject(object:EditableObject|null) {
   setSelectedObject(object?.uid??null);
-  if(object)setObjectKind(object.kind);
+  if(object){setObjectKind(object.kind);setRight(true);setInspectorTab(object.kind==="manual"?"transform":"stitches");}
 }
 
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
@@ -250,7 +252,7 @@ if(e.key==='F11'){e.preventDefault();toggleFocus();return;}
 if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='i'){e.preventDefault();openInsertDialog();return;}
 if(selectedObject!==null&&e.key==='Delete'){e.preventDefault();editSelection({kind:'delete'});return;}
 if(selectedObject!==null&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();editSelection({kind:'duplicate'});return;}
-if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} onInsert={result=>{
+if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right]);return <><dialog ref={textDialog} className="studio-modal editor-lettering-modal" aria-label="Add text"><div className="studio-modal-heading"><h2>Add text</h2><button onClick={()=>textDialog.current?.close()}>Close</button></div><Lettering monogram={false} onDone={()=>{textDialog.current?.close();void invoke<Plan|null>("current_preview").then(p=>{if(p){setPlan(p);setPlayhead(null);setPlaying(false);setHidden([])}}).catch(e=>setMessage(String(e)))}}/></dialog><InsertDesignDialog<Plan> dialogRef={insertDialog} onInsert={result=>{
   setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);setMessage('');
 }}/><div className={`studio-edit-bar ${focusCanvas?'studio-focus-active':''}`} role="group" aria-label="Design commands">
   <div className="studio-document">
@@ -266,7 +268,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="studio-tool-icon" title="Undo" aria-label="Undo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:false})}><Undo2 size={17}/></button>
     <button className="studio-tool-icon" title="Redo" aria-label="Redo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:true})}><Redo2 size={17}/></button>
   </div>
-  <div className="studio-command-group studio-design-tools">
+  <div className="studio-command-group studio-design-tools"><button className="studio-add-text" disabled={busy} onClick={()=>textDialog.current?.showModal()}><Type size={17}/> Add Text</button>
     <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/></button>
     <button className="studio-tool-icon" title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('transform')}}><Move size={17}/></button>
     <button className="studio-tool-icon" title="Stitch tools" aria-label="Stitch tools" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('stitches')}}><Scissors size={17}/></button>
@@ -285,6 +287,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {label:'Hoop and machine',group:'Inspector',run:()=>{setRight(true);setInspectorTab('hoop')}},
     {label:'Transform and resize',group:'Inspector',run:()=>{setRight(true);setInspectorTab('transform')},disabled:!plan},
     {label:'Stitch tools and quality',group:'Inspector',run:()=>{setRight(true);setInspectorTab('stitches')},disabled:!plan},
+    {label:'Add Text',group:'Create',run:()=>textDialog.current?.showModal(),disabled:busy},
     {label:'Insert design',group:'File',run:openInsertDialog,disabled:busy},
     {label:'Duplicate selection',group:'Edit',run:()=>editSelection({kind:'duplicate'}),disabled:busy||!selected},
     {label:'Delete selection',group:'Edit',run:()=>editSelection({kind:'delete'}),disabled:busy||!selected},
