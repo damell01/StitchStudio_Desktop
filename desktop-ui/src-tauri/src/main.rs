@@ -10,7 +10,7 @@ mod specialty;
 mod thread_recolor;
 use std::sync::Mutex;
 #[derive(Default)]
-struct Workspace { digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)> }
+struct Workspace { plan_cache: zigzag::design::PlanCache, digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)> }
 impl Workspace { fn checkpoint(&mut self) { if let Some(d)=self.current.clone(){self.undo.push((d,self.source.clone()));if self.undo.len()>20{self.undo.remove(0);}self.redo.clear();} } }
 use zigzag::{design::Design, formats};
 #[derive(serde::Serialize)]
@@ -790,7 +790,7 @@ fn apply_object_edit(workspace: &mut Workspace, uid: usize, operation: ObjectEdi
         }
     };
     result.map_err(|error| error.to_string())?;
-    let design = document.plan();
+    let design = document.plan_cached(&mut workspace.plan_cache);
     if design.stitch_count() == 0 { return Err("The edit would leave no stitchable objects".into()); }
     let result = preview(&design);
     workspace.checkpoint();
@@ -820,7 +820,7 @@ fn align_objects(workspace:&mut Workspace,uids:&[usize],mode:&str)->Result<Previ
  let delta=target-value;
  doc.transform(&[i],[1.0,0.0,0.0,1.0,if horizontal{delta}else{0.0},if vertical{delta}else{0.0}]).map_err(|e|e.to_string())?;
  }
- let design=doc.plan();if design.stitch_count()==0{return Err("Alignment produced no stitches".into())}
+ let design=doc.plan_cached(&mut workspace.plan_cache);if design.stitch_count()==0{return Err("Alignment produced no stitches".into())}
  let result=preview(&design);workspace.checkpoint();workspace.source=Some(doc);workspace.current=Some(design);Ok(result)
 }
 #[tauri::command]
@@ -834,7 +834,7 @@ async fn move_artwork_objects(uids:Vec<usize>,dx:f64,dy:f64,app:tauri::AppHandle
  if indices.is_empty(){return Err("No objects selected".into())}
  if indices.len()==doc.shapes.len(){return place_design(&mut w,[1.0,0.0,0.0,1.0,dx*10.0,dy*10.0])}
  doc.transform(&indices,[1.0,0.0,0.0,1.0,dx*10.0,dy*10.0]).map_err(|e|e.to_string())?;
- let design=doc.plan();if design.stitch_count()==0{return Err("Movement produced no stitches".into())}
+ let design=doc.plan_cached(&mut w.plan_cache);if design.stitch_count()==0{return Err("Movement produced no stitches".into())}
  let result=preview(&design);w.checkpoint();w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
@@ -851,7 +851,7 @@ async fn transform_artwork_group(uids:Vec<usize>,scale:f64,rotation:f64,app:taur
  let center=zigzag::svg::shapes_bounds(&shapes).center();
  let (s,c)=rotation.to_radians().sin_cos();let a=scale*c;let b=scale*s;
  doc.transform(&indices,[a,b,-b,a,center.x-a*center.x+b*center.y,center.y-b*center.x-a*center.y]).map_err(|e|e.to_string())?;
- let design=doc.plan();if design.stitch_count()==0{return Err("Transformation produced no stitches".into())}
+ let design=doc.plan_cached(&mut w.plan_cache);if design.stitch_count()==0{return Err("Transformation produced no stitches".into())}
  let result=preview(&design);w.checkpoint();w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
