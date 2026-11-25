@@ -1047,11 +1047,14 @@ impl Studio {
             .resizable(false)
             .frame(egui::Frame::new().fill(pal.dock))
             .show(ui, |ui| self.tool_strip(ui));
+        // Focus is a temporary view preference, not a saved dock layout.
+        let focus_id = egui::Id::new("studio-focus-mode");
+        let focus = ctx.data_mut(|d| d.get_temp::<bool>(focus_id).unwrap_or(false));
         // The docks: full panels, or collapsed to a strip of icons.
         self.tidy_agent_dock();
         use crate::dock::Place;
         for side in [Place::Left, Place::Right] {
-            if !self.dock_shown(side) {
+            if focus || !self.dock_shown(side) {
                 continue;
             }
             // Separate ids so each mode keeps its own width.
@@ -1092,9 +1095,11 @@ impl Studio {
             self.canvas(ui);
         });
         crate::profile::mark("canvas");
-        self.floating_panels(&ctx);
-        self.torn_toolbars(&ctx);
-        self.panel_drag(&ctx);
+        if !focus {
+            self.floating_panels(&ctx);
+            self.torn_toolbars(&ctx);
+            self.panel_drag(&ctx);
+        }
         self.text_window(&ctx);
         self.typing_box(&ctx, self.canvas_rect);
         crate::profile::mark("typing_box");
