@@ -859,7 +859,7 @@ struct DigitizerReview {
 async fn digitize_artwork(
     bytes: Vec<u8>, name: String, mime: String, width_mm: f64, colors: u32,
     remove_background: bool, detail: f64, fabric: String, cleanup: bool,
-    tolerance: u8, thin_lines: bool, state: tauri::State<'_, Mutex<Workspace>>,
+    tolerance: u8, thin_lines: bool, thread_palette: Option<Vec<[u8; 3]>>, state: tauri::State<'_, Mutex<Workspace>>,
 ) -> Result<DigitizerReview, String> {
     if bytes.is_empty() || bytes.len() > 20_000_000 || !(5.0..=300.0).contains(&width_mm)
         || !(0.0..=100.0).contains(&detail) || !(colors == 0 || (2..=10).contains(&colors))
@@ -876,7 +876,7 @@ async fn digitize_artwork(
     };
     let (document, design, review) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
         let options = zigzag::trace::TraceOptions {
-            width_mm, colors, remove_background, detail, lines: thin_lines, ..Default::default()
+            width_mm, colors, remove_background, detail, lines: thin_lines, threads: thread_palette.unwrap_or_default().into_iter().take(1024).collect(), ..Default::default()
         };
         let mut document = if mime == "image/svg+xml" {
             let svg = std::str::from_utf8(&bytes).map_err(|err| err.to_string())?;
