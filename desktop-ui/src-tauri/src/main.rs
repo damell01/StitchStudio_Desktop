@@ -660,6 +660,7 @@ fn apply_stitch_properties(uid:Option<usize>,fabric:String,spacing:f64,length:f6
 #[derive(serde::Serialize)]
 struct EditableObject {
     uid: usize,
+    groups: Vec<String>,
     label: String,
     color: [u8; 3],
     kind: String,
@@ -696,6 +697,7 @@ fn editable_object(shape: &zigzag::svg::Shape) -> Option<EditableObject> {
     };
     Some(EditableObject {
         uid: shape.uid,
+        groups: shape.groups.clone(),
         label: if shape.params.kind == Some(zigzag::params::Kind::Manual) {
             let mut parts = shape.id.split('_');
             if parts.next() == Some("stitches") {
