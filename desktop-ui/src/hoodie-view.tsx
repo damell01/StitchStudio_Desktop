@@ -4,20 +4,20 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import hoodieUrl from './assets/garments/hoodie.glb?url';
 
 type Block = {color:number[];runs:number[][][]};
-type Props = {angle:number;color:string;blocks:Block[];placement:number;xMm:number;yMm:number;sizeRatio:number;onUnavailable:()=>void};
+type Props = {angle:number;color:string;blocks:Block[];placement:number;xMm:number;yMm:number;sizeRatio:number;zoom:number;onUnavailable:()=>void};
 
 const textureBounds = {left:-.30,bottom:.67,width:.60,height:.78};
 
 function paintThreads(context:CanvasRenderingContext2D, props:Props) {
   const dimension=context.canvas.width;
   const units=1/(1000*props.sizeRatio);
-  const x=[.108,-.108,0][props.placement]??0;
-  const y=props.placement===2?1.098:1.205;
+  const x=0;
+  const y=1.205;
   context.setTransform(1,0,0,1,0,0);
   context.clearRect(0,0,dimension,dimension);
   context.translate(
-    (x+props.xMm*units-textureBounds.left)*dimension/textureBounds.width,
-    (textureBounds.bottom+textureBounds.height-y+props.yMm*units)*dimension/textureBounds.height,
+    (x-textureBounds.left)*dimension/textureBounds.width,
+    (textureBounds.bottom+textureBounds.height-y)*dimension/textureBounds.height,
   );
   context.scale(units*dimension/textureBounds.width,units*dimension/textureBounds.height);
   context.lineCap='round';
@@ -35,20 +35,28 @@ function paintThreads(context:CanvasRenderingContext2D, props:Props) {
     context.lineWidth=.48;
     context.strokeStyle=`rgb(${block.color.join(',')})`;
     context.stroke();
+    // Batch directional highlights into four paths rather than drawing each stitch separately.
+    const highlights=Array.from({length:4},()=>new Path2D());
+    for(const run of block.runs)for(let i=1;i<run.length;i++){
+      const a=run[i-1],b=run[i],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);if(len<.1)continue;
+      const p=highlights[Math.min(3,Math.floor(Math.abs(dx/len)*4))];p.moveTo(a[0],a[1]-.10);p.lineTo(b[0],b[1]-.10);
+    }
+    context.lineWidth=.14;highlights.forEach((p,i)=>{context.strokeStyle=`rgba(255,255,255,${.12+i*.09})`;context.stroke(p)});
   }
 }
 
 function applyThreadMap(material:THREE.MeshStandardMaterial, texture:THREE.CanvasTexture) {
   material.onBeforeCompile=shader=>{
     shader.uniforms.threadMap={value:texture};
+    shader.uniforms.threadOffset={value:texture.offset};
     shader.vertexShader='varying vec3 vHoodiePosition;\nvarying float vHoodieFront;\n'+shader.vertexShader;
     shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\nvHoodiePosition = position; vHoodieFront = normal.z;');
-    shader.fragmentShader='uniform sampler2D threadMap;\nvarying vec3 vHoodiePosition;\nvarying float vHoodieFront;\n'+shader.fragmentShader;
+    shader.fragmentShader='uniform sampler2D threadMap;\nuniform vec2 threadOffset;\nvarying vec3 vHoodiePosition;\nvarying float vHoodieFront;\n'+shader.fragmentShader;
     shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`
       #include <map_fragment>
       if (vHoodiePosition.z > 0.115 && vHoodieFront > 0.14 && abs(vHoodiePosition.x) < 0.24) {
-        vec2 threadUV = (vHoodiePosition.xy - vec2(${textureBounds.left}, ${textureBounds.bottom})) / vec2(${textureBounds.width}, ${textureBounds.height});
+        vec2 threadUV = (vHoodiePosition.xy - vec2(${textureBounds.left}, ${textureBounds.bottom})) / vec2(${textureBounds.width}, ${textureBounds.height}) - threadOffset;
         if (all(greaterThanEqual(threadUV, vec2(0.0))) && all(lessThanEqual(threadUV, vec2(1.0)))) {
           vec4 overlay = texture2D(threadMap, threadUV);
           diffuseColor.rgb = mix(diffuseColor.rgb, overlay.rgb, overlay.a);
@@ -90,7 +98,7 @@ export default function HoodieView(props:Props) {
     const element=host.current;
     if(!element)return;
     const stitchCanvas=document.createElement('canvas');
-    stitchCanvas.width=stitchCanvas.height=1024;
+    stitchCanvas.width=stitchCanvas.height=2048;
     const threadContext=stitchCanvas.getContext('2d');
     let renderer:THREE.WebGLRenderer;
     try {
@@ -122,15 +130,14 @@ export default function HoodieView(props:Props) {
     texture.colorSpace=THREE.SRGBColorSpace;
     texture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),8);
     let active=true;
+    let frame=0;let lastWidth=0,lastHeight=0;
     let previous:Props|undefined;
     let fabric:THREE.MeshStandardMaterial|undefined;
 
     function render() {
       const {clientWidth,clientHeight}=element!;
       if(clientWidth<1||clientHeight<1)return;
-      renderer.setSize(clientWidth,clientHeight,false);
-      camera.aspect=clientWidth/clientHeight;
-      camera.updateProjectionMatrix();
+      if(lastWidth!==clientWidth||lastHeight!==clientHeight){renderer.setSize(clientWidth,clientHeight,false);camera.aspect=clientWidth/clientHeight;camera.updateProjectionMatrix();lastWidth=clientWidth;lastHeight=clientHeight;}
       renderer.render(scene,camera);
     }
     const observer=new ResizeObserver(render);
@@ -149,15 +156,17 @@ export default function HoodieView(props:Props) {
       model.scene.position.set(0,-1.054,-.129);
       pivot.add(model.scene);
       draw.current=next=>{
-        if(!previous||previous.blocks!==next.blocks||previous.xMm!==next.xMm||previous.yMm!==next.yMm
-          ||previous.placement!==next.placement||previous.sizeRatio!==next.sizeRatio){
+        if(!previous||previous.blocks!==next.blocks||previous.sizeRatio!==next.sizeRatio){
           paintThreads(threadContext!,next);
           texture.needsUpdate=true;
         }
         previous=next;
+        const units=1/(1000*next.sizeRatio);
+        texture.offset.set((([.108,-.108,0][next.placement]??0)+next.xMm*units)/textureBounds.width,((next.placement===2?1.098:1.205)-1.205-next.yMm*units)/textureBounds.height);
+        camera.zoom=next.zoom;camera.updateProjectionMatrix();
         fabric!.color.set(next.color);
         pivot.rotation.y=THREE.MathUtils.degToRad(next.angle);
-        render();
+        cancelAnimationFrame(frame);frame=requestAnimationFrame(render);
       };
       draw.current(latest.current);
       setLoaded(true);
@@ -165,6 +174,7 @@ export default function HoodieView(props:Props) {
 
     return ()=>{
       active=false;
+      cancelAnimationFrame(frame);
       draw.current=null;
       observer.disconnect();
       renderer.domElement.removeEventListener('webglcontextlost',contextLost);
