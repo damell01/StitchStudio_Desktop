@@ -958,3 +958,9 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .app>header>button:last-child { margin-left:auto; }
 .thread-catalog > div { min-width:0; }
 .thread-catalog > div small { overflow-wrap:anywhere; }
+
+.digitizer-quality-summary{display:grid;gap:7px;padding:12px;border:1px solid var(--lav-border,#d8d5df);border-radius:10px;background:var(--lav-panel,transparent)}
+.digitizer-quality-summary>div{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+.digitizer-quality-summary>small{line-height:1.4;opacity:.8}
+.digitizer-quality-summary>div>b{font-variant-numeric:tabular-nums}
+.digitizer-quality-summary>button{margin-top:4px;width:100%}
