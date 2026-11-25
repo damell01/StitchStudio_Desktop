@@ -256,8 +256,11 @@ pub fn check(
     let mut total = 0usize;
     let mut longest = 0.0_f64;
     let mut invalid = 0usize;
+    let mut repeated = 0usize;
+    let mut worst = 0usize;
     for block in &design.blocks {
         for run in &block.runs {
+            let mut edges = std::collections::HashMap::new();
             invalid += run.pts.iter().filter(|p| !p.x.is_finite() || !p.y.is_finite()).count();
             for pair in run.pts.windows(2) {
                 let length = pair[0].dist(pair[1]) / 10.0;
@@ -265,6 +268,12 @@ pub fn check(
                 longest = longest.max(length);
                 if length > 12.0 { long += 1; }
                 if length < 0.2 { tiny += 1; }
+                if length >= 0.2 && length.is_finite() {
+                    let count = edges.entry(segment_key(pair[0], pair[1])).or_insert(0usize);
+                    *count += 1;
+                    worst = worst.max(*count);
+                    if *count == 5 { repeated += 1; }
+                }
             }
         }
     }
@@ -277,6 +286,9 @@ pub fn check(
             && design.per_shape.get(i).copied().unwrap_or(0) == 0 {
             add(Some(i), Level::Warning, "Object generated no stitches. Inspect its geometry or stitch type.".into());
         }
+    }
+    if repeated > 0 {
+        add(None, Level::Warning, format!("{repeated} stitch segments are traversed at least five times within a run (maximum {worst}). Inspect hole boundaries, travel routes and intentional reinforcement before sewing."));
     }
     if long > 0 {
         add(None, Level::Warning, format!(
@@ -294,6 +306,15 @@ pub fn check(
     }
     out.sort_by_key(|i| std::cmp::Reverse(i.level));
     out
+}
+
+// Coordinates are in tenths of a millimetre. Match at machine resolution,
+// irrespective of direction, to detect repeated travel along the same edge.
+fn segment_key(a: crate::geom::P, b: crate::geom::P) -> ((i64,i64),(i64,i64)) {
+    let quantize = |p: crate::geom::P| (p.x.round() as i64, p.y.round() as i64);
+    let a = quantize(a);
+    let b = quantize(b);
+    if a <= b { (a,b) } else { (b,a) }
 }
 
 #[cfg(test)]
@@ -334,6 +355,14 @@ mod tests {
         let opt = PlanOptions::default();
         let d = plan("t", shapes, &opt);
         check(shapes, &d, &opt, hoop)
+    }
+
+    #[test]
+    fn repeated_segment_key_ignores_direction() {
+        let a = P::new(10.0, 15.0);
+        let b = P::new(30.0, 40.0);
+        assert_eq!(segment_key(a,b), segment_key(b,a));
+        assert_eq!(segment_key(a,b), segment_key(P::new(10.1,15.1),b));
     }
 
     #[test]
