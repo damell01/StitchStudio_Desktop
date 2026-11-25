@@ -1082,6 +1082,15 @@ fn shape_runs(
         (_, Kind::Skip) => ShapeRuns::new(Vec::new(), None),
         (_, Kind::Manual) => ShapeRuns::new(manual_pieces(geometry), None),
         (_, Kind::Blanket) => ShapeRuns::new(vec![blanket_pieces(shape, geometry)], None),
+        (Geometry::Fill { rings, rule }, Kind::Fill) if opt.hat_order && shape.groups.iter().any(|g| g == "tl-small-ink-detail") && p.spacing.is_none() && p.angle.is_none() => {
+            // Small raster glyphs need support across their narrow strokes,
+            // not long rows and an oversized underlay. Keep their actual
+            // contours, including counters and punctuation.
+            let mut detail = shape.clone();
+            detail.params.spacing = Some(0.30);
+            detail.params.angle = Some(0.0);
+            ShapeRuns::new(fill_runs(rings, *rule, &detail, opt), Some((rings.clone(), *rule)))
+        }
         (Geometry::Fill { rings, rule }, Kind::Fill) => ShapeRuns::new(
             fill_runs(rings, *rule, shape, opt),
             Some((rings.clone(), *rule)),
@@ -1697,6 +1706,7 @@ pub fn plan_cached(
             format!("{:?}{:?}", shape.params, shape.part).hash(&mut h);
             // Generated lettering uses extra satin geometry validation.
             shape.groups.iter().any(|g| g.starts_with("tl-lettering-")).hash(&mut h);
+            shape.groups.iter().any(|g| g == "tl-small-ink-detail").hash(&mut h);
             // A tartan's default sett comes from the thread color, and a
             // meander's seed from the uid.
             shape.color.hash(&mut h);
