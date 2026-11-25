@@ -125,14 +125,16 @@ function paintMockup(
     context.strokeStyle = `rgb(${block.color.join(',')})`;
     context.lineWidth = .42;
     context.stroke();
-    // Fine directional sheen on individual thread segments.
+    // Batch highlights by direction instead of issuing a draw per stitch.
+    const highlights=Array.from({length:4},()=>new Path2D());
     for(const run of block.runs) for(let i=1;i<run.length;i++){
-      const a=run[i-1],b=run[i],dx=b[0]-a[0],dy=b[1]-a[1];
-      const len=Math.hypot(dx,dy);if(len<.15)continue;
-      context.beginPath();context.moveTo(a[0],a[1]-.09);context.lineTo(b[0],b[1]-.09);
-      context.strokeStyle=`rgba(255,255,255,${.08+.22*Math.abs(dx/len)})`;
-      context.lineWidth=.12;context.stroke();
+      const a=run[i-1],b=run[i],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);
+      if(len<.15)continue;
+      const p=highlights[Math.min(3,Math.floor(Math.abs(dx/len)*4))];
+      p.moveTo(a[0],a[1]-.09);p.lineTo(b[0],b[1]-.09);
     }
+    context.lineWidth=.12;
+    highlights.forEach((p,i)=>{context.strokeStyle=`rgba(255,255,255,${.08+i*.07})`;context.stroke(p)});
   }
   context.restore();
 }
@@ -151,6 +153,7 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
   const turn=useRef<{id:number;x:number;angle:number}|null>(null);
   const [placementIndex,setPlacement] = useState(0);
   const [color,setColor] = useState('#e6dced');
+  const [showGuide,setShowGuide]=useState(false);
   const drag=useRef<{id:number;x:number;y:number;ox:number;oy:number}|null>(null);
   const [dragging,setDragging]=useState(false);
   const [x,setX] = useState('');
@@ -197,7 +200,7 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
           <button onClick={()=>dialog.current?.close()} aria-label="Close garment mockup"><X size={17} aria-hidden="true"/></button>
         </div>
         <div className="garment-preview-layout">
-          <div className="garment-preview-stage" data-rotatable={is3d}
+          <div className="garment-preview-display"><div className="garment-stage-heading"><strong>{garment.label} · {garmentSize.label}</strong><small>{is3d?'3D fabric preview':'Stitched garment preview'}</small></div><div className="garment-preview-stage" data-rotatable={is3d}
             onPointerDown={event=>{
               if(!is3d||event.button!==0)return;
               if(interaction==='move'&&!event.shiftKey){
@@ -240,8 +243,8 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
                 setX(((xOffset+d[0]*step)/25.4).toFixed(3));setY(((yOffset+d[1]*step)/25.4).toFixed(3));
               }}
               aria-label={`Design on ${garmentSize.label.toLowerCase()} ${garment.label}, ${placement.label.toLowerCase()}`}/>}
-          </div>
-          <div className="garment-preview-options">
+          </div><div className="garment-stage-footer"><span>{placement.label}</span><span>{insideZone?'Within suggested placement':'Outside suggested placement'}</span></div></div>
+          <div className="garment-preview-options"><h3>Garment setup</h3>
             <label>Garment<select aria-label="Garment" value={garmentName} onChange={event=>{
               setGarment(event.target.value as GarmentName);setPlacement(0);setX('');setY('');
             }}>
@@ -264,7 +267,7 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
             </>}
             {garmentName==='hoodie'&&unavailable&&<p role="status">3D is unavailable here. Showing the flat mockup.</p>}
             <label className="garment-color">Fabric color<input type="color" value={color} onChange={event=>setColor(event.target.value)}/></label>
-            <p className="muted">{is3d?'Drag to move the design or select Rotate garment. Hold Shift to rotate.':'Drag the design on the garment, or use arrow keys on the preview.'}</p>
+            <div className="garment-fabric-swatches" role="group" aria-label="Fabric presets">{[["Lavender","#e6dced"],["White","#f9f8f5"],["Black","#24232a"],["Navy","#263953"],["Sage","#a4b4a0"],["Rose","#d9a1ad"]].map(([name,value])=><button key={name} title={name} aria-label={name} aria-pressed={color===value} style={{backgroundColor:value}} onClick={()=>setColor(value)}/>)}</div><button aria-expanded={showGuide} onClick={()=>setShowGuide(v=>!v)}>{showGuide?"Hide controls guide":"How to move the design"}</button>{showGuide&&<p className="muted">{is3d?'Drag to move the design or select Rotate garment. Hold Shift to rotate.':'Drag the design on the garment, or use arrow keys on the preview.'}</p>}
             <div className="garment-view-switch"><button onClick={centerDesign}>Center design</button><button onClick={()=>{setX('');setY('');}}>Reset placement</button></div>
             {Number.isFinite(bounds.left)&&<small>Design: {(bounds.right-bounds.left).toFixed(1)} × {(bounds.bottom-bounds.top).toFixed(1)} mm</small>}
             <details><summary>Precise placement (optional)</summary><fieldset>
