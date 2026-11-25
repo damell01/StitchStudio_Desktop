@@ -1105,7 +1105,20 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
    let theta=0.5*(2.0*xy).atan2(xx-yy);let (sn,cs)=theta.sin_cos();
    let mut b=Bounds::empty();for p in ring{b.add(P::new((p.x-mx)*cs+(p.y-my)*sn,-(p.x-mx)*sn+(p.y-my)*cs));}
    let short=b.width().min(b.height());let long=b.width().max(b.height());
-   if short>=8.0 && short<=45.0 && long>=short*2.8 {s.params.kind=Some(Kind::Satin);}
+   if short>=6.0 && short<=45.0 && long>=short*2.0 {
+    // Validate the actual column rather than trusting a bounding box alone.
+    let components=satin::components(rings,*rule);
+    if components.len()==1 {
+     if let Ok(rails)=satin::auto_rails(&components[0]) {
+      let pairs=satin::pairs(&rails,10.0);
+      if !pairs.is_empty() && pairs.iter().all(|(a,b)| {
+       let w=a.dist(*b); w.is_finite() && (3.0..=55.0).contains(&w)
+      }) {
+       s.params.kind=Some(Kind::Satin);
+      }
+     }
+    }
+   }
    else if short>=45.0 && long>=short*1.6 && s.params.angle.is_none() {
     // Follow the shorter axis to limit long fill traversals. Preserve explicit angles.
     let axis=if b.width()>b.height(){theta.to_degrees()+90.0}else{theta.to_degrees()};
