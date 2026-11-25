@@ -260,13 +260,22 @@ fn monochrome_logo_removes_enclosed_paper_but_keeps_ink(){
 }
 
 fn prepare_raster(r:&Raster,remove_background:bool,tolerance:u8,cleanup:bool)->Raster{
-    if remove_background {if let Some(ink)=monochrome_ink(r){return ink;}}
+    prepare_raster_with_mode(r, remove_background, tolerance, cleanup).0
+}
+
+fn prepare_raster_with_mode(
+    r: &Raster, remove_background: bool, tolerance: u8, cleanup: bool,
+) -> (Raster, bool) {
+    if remove_background && let Some(ink) = monochrome_ink(r) {
+        return (ink, true);
+    }
 
     // Suppress fabric texture before edge flood fill, preserving the original alpha.
     // A predominantly flat palette is typical of logos and cartoons.
     // Skip destructive median passes for such artwork, especially thin ink lines.
     let cleaned=if cleanup && !flat_palette(r) {median_texture(&median_texture(r,false),false)}else{r.clone()};
-    if remove_background {remove_edge_background(&cleaned,tolerance)}else{cleaned}
+    let raster = if remove_background { remove_edge_background(&cleaned, tolerance) } else { cleaned };
+    (raster, false)
 }
 
 #[test]
@@ -326,23 +335,62 @@ pub fn prepared_pixels(bytes:&[u8],remove_background:bool,tolerance:u8,cleanup:b
 }
 
 pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:bool)->Result<Traced>{
-    let image=Image::decode(bytes)?;
-    let mono=if o.remove_background {monochrome_ink(&image.raster)}else{None};
-    let monochrome=mono.is_some();
-    let raster=mono.unwrap_or_else(||prepare_raster(&image.raster,o.remove_background,tolerance,cleanup));
+    PreparedArtwork::new(bytes, o.remove_background, tolerance, cleanup)?.trace(o)
+}
+
+/// The prepared pixel input shared by competing automatic trace strategies.
+pub struct PreparedArtwork {
+    image: Image,
+    monochrome: bool,
+    cleanup: bool,
+}
+
+impl PreparedArtwork {
+    pub fn new(bytes: &[u8], remove_background: bool, tolerance: u8, cleanup: bool) -> Result<Self> {
+        let image = Image::decode(bytes)?;
+        let (raster, monochrome) = prepare_raster_with_mode(&image.raster, remove_background, tolerance, cleanup);
+        if !raster.rgba.chunks_exact(4).any(|pixel| pixel[3] >= 32) {
+            return Err(anyhow!("No foreground remains after background removal. Disable removal or lower sensitivity."));
+        }
+        Ok(Self { image: Image { raster: trim_transparent_margin(&raster) }, monochrome, cleanup })
+    }
+
+    pub fn trace(&self, options: &TraceOptions) -> Result<Traced> {
+        trace_prepared_image(&self.image, options, self.monochrome, self.cleanup)
+    }
+
+    /// Pixel dimensions after trimming transparent margins.
+    pub fn size(&self) -> (u32, u32) {
+        self.image.size()
+    }
+
+    pub fn digitize(&self, name: &str, options: &TraceOptions) -> Result<crate::document::Document> {
+        digitize_trace(self.trace(options)?, name, options)
+    }
+
+    /// Check spatial fidelity against the same prepared pixels for both drafts.
+    pub fn preserves_fidelity(
+        &self, baseline: &crate::document::Document, candidate: &crate::document::Document,
+    ) -> bool {
+        let score = |document: &crate::document::Document| {
+            spatial_error(&document.to_svg().ok()?, &self.image.raster, self.monochrome)
+        };
+        let Some((before, after)) = score(baseline).zip(score(candidate)) else { return false; };
+        after <= before + 0.004 && after <= before * 1.08 + 0.001
+    }
+}
+
+fn trace_prepared_image(prepared: &Image, o: &TraceOptions, monochrome: bool, cleanup: bool) -> Result<Traced> {
     let mut options=o.clone();options.remove_background=monochrome;
-    if flat_palette(&raster) { options.speckle_mm=options.speckle_mm.min(0.35); options.detail=options.detail.max(80.0); } else if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); options.detail=options.detail.min(65.0);}
+    let flat = flat_palette(&prepared.raster);
+    if flat { options.speckle_mm=options.speckle_mm.min(0.35); options.detail=options.detail.max(80.0); } else if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); options.detail=options.detail.min(65.0);}
     // Keep small detached punctuation and serif details; do not use the
     // aggressive generic speckle retry for detected ink logos.
     if monochrome {options.speckle_mm=options.speckle_mm.min(0.18);options.detail=options.detail.max(85.0);}
-    if !raster.rgba.chunks_exact(4).any(|p|p[3]>=32){return Err(anyhow!("No foreground remains after background removal. Disable removal or lower sensitivity."));}
-    let raster=trim_transparent_margin(&raster);
     // Avoid global hue merging: it destroys intentional shading in character artwork.
-        // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
-    let prepared=Image{raster};
     // On flat artwork, attempt mixed fill/centerline tracing before
     // simplifying the palette. This preserves thin outlines as strokes.
-    let prefer_lines = flat_palette(&prepared.raster) && options.colors == 0 && !options.lines;
+    let prefer_lines = flat && options.colors == 0 && !options.lines;
     let mut failures = Vec::new();
     // Try the requested fidelity first, then progressively simplify.
     // Empty successful traces are also retried, rather than ending import.
@@ -358,7 +406,7 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
             candidate.speckle_mm = candidate.speckle_mm.max(1.5);
             if candidate.colors == 0 { candidate.colors = 6; }
         }
-        match trace(&prepared, &candidate) {
+        match trace(prepared, &candidate) {
             Ok(t) if t.shapes + t.lines > 0 => {
                 // Complex illustrations often contain tiny anti-alias islands.
                 // Compare one physically scaled cleanup candidate, not a blind
@@ -394,28 +442,16 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
 pub fn digitize_raster(
     bytes: &[u8], name: &str, options: &TraceOptions, tolerance: u8, cleanup: bool,
 ) -> Result<crate::document::Document> {
-    let trace = trace_prepared_bytes(bytes, options, tolerance, cleanup)?;
+    PreparedArtwork::new(bytes, options.remove_background, tolerance, cleanup)?.digitize(name, options)
+}
+
+fn digitize_trace(trace: Traced, name: &str, options: &TraceOptions) -> Result<crate::document::Document> {
+    use crate::params::Kind;
+    use crate::svg::Geometry;
+
     let mut document = crate::document::Document::from_svg(&trace.svg, name, None)?;
-    // Merge adjacent same-color filled objects only when their union
-    // reduces contour count. Preserve intervening layer order.
     if options.colors == 0 {
-        use crate::svg::{Geometry, Shape};
-        let mut merged: Vec<Shape> = Vec::new();
-        for shape in std::mem::take(&mut document.shapes) {
-            if let Some(prev) = merged.last_mut() {
-                if prev.color == shape.color && prev.params.kind.is_none() && shape.params.kind.is_none() {
-                    if let (Geometry::Fill { rings: a, rule: ar }, Geometry::Fill { rings: b, rule: br }) = (&prev.geometry, &shape.geometry) {
-                        let union = crate::boolean::pathfinder(&[(a.clone(), *ar), (b.clone(), *br)], crate::boolean::PathOp::Unite);
-                        if !union.is_empty() && union.len() < a.len() + b.len() {
-                            prev.geometry = Geometry::Fill { rings: union, rule: crate::geom::FillRule::EvenOdd };
-                            continue;
-                        }
-                    }
-                }
-            }
-            merged.push(shape);
-        }
-        document.shapes = merged;
+        consolidate_traced_fills(&mut document)?;
     }
     // Small neutral ink shapes in text-like rows retain their individual
     // contours. Detect geometry rather than guessing the actual characters.
@@ -428,9 +464,77 @@ pub fn digitize_raster(
             if peers>=3 {document.shapes[i].groups.push("tl-small-ink-detail".into());}
         }
     }
+    // The SVG importer populates fallback stitch kinds. This artwork comes
+    // from our own tracer, so those defaults are free to change.
+    let wide_strokes: Vec<_> = document.shapes.iter().enumerate()
+        .filter_map(|(index, shape)| match shape.geometry {
+            Geometry::Stroke { width, .. } if width > 55.0 => Some(index),
+            _ => None,
+        }).collect();
+    if !wide_strokes.is_empty() {
+        document.outline_stroke(&wide_strokes)?;
+    }
+    for shape in &mut document.shapes {
+        // An unoutlined, degenerate wide stroke keeps its default, rather
+        // than converting only its transient in-memory geometry to fill.
+        if !matches!(shape.geometry, Geometry::Stroke { width, .. } if width > 55.0) {
+            shape.params.kind = None;
+        }
+    }
     crate::design::auto_stitch_types(&mut document.shapes);
+    for shape in &mut document.shapes {
+        shape.params.kind.get_or_insert(Kind::Fill);
+    }
     document.settings.hat_order = document.shapes.len() <= 1000;
     Ok(document)
+}
+
+/// Consolidate adjacent same-color areas when the union removes a contour.
+/// Write the new outlines to the editable SVG so a save, undo or resize
+/// continues to use the same geometry and sewing order.
+fn consolidate_traced_fills(document: &mut crate::document::Document) -> Result<()> {
+    use crate::geom::FillRule;
+    use crate::params::Kind;
+    use crate::svg::Geometry;
+
+    let mut retained = None;
+    let mut outline = None;
+    let mut edits = Vec::new();
+    let mut removed = Vec::new();
+    for (index, shape) in document.shapes.iter().enumerate() {
+        if let Some(previous) = retained {
+            let prev: &crate::svg::Shape = &document.shapes[previous];
+            if prev.color == shape.color
+                && prev.params.kind == Some(Kind::Fill)
+                && shape.params.kind == Some(Kind::Fill)
+                && let Geometry::Fill { rings: a, rule: ar } = &prev.geometry
+                && let Geometry::Fill { rings: b, rule: br } = &shape.geometry
+            {
+                let (a, ar) = outline.as_ref().map_or((a, *ar), |rings| (rings, FillRule::EvenOdd));
+                let union = crate::boolean::pathfinder(
+                    &[(a.clone(), ar), (b.clone(), *br)],
+                    crate::boolean::PathOp::Unite,
+                );
+                if !union.is_empty() && union.len() < a.len() + b.len() {
+                    outline = Some(union);
+                    removed.push(index);
+                    continue;
+                }
+            }
+            if let Some(rings) = outline.take() {
+                edits.push((previous, crate::bezier::from_rings(&rings, 0.0)));
+            }
+        }
+        retained = Some(index);
+    }
+    if let Some((previous, rings)) = retained.zip(outline) {
+        edits.push((previous, crate::bezier::from_rings(&rings, 0.0)));
+    }
+    if !removed.is_empty() {
+        document.set_paths(&edits)?;
+        document.delete_many(&removed)?;
+    }
+    Ok(())
 }
 
 /// Optional texture cleanup for photographed or rendered embroidery artwork.
@@ -466,49 +570,129 @@ fn transparent_padding_does_not_shrink_finished_artwork(){
     assert_eq!((out.width,out.height),(40,30));
 }
 
-// Collapse nearby shades of the same hue in textured artwork, while preserving
-// neutral outlines, alpha, and strongly different colors.
-fn flatten_texture_shades(r:&Raster)->Raster{
-    fn key(rgb:[u8;3])->Option<usize>{
-        let [a,b,c]=rgb.map(f64::from);let hi=a.max(b).max(c);let lo=a.min(b).min(c);let delta=hi-lo;
-        if delta<35.0 || hi<45.0{return None}
-        let hue=if hi==a{((b-c)/delta).rem_euclid(6.0)}else if hi==b{(c-a)/delta+2.0}else{(a-b)/delta+4.0};
-        Some(((hue*2.0+0.5).floor() as usize)%12)
-    }
-    let mut sums=[[0u64;3];12];let mut counts=[0u64;12];
-    for px in r.rgba.chunks_exact(4){if px[3]<128{continue}if let Some(k)=key([px[0],px[1],px[2]]){counts[k]+=1;for j in 0..3{sums[k][j]+=u64::from(px[j]);}}}
-    Raster::from_fn(r.width,r.height,|x,y|{let i=(y as usize*r.width as usize+x as usize)*4;let p=[r.rgba[i],r.rgba[i+1],r.rgba[i+2],r.rgba[i+3]];
-        if p[3]<128{return p}if let Some(k)=key([p[0],p[1],p[2]]){if counts[k]>=16{return [(sums[k][0]/counts[k]) as u8,(sums[k][1]/counts[k]) as u8,(sums[k][2]/counts[k]) as u8,p[3]]}}p})
-}
-#[test]
-fn texture_shades_merge_without_losing_neutral_or_alpha(){
- let r=Raster::from_fn(20,20,|x,y|if y==0{[240,240,240,0]}else if y==1{[120,120,120,255]}else if x<10{[160,12,25,255]}else{[210,20,35,255]});
- let out=flatten_texture_shades(&r);
- assert_eq!(&out.rgba[0..4],&[240,240,240,0]);
- assert_eq!(&out.rgba[80..84],&[120,120,120,255]);
- assert_eq!(&out.rgba[160..164],&out.rgba[200..204]);
-}
 fn median_texture(r:&Raster,remove_white:bool)->Raster {
     Raster::from_fn(r.width, r.height, |x,y| {
         let mut channels = [[0u8;9];3];
+        let mut matching = [false; 9];
         let mut k=0;
         let center=(y as usize*r.width as usize+x as usize)*4;
         if r.rgba[center+3]<32{return [0,0,0,0];}
+        let original: [u8; 3] = r.rgba[center..center + 3].try_into().unwrap();
         for dy in -1i64..=1 { for dx in -1i64..=1 {
             let xx=(i64::from(x)+dx).clamp(0,i64::from(r.width)-1) as usize;
             let yy=(i64::from(y)+dy).clamp(0,i64::from(r.height)-1) as usize;
             let i=(yy*r.width as usize+xx)*4;
-            for ch in 0..3 {channels[ch][k]=if r.rgba[i+3]<32{r.rgba[center+ch]}else{r.rgba[i+ch]};}
+            let visible = r.rgba[i+3] >= 32;
+            for ch in 0..3 {channels[ch][k]=if visible {r.rgba[i+ch]} else {original[ch]};}
+            // Clamped boundary samples repeat the center and cannot establish a line.
+            matching[k] = visible && i != center
+                && (0..3).all(|ch| original[ch].abs_diff(r.rgba[i + ch]) <= 24);
             k+=1;
         }}
         for ch in &mut channels {ch.sort_unstable();}
         let mut rgb=[channels[0][4],channels[1][4],channels[2][4]];
+        // A high-contrast pixel with support on opposite sides may be part
+        // of a one-pixel outline. Preserve it while removing isolated flecks.
+        if (0..3).any(|ch| original[ch].abs_diff(rgb[ch]) >= 32)
+            && (0..4).any(|sample| matching[sample] && matching[8 - sample])
+        {
+            rgb = original;
+        }
         let lo=*rgb.iter().min().unwrap();
         let hi=*rgb.iter().max().unwrap();
         if remove_white && lo>=218 && hi-lo<=20 {rgb=[255;3];}
         let alpha=r.rgba[(y as usize*r.width as usize+x as usize)*4+3];
         [rgb[0],rgb[1],rgb[2],alpha]
     })
+}
+
+#[test]
+fn texture_cleanup_preserves_thin_ink_and_removes_isolated_noise() {
+    let raster = Raster::from_fn(48, 48, |x, y| {
+        if x == 22 || (x, y) == (8, 15) {
+            return [20, 18, 30, 255];
+        }
+        [145 + ((x * 41 + y * 17) % 64) as u8,
+         114 + ((x * 19 + y * 31) % 64) as u8,
+         88 + ((x * 51 + y * 7) % 64) as u8, 255]
+    });
+    assert!(!flat_palette(&raster));
+    let processed = prepare_raster(&raster, false, 32, true);
+    let pixel = |x: usize, y: usize| &processed.rgba[(y * 48 + x) * 4..(y * 48 + x) * 4 + 4];
+    assert!((2..46).all(|y| pixel(22, y) == [20, 18, 30, 255]));
+    assert!(pixel(8, 15)[0] >= 145);
+}
+
+#[test]
+fn consolidated_fills_survive_project_reopening_without_reordering_layers() {
+    use crate::document::Document;
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="50mm" viewBox="0 0 60 50">
+        <path id="first" d="M4 4 H30 V47 H4Z M9 9 V38 H20 V9Z" fill="#a11936"/>
+        <rect id="overlap" x="27" y="8" width="15" height="38" fill="#a11936"/>
+        <rect id="intervening" x="36" y="8" width="16" height="30" fill="#323375"/>
+        <rect id="upper" x="40" y="3" width="14" height="15" fill="#a11936"/>
+    </svg>"##;
+    let mut document = Document::from_svg(svg, "overlapping fills", None).unwrap();
+    consolidate_traced_fills(&mut document).unwrap();
+    let xml = document.to_svg().unwrap();
+    let restored = Document::from_svg(&xml, &document.name, None).unwrap();
+    let layers: Vec<_> = restored.shapes.iter().map(|shape| shape.color).collect();
+    assert_eq!(layers, [[161, 25, 54], [50, 51, 117], [161, 25, 54]]);
+    let crate::svg::Geometry::Fill { rings, rule } = &restored.shapes[0].geometry else {
+        panic!("expected editable fill geometry");
+    };
+    assert_eq!(rings.len(), 2, "the interior opening was lost");
+    let components = crate::stitch::satin::components(rings, *rule);
+    assert_eq!(components.len(), 1);
+    assert_eq!(components[0].len(), 2, "the second contour no longer represents a hole");
+    let dst = |doc: &Document| crate::formats::write_format(&doc.plan(), "dst").unwrap();
+    assert_eq!(dst(&document), dst(&restored));
+}
+
+#[test]
+fn alternate_trace_with_same_extent_and_colors_must_preserve_geometry() {
+    use crate::document::Document;
+    let artwork = PreparedArtwork {
+        image: Image { raster: Raster::from_fn(64, 32, |x, y| {
+            if x < 8 || x >= 56 || (10..22).contains(&y) { [194, 28, 56, 255] }
+            else { [0, 0, 0, 0] }
+        }) },
+        monochrome: false,
+        cleanup: false,
+    };
+    let doc = |middle| {
+        Document::from_svg(&format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="32">
+            <path fill="#c21c38" d="M0 0 H8 V32 H0Z M56 0 H64 V32 H56Z {middle}"/>
+        </svg>"##), "same-color artwork", None).unwrap()
+    };
+    let baseline = doc("M8 10 H56 V22 H8Z");
+    let missing_detail = doc("");
+    assert!(artwork.preserves_fidelity(&baseline, &baseline));
+    assert!(!artwork.preserves_fidelity(&baseline, &missing_detail));
+}
+
+#[test]
+fn generated_artwork_replaces_import_defaults_with_mixed_stitch_types() {
+    use crate::params::Kind;
+    let trace = Traced {
+        svg: r##"<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="40mm" viewBox="0 0 60 40">
+            <rect id="narrow" x="2" y="2" width="21" height="2" fill="#a11936"/>
+            <rect id="wide" x="7" y="8" width="24" height="24" fill="#262d61"/>
+            <path id="fine" d="M38 12 L57 4" fill="none" stroke="#165c40" stroke-width="0.6"/>
+        </svg>"##.into(),
+        colors: vec![[161, 25, 54], [38, 45, 97], [22, 92, 64]],
+        shapes: 2,
+        lines: 1,
+        method: "test",
+    };
+    let doc = digitize_trace(trace, "mixed geometry", &TraceOptions::default()).unwrap();
+    let kinds = |doc: &crate::document::Document| {
+        doc.shapes.iter().map(|shape| shape.params.kind).collect::<Vec<_>>()
+    };
+    assert_eq!(kinds(&doc), [Some(Kind::Satin), Some(Kind::Fill), Some(Kind::Run)]);
+    let reopened = crate::document::Document::from_svg(&doc.to_svg().unwrap(), &doc.name, None).unwrap();
+    assert_eq!(kinds(&doc), kinds(&reopened));
+    assert!(doc.plan().stitch_count() > 0);
 }
 
 /// Trace `img` with `o`.

@@ -248,7 +248,7 @@ pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
                         // Avoid an abrupt density change at the threshold.
                         let severity = (1.0 - d / SHORT_DIST).clamp(0.0, 1.0);
                         let asymmetry = (1.0 - d / other.max(1e-9)).clamp(0.0, 1.0);
-                        ((SHORT_INSET + 0.10 * severity) * (severity * 2.0).min(1.0)
+                        ((SHORT_INSET + 0.10 * severity) * (severity * 4.0).min(1.0)
                             * (asymmetry * 2.5).min(1.0)).min(0.25)
                     }
                 } else { 0.0 }
@@ -701,7 +701,7 @@ fn split_at_tips(ring: &[P]) -> Option<Rails> {
         .filter(|c| c.0 >= best * 0.85).collect();
     ranked.sort_by(|a,b| b.0.total_cmp(&a.0));
     let outline = vec![ring.to_vec()];
-    ranked.into_iter().take(96).filter_map(|(_,i,j)| {
+    ranked.into_iter().take(160).filter_map(|(_,i,j)| {
         let rails = rails_for(i,j);
         let step = polyline_length(&rails.a).max(polyline_length(&rails.b)) / 32.0;
         let ps = pairs(&rails, step.max(1.0));
@@ -709,22 +709,28 @@ fn split_at_tips(ring: &[P]) -> Option<Rails> {
         let mut width=0.0_f64;
         let mut widest=0.0_f64;
         let mut variation=0.0_f64;
+        let mut skew=0.0_f64;
         let mut previous:Option<f64>=None;
         let mut outside=0usize;
-        for &(a,b) in &ps {
+        for (index, &(a,b)) in ps.iter().enumerate() {
             let w=a.dist(b);
             width+=w;
             widest=widest.max(w);
             if let Some(prev)=previous {variation+=(w-prev).abs();}
             previous=Some(w);
             if w>1.0 {
+                let before = ps[index.saturating_sub(1)];
+                let after = ps[(index + 1).min(ps.len() - 1)];
+                let tangent = ((after.0 + after.1) - (before.0 + before.1)).norm();
+                let rung = b - a;
+                skew += (rung.x * tangent.x + rung.y * tangent.y).abs();
                 for t in [0.25,0.5,0.75] {
                     if !point_inside(&outline,FillRule::EvenOdd,a.lerp(b,t)) {outside+=1;}
                 }
             }
         }
         let n=ps.len() as f64;
-        let cost=width/n+widest*0.18+variation/n*0.6+outside as f64/n*80.0;
+        let cost=width/n+widest*0.18+variation/n*0.6+skew/n*0.35+outside as f64/n*80.0;
         Some((cost,rails))
     }).min_by(|a,b| a.0.total_cmp(&b.0)).map(|(_,rails)| rails)
 }

@@ -2111,12 +2111,16 @@ async fn digitize_artwork(
         selected.retain(|l| l.enabled);
         if selected.len()>64 { return Err("Review at most 64 lettering regions.".into()); }
         let has_lettering = !selected.is_empty() && mime != "image/svg+xml";
+        let prepared = if mime == "image/svg+xml" {
+            None
+        } else {
+            Some(zigzag::trace::PreparedArtwork::new(&bytes, remove_background, tolerance, cleanup)
+                .map_err(|err| err.to_string())?)
+        };
         let mut lettering_warnings = Vec::new();
-        let mut document = if has_lettering {
-            let trace=zigzag::trace::trace_prepared_bytes(&bytes,&options,tolerance,cleanup).map_err(|e|e.to_string())?;
-            let mut doc=zigzag::document::Document::from_svg(&trace.svg,&name,None).map_err(|e|e.to_string())?;
-            zigzag::design::auto_stitch_types(&mut doc.shapes);
-            let (w,h,_)=ocr_pixels(&bytes,remove_background,tolerance,cleanup)?;
+        let mut document = if let Some(raster) = prepared.as_ref().filter(|_| has_lettering) {
+            let mut doc=raster.digitize(&name,&options).map_err(|e|e.to_string())?;
+            let (w,h)=raster.size();
             for line in &mut selected { line.rect=[line.rect[0]*w as f64,line.rect[1]*h as f64,line.rect[2]*w as f64,line.rect[3]*h as f64]; }
             doc.settings.fabric=fabric.clone();
             let mut accepted_plan=doc.plan();
@@ -2140,12 +2144,11 @@ async fn digitize_artwork(
                 }
             }
             doc
-        } else if mime == "image/svg+xml" {
+        } else if let Some(raster) = &prepared {
+            raster.digitize(&name, &options).map_err(|err| err.to_string())?
+        } else {
             let svg = std::str::from_utf8(&bytes).map_err(|err| err.to_string())?;
             zigzag::document::Document::from_svg(svg, &name, None).map_err(|err| err.to_string())?
-        } else {
-            zigzag::trace::digitize_raster(&bytes, &name, &options, tolerance, cleanup)
-                .map_err(|err| err.to_string())?
         };
         document.settings.fabric = fabric.clone();
         let artwork_bounds = zigzag::svg::shapes_bounds(&document.shapes);
@@ -2156,10 +2159,12 @@ async fn digitize_artwork(
         // Compare a second automatic trace only for raster imports with
         // automatic colors. Keep the original unless the alternate retains
         // the palette and approximate extent while reducing sewing complexity.
-        if !has_lettering && mime != "image/svg+xml" && colors == 0 && !thin_lines && design.stitch_count() <= 100_000 {
+        if !has_lettering && colors == 0 && !thin_lines && design.stitch_count() <= 100_000
+            && let Some(raster) = &prepared
+        {
             let mut alternate_options = options.clone();
             alternate_options.lines = true;
-            if let Ok(mut alternate) = zigzag::trace::digitize_raster(&bytes, &name, &alternate_options, tolerance, cleanup) {
+            if let Ok(mut alternate) = raster.digitize(&name, &alternate_options) {
                 alternate.settings.fabric = fabric.clone();
                 let bounds = zigzag::svg::shapes_bounds(&alternate.shapes);
                 let similar_extent = (bounds.width() - artwork_bounds.width()).abs() <= 10.0
@@ -2179,7 +2184,9 @@ async fn digitize_artwork(
                     let base = design.stitch_count();
                     if n > 0 && n <= 100_000 && n >= base / 2
                         && palette(&candidate) == palette(&design)
-                        && score(&candidate) < score(&design) * 0.90 {
+                        && score(&candidate) < score(&design) * 0.90
+                        && raster.preserves_fidelity(&document, &alternate)
+                    {
                         document = alternate;
                         design = candidate;
                     }

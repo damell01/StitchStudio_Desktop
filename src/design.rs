@@ -1346,7 +1346,12 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
     if components.len()==1 {
      if let Ok(rails)=satin::auto_rails(&components[0]) {
       let pairs=satin::pairs(&rails,10.0);
-      if !pairs.is_empty() && pairs.iter().all(|(a,b)| {
+      // Open rails can meet at their tips. Check the actual column
+      // between these shared endpoints before choosing satin.
+      let column = if rails.closed { pairs.as_slice() } else {
+       pairs.get(1..pairs.len().saturating_sub(1)).unwrap_or_default()
+      };
+      if !column.is_empty() && column.iter().all(|(a,b)| {
        let w=a.dist(*b); w.is_finite() && (3.0..=55.0).contains(&w)
       }) {
        s.params.kind=Some(Kind::Satin);
@@ -1718,8 +1723,10 @@ pub fn plan_cached(
             k.hash(&mut h);
             let kind = s.params.kind.unwrap_or(Kind::Fill);
             format!("{kind:?}").hash(&mut h);
-            if kind == Kind::Satin {
-                format!("{:?}", s.params).hash(&mut h);
+            match kind {
+                Kind::Fill => (s.params.fill_spacing(&opt.fabric) > 0.65).hash(&mut h),
+                Kind::Satin => format!("{:?}", s.params).hash(&mut h),
+                _ => {}
             }
         }
         h.finish()

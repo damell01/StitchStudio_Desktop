@@ -57,7 +57,6 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const [pdf, setPdf] = useState<File | null>(null);
   const [settings, setSettings] = useState(defaults);
   const [outputFormat,setOutputFormat]=useState(()=>{let preferred='';try{const id=localStorage.getItem('studio-default-machine');const machines: {id:string;format?:string}[]=JSON.parse(localStorage.getItem('studio-machines')||'[]');preferred=machines.find(m=>m.id===id)?.format?.toLowerCase()||''}catch{}const saved=preferred||localStorage.getItem('studio-digitizer-format')||'dst';return ['dst','pes','pec','jef','exp','vp3'].includes(saved)?saved:'dst'});
-  const [started,setStarted]=useState(false);
   const [ocr,setOcr]=useState<{art:Art;settings:typeof defaults;lines:OcrLine[]}|null>(null);
   const [ocrFonts,setOcrFonts]=useState<string[]>([]);
   const [ocrBusy,setOcrBusy]=useState(false);
@@ -90,7 +89,8 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     if(!review)return;
     let active=true;setCompareBusy(true);
     invoke<{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]>('compare_digitizer_draft',{id:review.id}).then(variants=>{
-      if(!active)return;setComparison({id:review.id,variants});
+      if(!active||!Array.isArray(variants))return;
+      setComparison({id:review.id,variants});
       const speed=Math.max(100,Math.min(1500,Number(localStorage.getItem('studio-sewing-spm'))||800));
       const trim=Number(localStorage.getItem('studio-trim-seconds')??3);
       const change=Number(localStorage.getItem('studio-change-seconds')??8);
@@ -110,11 +110,11 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const generationError = failed?.art === art && failed?.settings === settings && failed.lettering===selected ? failed.message : '';
   const valid = vector || (settings.widthMm >= 5 && settings.widthMm <= 300);
   const ocrReady = !autoOcr || vector || (ocrAttempt?.art===art && ocrAttempt?.removeBackground===settings.removeBackground && ocrAttempt?.tolerance===settings.tolerance && ocrAttempt?.cleanup===settings.cleanup);
-  const processing = Boolean(started && art && valid && !review && !generationError);
+  const processing = Boolean(art && valid && !review && !generationError);
   const processedUrl = processed?.art === art && processed?.settings === settings ? processed.url : '';
 
   useEffect(() => {
-    if (!started || !art || !valid || !ocrReady) return;
+    if (!art || !valid || !ocrReady) return;
     let active = true;
     const timer = setTimeout(() => {
       pendingGeneration = pendingGeneration.then(async () => {
@@ -129,7 +129,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       });
     }, art === original ? (settings === defaults ? 0 : 450) : 450);
     return () => { active = false; clearTimeout(timer); };
-  }, [art, original, settings, valid, started, selected, ocrReady]);
+  }, [art, original, settings, valid, selected, ocrReady]);
 
   useEffect(() => {
     if (!showProcessed || !art || vector || processing || !valid || processedUrl) return;
@@ -154,7 +154,8 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const acceptArtwork = useCallback((next: Art) => {
     setOcr(null);setApproved(null);setOcrAttempt(null);setOcrMessage('');
     setInspector('settings');
-    setStarted(false);
+    setShowExport(false);
+    setExportNotice('');
     setArt(next);
     setOriginal(next);
     setSettings({...defaults,useOwnedThreads:localStorage.getItem('studio-use-owned-threads')==='true'});
@@ -275,7 +276,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     setSettings(previous => ({ ...previous, [key]: value }));
   }
 
-  const plan = review?.plan;
+  const plan = activeComparison?.variants.find(variant => variant.strength === chosen)?.plan ?? review?.plan;
   const previewBox=useMemo(()=>{let l=Infinity,t=Infinity,r=-Infinity,b=-Infinity;for(const block of plan?.blocks??[])for(const run of block.runs)for(const [x,y] of run){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);b=Math.max(b,y)}if(!Number.isFinite(l))return [-1,-1,2,2];const padding=Math.max(2,Math.max(r-l,b-t)*.06);return [l-padding,t-padding,Math.max(1,r-l)+padding*2,Math.max(1,b-t)+padding*2]},[plan]);
   const colors = new Set(plan?.blocks.map(block => block.color.join(',')));
   const displayUrl = showProcessed ? processedUrl : artworkUrl;
@@ -296,19 +297,19 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       setEditing(false);
     }} />}
     <article className="digitizer-controls">
-      <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2><div className="digitizer-start-steps" aria-label="Digitizing progress">{['Import','Configure','Review','Edit & export'].map((label,i)=><span key={label} aria-current={i===(!art?0:!started?1:2)?'step':undefined}><b>{i+1}</b> {label}</span>)}</div>
+      <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2><div className="digitizer-start-steps" aria-label="Digitizing progress">{['Import','Digitize','Review','Edit & export'].map((label,i)=><span key={label} aria-current={i===(!art?0:review?2:1)?'step':undefined}><b>{i+1}</b> {label}</span>)}</div>
       {art && <div className="digitizer-inspector-tabs" role="group" aria-label="Inspector view">{(['settings','quality','threads'] as const).map(t=><button key={t} aria-pressed={inspector===t} disabled={t!=='settings'&&!review} onClick={()=>setInspector(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div>}
       <div hidden={!!art&&inspector!=='settings'} className="digitizer-inspector-content">
-      {art && <p>{!started?'Next: select the format your embroidery machine accepts, set the design width and fabric, then click Start digitizing.':processing?'Generating stitches. Review the result before opening the editor.':review?'Next: compare artwork and stitches, check the Quality and Threads tabs, then open the design studio.':'Adjust settings or retry the generation.'}</p>}
+      {art && <p>{processing?'Generating stitches. Review the result before opening the editor.':review?'Next: compare artwork and stitches, check the Quality and Threads tabs, then open the design studio.':'Adjust settings or retry the generation.'}</p>}
       {art && settings !== defaults && <button type="button" onClick={()=>setSettings(defaults)}>Restore automatic settings</button>}
       <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
         <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image or PDF' : 'Choose or drop an image'}</strong>{!art&&<span>Browse your computer to get started</span>}
       </button>
-      {!art && <p>PNG, JPEG, SVG, WebP, BMP, TIFF, GIF or PDF. Choose a machine format before generating stitches.</p>}
+      {!art && <p>PNG, JPEG, SVG, WebP, BMP, TIFF, GIF or PDF. Digitizing starts as soon as you select artwork.</p>}
       {(!art || pdf) && <PdfArtwork onArt={acceptArtwork} droppedFile={pdf} />}
       {!art && <CharacterGallery onArt={acceptArtwork} />}
       {art && <>
-        <label>Target embroidery format<select value={outputFormat} disabled={busy||processing} onChange={e=>{setOutputFormat(e.target.value);localStorage.setItem('studio-digitizer-format',e.target.value)}}>{[['dst','DST · Poolin / Tajima'],['pes','PES · Brother / Baby Lock'],['pec','PEC · Brother'],['jef','JEF · Janome'],['exp','EXP · Melco / compatible machines'],['vp3','VP3 · Husqvarna Viking / Pfaff']].map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></label><small>{outputFormat==='dst'||outputFormat==='exp'?'Keep the native project and thread sequence for intended colors.':'Check format compatibility with your machine.'}</small>
+        <label>Target embroidery format<select value={outputFormat} disabled={busy} onChange={e=>{setOutputFormat(e.target.value);localStorage.setItem('studio-digitizer-format',e.target.value)}}>{[['dst','DST · Poolin / Tajima'],['pes','PES · Brother / Baby Lock'],['pec','PEC · Brother'],['jef','JEF · Janome'],['exp','EXP · Melco / compatible machines'],['vp3','VP3 · Husqvarna Viking / Pfaff']].map(([id,name])=><option value={id} key={id}>{name}</option>)}</select></label><small>{outputFormat==='dst'||outputFormat==='exp'?'Keep the native project and thread sequence for intended colors.':'Check format compatibility with your machine.'}</small>
         {!vector && <label>Width (inches) · {settings.widthMm.toFixed(1)} mm
           <input type="number" min={5 / 25.4} max={300 / 25.4} step=".01" disabled={busy}
             value={Number((settings.widthMm / 25.4).toFixed(3))}
@@ -365,15 +366,13 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
               <input aria-label={'Recognized text '+(i+1)} value={line.text} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,text:e.target.value}:l)})}/>
               <select aria-label={'Font for region '+(i+1)} value={line.font} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,font:e.target.value}:l)})}>{ocrFonts.map(font=><option key={font}>{font}</option>)}</select>
             </details>)}
-            <button type="button" disabled={busy||processing} onClick={()=>{setApproved(activeOcr);setStarted(true);setMode('compare')}}>Update lettering preview</button>
+            <button type="button" disabled={busy||processing} onClick={()=>{setApproved(activeOcr);setMode('compare')}}>Update lettering preview</button>
           </details>}
           {selected&&<button type="button" onClick={()=>{setAutoOcr(false);setApproved(null);setOcrMessage('Using original traced lettering.')}}>Restore traced lettering</button>}
         </section>}
-        {!started&&<button className="primary" disabled={busy||!valid} onClick={()=>setStarted(true)}>Start digitizing · {outputFormat.toUpperCase()}</button>}
       </>}
       </div>
-      {processing && <p>Digitizing in progress…</p>}{art&&!started&&<small>Your original image is unchanged. You can adjust the settings again after generating a preview.</small>}
-      {!valid && <p role="alert">Width must be between 5 and 300 mm.</p>}
+            {!valid && <p role="alert">Width must be between 5 and 300 mm.</p>}
       {(error || generationError) && <p role="alert">{error || generationError}</p>}
       {generationError && !vector && settings.removeBackground && generationError.includes('No foreground') &&
         <button onClick={() => update('removeBackground', false)}>Retry with background</button>}
@@ -435,12 +434,11 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
             const link=document.createElement('a');link.href=url;link.download=(art?.name||'design')+'-thread-sequence.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
           }}>Download thread sequence CSV</button>
         </section></div>
-        <div className="wizard-actions"><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Edit selected design · {outputFormat.toUpperCase()} <ArrowRight size={16} /></button></div>
       </>}
     </article>
     <article className={`artwork-preview review-${mode === 'density' || mode === 'thread' ? 'stitches' : mode}`}>
       <div className="preview-heading"><div><small>DESIGN REVIEW</small><strong title={art?.name}>{art?.name}</strong></div><span className="digitizer-preview-state" role="status">{processing?"Generating":review?"Preview ready":"Artwork"}</span></div>
-      {review&&<section className="digitizer-variant-review" aria-label="Compare embroidery-ready designs"><div className="digitizer-variant-heading"><div><strong>Choose your stitch plan</strong><small>Compare actual stitch paths before editing or exporting.</small></div>{compareBusy&&<span role="status">Optimizing alternatives…</span>}</div>{compareError&&<p role="status">Alternative preview unavailable: {compareError}. Original still available.</p>}<DigitizerVariants base={review.plan} variants={activeComparison?.variants??[]} chosen={chosen} recommended={recommended} onChoose={setChosen}/><div className="digitizer-review-actions"><button disabled={busy||compareBusy} onClick={()=>setShowExport(v=>!v)}>Export {outputFormat.toUpperCase()}</button><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Edit {['original','gentle','balanced','maximum','solid silhouette','fast stitch'][activeComparison?chosen:0]} design <ArrowRight size={16}/></button></div>{showExport&&<div className="digitizer-direct-export"><strong>Confirm usable sewing field</strong><div className="workspace-hoop-fields"><label>Width (in)<input type="number" min=".1" step=".01" value={exportWidth} onChange={e=>setExportWidth(e.target.value)}/></label><label>Height (in)<input type="number" min=".1" step=".01" value={exportHeight} onChange={e=>setExportHeight(e.target.value)}/></label></div><small>Use the machine's usable sewing field, not the hoop's outer dimensions. DST does not preserve exact thread colors.</small><button className="primary" disabled={busy||compareBusy||!(Number(exportWidth)>0&&Number(exportHeight)>0)} onClick={()=>void exportChosen()}>Save {outputFormat.toUpperCase()} file</button>{exportNotice&&<p role="status">{exportNotice}</p>}</div>}<small>Detailed quality and density report below describes the original digitized plan; inspect the chosen version in the editor.</small></section>}
+      {review&&<section className="digitizer-variant-review" aria-label="Compare embroidery-ready designs"><div className="digitizer-variant-heading"><div><strong>Choose your stitch plan</strong><small>Compare actual stitch paths before editing or exporting.</small></div>{compareBusy&&<span role="status">Optimizing alternatives…</span>}</div>{compareError&&<p role="status">Alternative preview unavailable: {compareError}. Original still available.</p>}<DigitizerVariants base={review.plan} variants={activeComparison?.variants??[]} chosen={chosen} recommended={recommended} onChoose={setChosen}/><div className="digitizer-review-actions"><button disabled={busy||compareBusy} onClick={()=>setShowExport(v=>!v)}>Export {outputFormat.toUpperCase()}</button><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Open in design studio <ArrowRight size={16}/></button></div>{showExport&&<div className="digitizer-direct-export"><strong>Confirm usable sewing field</strong><div className="workspace-hoop-fields"><label>Width (in)<input type="number" min=".1" step=".01" value={exportWidth} onChange={e=>setExportWidth(e.target.value)}/></label><label>Height (in)<input type="number" min=".1" step=".01" value={exportHeight} onChange={e=>setExportHeight(e.target.value)}/></label></div><small>Use the machine's usable sewing field, not the hoop's outer dimensions. DST does not preserve exact thread colors.</small><button className="primary" disabled={busy||compareBusy||!(Number(exportWidth)>0&&Number(exportHeight)>0)} onClick={()=>void exportChosen()}>Save {outputFormat.toUpperCase()} file</button>{exportNotice&&<p role="status">{exportNotice}</p>}</div>}<small>The Quality report and density heatmap describe the original plan.</small></section>}
       {plan&&<div className="digitizer-preview-metrics"><div><small>Stitch points</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Unique colors</small><strong>{colors.size}</strong></div><div><small>Color blocks</small><strong>{plan.blocks.length}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div></div>}<div className="review-switch" role="group" aria-label="Preview options">
         {(['compare', 'stitches', 'original'] as const).map(view =>
           <button key={view} aria-pressed={mode === view} onClick={() => setMode(view)}>
