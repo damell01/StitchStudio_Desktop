@@ -1,0 +1,194 @@
+import {useEffect, useRef, useState} from 'react';
+import {Shirt, X} from 'lucide-react';
+import './garment-preview.css';
+
+type Block = {color:number[]; runs:number[][][]};
+type Placement = {label:string; x:number; y:number; widthMm:number; heightMm:number};
+type Garment = {
+  label:string; outline:string; zone:string; seams:string; pxPerMm:number; placements:Placement[];
+};
+
+const size = {width:600, height:440};
+const sizes = {adult:{label:'Adult', ratio:1}, kids:{label:'Kids', ratio:.78}, toddler:{label:'Toddler', ratio:.58}};
+type SizeName = keyof typeof sizes;
+const garments = {
+  shirt: {
+    label:'T-shirt',
+    outline:'M224 42 172 65 88 144 147 216 195 185 183 405 Q300 423 417 405 L405 185 453 216 512 144 428 65 376 42 Q360 100 300 103 Q240 100 224 42Z',
+    zone:'M198 106 Q300 132 402 106 L413 397 Q300 412 187 397Z',
+    seams:'M224 46 Q240 108 300 111 Q360 108 376 46 M94 139 L151 208 M506 139 L449 208 M187 398 Q300 414 413 398',
+    pxPerMm:.48,
+    placements:[
+      {label:'Left chest (wearer)',x:354,y:153,widthMm:120,heightMm:120},
+      {label:'Right chest (wearer)',x:246,y:153,widthMm:120,heightMm:120},
+      {label:'Center front',x:300,y:209,widthMm:300,heightMm:300},
+    ],
+  },
+  hoodie: {
+    label:'Hoodie',
+    outline:'M232 79 Q221 39 248 24 Q300 -4 352 24 Q379 39 368 79 L419 102 Q474 122 493 247 L513 371 L460 384 L412 252 L423 410 Q300 423 177 410 L188 252 L140 384 L87 371 L107 247 Q126 122 181 102Z',
+    zone:'M195 123 Q300 150 405 123 L416 395 Q300 409 184 395Z',
+    seams:'M232 79 Q275 129 300 119 Q325 129 368 79 M250 45 Q300 20 350 45 Q341 88 300 112 Q259 88 250 45Z M274 109 L263 153 M326 109 L337 153 M92 357 L136 369 M508 357 L464 369 M185 398 Q300 412 415 398 M255 311 H345 L367 367 H233Z',
+    pxPerMm:.47,
+    placements:[
+      {label:'Left chest (wearer)',x:355,y:169,widthMm:123,heightMm:115},
+      {label:'Right chest (wearer)',x:245,y:169,widthMm:123,heightMm:115},
+      {label:'Center front',x:300,y:226,widthMm:285,heightMm:210},
+    ],
+  },
+  cap: {
+    label:'Cap',
+    outline:'M144 252 C135 143 193 78 278 71 C383 59 466 142 458 247 L448 269 C492 286 509 308 476 328 C430 361 232 379 131 337 C93 320 107 278 154 262Z',
+    zone:'M159 250 C152 153 210 91 288 87 C378 82 442 153 442 244 Q310 297 159 250Z',
+    seams:'M153 256 Q303 306 451 253 M275 78 Q218 129 228 268 M317 77 Q387 125 378 264 M121 310 Q234 370 482 317 M125 319 Q250 371 464 331',
+    pxPerMm:1.18,
+    placements:[{label:'Cap front',x:300,y:194,widthMm:125,heightMm:55}],
+  },
+  shorts: {
+    label:'Shorts',
+    outline:'M156 83 Q300 63 444 83 L469 356 Q397 385 327 366 L300 230 273 366 Q203 385 131 356Z',
+    zone:'M159 103 Q300 85 441 103 L463 348 Q397 378 334 358 L300 215 266 358 Q203 378 137 348Z',
+    seams:'M156 99 Q300 79 444 99 M154 109 Q300 89 446 109 M202 111 Q195 143 154 160 M398 111 Q405 143 446 160 M136 345 Q203 372 274 357 M326 357 Q397 372 464 345 M300 111 V230',
+    pxPerMm:.66,
+    placements:[
+      {label:'Left leg (wearer)',x:391,y:294,widthMm:125,heightMm:112},
+      {label:'Right leg (wearer)',x:209,y:294,widthMm:125,heightMm:112},
+    ],
+  },
+} satisfies Record<string, Garment>;
+type GarmentName = keyof typeof garments;
+
+function paintMockup(
+  canvas: HTMLCanvasElement, garment: Garment, placement: Placement, blocks: Block[],
+  fabric: string, xOffset: number, yOffset: number, scale: number,
+) {
+  const context = canvas.getContext('2d');
+  if (!context) return;
+  const ratio = canvas.width / size.width;
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, size.width, size.height);
+  const outline = new Path2D(garment.outline);
+
+  context.save();
+  context.shadowColor = '#21113136';
+  context.shadowOffsetY = 10;
+  context.shadowBlur = 22;
+  context.fillStyle = fabric;
+  context.fill(outline);
+  context.restore();
+
+  context.save();
+  context.clip(outline);
+  const shade = context.createLinearGradient(90, 75, 495, 380);
+  shade.addColorStop(0, '#ffffff46');
+  shade.addColorStop(.39, '#ffffff00');
+  shade.addColorStop(.65, '#21132e18');
+  shade.addColorStop(1, '#1a102d46');
+  context.fillStyle = shade;
+  context.fillRect(0, 0, size.width, size.height);
+  context.strokeStyle = '#432c580c';
+  context.lineWidth = .45;
+  context.beginPath();
+  for (let x = -440; x < size.width; x += 4) {
+    context.moveTo(x, 0);
+    context.lineTo(x + 440, 440);
+  }
+  context.stroke();
+  context.lineWidth = 1.4;
+  context.strokeStyle = '#22183259';
+  context.stroke(new Path2D(garment.seams));
+  context.restore();
+
+  context.save();
+  context.clip(new Path2D(garment.zone));
+  // The placement anchor is the hoop origin so edits to a design's hoop
+  // position appear on the garment at the same scale.
+  context.translate(placement.x + xOffset * scale, placement.y + yOffset * scale);
+  context.scale(scale, scale);
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  for (const block of blocks) {
+    context.beginPath();
+    for (const run of block.runs) {
+      if (run.length < 2) continue;
+      context.moveTo(run[0][0], run[0][1]);
+      for (let i = 1; i < run.length; i++) context.lineTo(run[i][0], run[i][1]);
+    }
+    context.strokeStyle = '#1a112b39';
+    context.lineWidth = .53;
+    context.stroke();
+    context.strokeStyle = `rgb(${block.color.join(',')})`;
+    context.lineWidth = .35;
+    context.stroke();
+  }
+  context.restore();
+}
+
+export function GarmentPreview({blocks}: {blocks:Block[]}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [open,setOpen] = useState(false);
+  const [garmentName,setGarment] = useState<GarmentName>('shirt');
+  const [sizeName,setSizeName] = useState<SizeName>('adult');
+  const [placementIndex,setPlacement] = useState(0);
+  const [color,setColor] = useState('#e6dced');
+  const [x,setX] = useState('');
+  const [y,setY] = useState('');
+  const garment = garments[garmentName];
+  const placement = garment.placements[placementIndex];
+  const garmentSize = sizes[sizeName];
+  const scale = garment.pxPerMm / garmentSize.ratio;
+  const xOffset = (Number(x)||0)*25.4;
+  const yOffset = (Number(y)||0)*25.4;
+  const insideZone = !open || !blocks.some(block => block.runs.some(run => run.some(point =>
+    Math.abs(point[0]+xOffset) > placement.widthMm*garmentSize.ratio/2 || Math.abs(point[1]+yOffset) > placement.heightMm*garmentSize.ratio/2
+  )));
+
+  useEffect(()=>{
+    if(!open || !canvas.current)return;
+    const surface=canvas.current;
+    const frame=requestAnimationFrame(()=>paintMockup(surface,garment,placement,blocks,color,xOffset,yOffset,scale));
+    return ()=>cancelAnimationFrame(frame);
+  },[open,garment,placement,blocks,color,xOffset,yOffset,scale]);
+
+  return <>
+    <button className="studio-tool-icon" aria-label="Garment mockup" title="Preview on a garment" disabled={!blocks.length}
+      onClick={()=>{dialog.current?.showModal();setOpen(true);}}><Shirt size={18}/></button>
+    <dialog ref={dialog} className="studio-modal garment-preview" aria-label="Garment mockup" onClose={()=>setOpen(false)}>
+      {open&&<>
+        <div className="studio-modal-heading"><h2>Garment mockup</h2>
+          <button onClick={()=>dialog.current?.close()} aria-label="Close garment mockup"><X size={17} aria-hidden="true"/></button>
+        </div>
+        <div className="garment-preview-layout">
+          <div className="garment-preview-stage">
+            <canvas ref={canvas} width={size.width*2} height={size.height*2} role="img"
+              aria-label={`Design on ${garmentSize.label.toLowerCase()} ${garment.label}, ${placement.label.toLowerCase()}`}/>
+          </div>
+          <div className="garment-preview-options">
+            <label>Garment<select aria-label="Garment" value={garmentName} onChange={event=>{
+              setGarment(event.target.value as GarmentName);setPlacement(0);setX('');setY('');
+            }}>
+              {Object.entries(garments).map(([name,item])=><option key={name} value={name}>{item.label}</option>)}
+            </select></label>
+            <label>Garment size<select aria-label="Garment size" value={sizeName} onChange={event=>setSizeName(event.target.value as SizeName)}>
+              {Object.entries(sizes).map(([name,item])=><option key={name} value={name}>{item.label}</option>)}
+            </select></label>
+            <label>Placement<select aria-label="Placement" value={placementIndex} onChange={event=>{setPlacement(Number(event.target.value));setX('');setY('');}}>
+              {garment.placements.map((item,index)=><option key={item.label} value={index}>{item.label}</option>)}
+            </select></label>
+            <label className="garment-color">Fabric color<input type="color" value={color} onChange={event=>setColor(event.target.value)}/></label>
+            <fieldset>
+              <legend>Adjust placement (in)</legend>
+              <label>Horizontal<input type="number" min="-8" max="8" step=".25" value={x}
+                placeholder="0" onChange={event=>setX(event.target.value)}/></label>
+              <label>Vertical<input type="number" min="-8" max="8" step=".25" value={y}
+                placeholder="0" onChange={event=>setY(event.target.value)}/></label>
+            </fieldset>
+            {!insideZone&&<p role="status">This design extends beyond the suggested area for this placement.</p>}
+            <p className="muted">Garment scale is approximate. Mockup adjustments affect only this preview.</p>
+          </div>
+        </div>
+      </>}
+    </dialog>
+  </>;
+}

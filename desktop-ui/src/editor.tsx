@@ -1,3 +1,4 @@
+import {GarmentPreview} from './garment-preview';
 import {ThreadOrder} from './thread-order';
 import {FabricPicker} from './fabric-picker';
 import {ListNavigation,matchesName,usePagedList} from './list-navigation';
@@ -271,6 +272,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
       <label><span>Inspector width</span><input aria-label="Right panel width" type="range" min="180" max="360" value={rightWidth} onChange={e=>setRightWidth(Number(e.target.value))}/></label>
     </div>
   </details>
+  {plan&&<GarmentPreview blocks={plan.blocks}/>}
   {plan&&<ThreadOrder blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
   <button className="primary studio-export" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>

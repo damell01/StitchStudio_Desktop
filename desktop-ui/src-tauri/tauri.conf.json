@@ -13,7 +13,8 @@
       {
         "title": "Stitch Studio",
         "dragDropEnabled": false,
-        "width": 1440,
+        "width": 1600,
+        "maximized": true,
         "height": 900,
         "minWidth": 760,
         "minHeight": 540

@@ -57,10 +57,14 @@ For installation, open the DMG and copy the app into Applications. Local packagi
 5. Use the canvas zoom and pan to inspect stitches. In Select mode, click or drag an editable object. Drag a corner to resize proportionally or a side to adjust one dimension. Use the grip to move the camera controls above or below the design. Use **Insert design** to preview and place templates, saved layouts, or machine designs inside the current workspace. Use the design transformation controls to change physical dimensions or placement. Save an editable `.stitchstudio` project before exporting.
 6. Use **Thread order** to match numbered color blocks to the spools or needles you assign on the machine. Review the machine format, dimensions and thread sequence, then save the machine file. Keep a separate project file for edits. Use the [sew-out worksheet](SEW_OUT.md) for the first machine test.
 
+## Preview placement on a garment
+
+Open a design and choose the shirt icon in the editor toolbar. Choose a T-shirt, hoodie, cap, or shorts. Pick toddler, kids, or adult sizing and select a placement. The preset anchor follows the current design position relative to the hoop center. Use the offsets and fabric color to compare placements. The mockup uses the current stitch paths and an approximate garment scale. It leaves the project and exports as they were.
+
 ## Browse and reuse designs
 
 - **Template Library** includes built-in bow, sports, botanical, animal, monogram and patch artwork. Filter by category, favorites or recent designs. Licensed character and seasonal templates carry source credits in the preview. **Preview design** generates a stitch preview before you open the template.
-- **Design Library** imports compatible embroidery files or scans a folder for editable Stitch Studio projects. Search for a machine file and choose **Insert design** to add its stitch paths to the workspace.
+- **Design Library** includes 19 original machine-readable DST designs with matching thread colors in the app. It also imports compatible embroidery files or scans a folder for editable Stitch Studio projects. Search for a machine file and choose **Insert design** to add its stitch paths to the workspace.
 - Choose disk files or a folder that you have permission to use. Keep original machine files for reference. Imported needle paths stay as manual stitches and editable artwork remains in the project. Use **Design Library → Import ZIP** to add DST, PES, PEC, EXP, or JEF files, including files in nested folders. To reuse a full, editable layout, save it as a .stitchstudio project and include it in a ZIP. Open **Template Library → My editable templates → Import template ZIP**, preview the layout, and choose **Use as new design**. Save the new design under its own filename.
 - In the editor, open **Workspace options** to adjust the Layers and Inspector widths. The workspace remembers both widths. Use the top toolbar to toggle either panel. Press **F11** or choose **Focus canvas** to enter full-screen editing. Press **Esc** to return. In the Inspector, choose **Hoop**, **Stitches**, or **Size** for the task at hand.
 

@@ -1,0 +1,23 @@
+.garment-preview { width: min(940px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); }
+.garment-preview-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(170px, 223px); gap: 16px; align-items: start; }
+.garment-preview-stage {
+  display: grid;
+  align-items: center;
+  min-height: 220px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--workspace-border, #ded3ed);
+  background: radial-gradient(ellipse at center, var(--workspace-surface, #fff), var(--workspace-soft, #eee6fb));
+}
+.garment-preview-stage canvas { display: block; width: 100%; height: auto; }
+.garment-preview-options { display: grid; gap: 10px; }
+.garment-preview-options label { display: grid; gap: 4px; }
+.garment-preview-options :is(select,input[type=number]) { width: 100%; min-width: 0; }
+.garment-preview-options .garment-color { display: flex; align-items: center; justify-content: space-between; }
+.garment-preview-options fieldset { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; padding: 7px; border: 1px solid var(--workspace-border, #ded3ed); border-radius: 8px; }
+.garment-preview-options fieldset label { min-width: 0; }
+.garment-preview-options p { margin: 0; font-size: 12px; }
+@media(max-width:650px) {
+  .garment-preview-layout { grid-template-columns: minmax(0,1fr); }
+  .garment-preview-stage canvas { max-height: 260px; object-fit: contain; }
+}
