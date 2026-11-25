@@ -458,6 +458,14 @@ fn fill_runs(
 ) -> Vec<Vec<Piece>> {
     let p = &shape.params;
     let f = &opt.fabric;
+    // Independent islands can use their own fill direction and density.
+    // Preserve explicit settings and the original ordering outside auto mode.
+    if opt.hat_order && p.angle.is_none() && p.spacing.is_none() {
+        let islands = satin::components(rings, rule);
+        if islands.len() > 1 {
+            return islands.iter().flat_map(|comp| fill_runs(comp, FillRule::EvenOdd, shape, opt)).collect();
+        }
+    }
     let mut angle = p.fill_angle().to_radians();
     // Sample the dominant outline orientation as well as fixed angles.
     // Score disconnected row transitions separately from stitch count:
@@ -568,7 +576,16 @@ fn fill_runs(
         // Automatic artwork uses a moderate density floor on stable woven.
         // Explicit object spacing and other fabric presets remain untouched.
         spacing: mm(if p.spacing.is_none() && opt.hat_order && f.id == "standard" {
-            if narrow || small_detail { p.fill_spacing(f) } else { p.fill_spacing(f).max(0.36) }
+            if narrow || small_detail { p.fill_spacing(f) } else {
+                let area = components.iter().map(|comp| {
+                    comp.first().map(|r| boolean::ring_area(r).abs()).unwrap_or(0.0)
+                        - comp.iter().skip(1).map(|r| boolean::ring_area(r).abs()).sum::<f64>()
+                }).sum::<f64>().max(0.0);
+                // Gradually relax the density floor on larger solid areas.
+                // Keep narrow features, small islands and user settings intact.
+                let blend = ((area - 600.0) / 19400.0).clamp(0.0, 1.0);
+                p.fill_spacing(f).max(0.36 + 0.02 * blend)
+            }
         } else { p.fill_spacing(f) }),
         len: mm(p.fill_len(f)),
         inset: 0.0,
