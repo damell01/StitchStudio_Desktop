@@ -260,7 +260,7 @@ fn monochrome_logo_removes_enclosed_paper_but_keeps_ink(){
 }
 
 fn prepare_raster(r:&Raster,remove_background:bool,tolerance:u8,cleanup:bool)->Raster{
-    if cleanup && remove_background {if let Some(ink)=monochrome_ink(r){return ink;}}
+    if remove_background {if let Some(ink)=monochrome_ink(r){return ink;}}
 
     // Suppress fabric texture before edge flood fill, preserving the original alpha.
     // A predominantly flat palette is typical of logos and cartoons.
@@ -327,9 +327,14 @@ pub fn prepared_pixels(bytes:&[u8],remove_background:bool,tolerance:u8,cleanup:b
 
 pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:bool)->Result<Traced>{
     let image=Image::decode(bytes)?;
-    let raster=prepare_raster(&image.raster,o.remove_background,tolerance,cleanup);
-    let mut options=o.clone();options.remove_background=false;
+    let mono=if o.remove_background {monochrome_ink(&image.raster)}else{None};
+    let monochrome=mono.is_some();
+    let raster=mono.unwrap_or_else(||prepare_raster(&image.raster,o.remove_background,tolerance,cleanup));
+    let mut options=o.clone();options.remove_background=monochrome;
     if flat_palette(&raster) { options.speckle_mm=options.speckle_mm.min(0.35); options.detail=options.detail.max(80.0); } else if cleanup {options.speckle_mm=options.speckle_mm.max(0.6); options.detail=options.detail.min(65.0);}
+    // Keep small detached punctuation and serif details; do not use the
+    // aggressive generic speckle retry for detected ink logos.
+    if monochrome {options.speckle_mm=options.speckle_mm.min(0.18);options.detail=options.detail.max(85.0);}
     if !raster.rgba.chunks_exact(4).any(|p|p[3]>=32){return Err(anyhow!("No foreground remains after background removal. Disable removal or lower sensitivity."));}
     let raster=trim_transparent_margin(&raster);
     // Avoid global hue merging: it destroys intentional shading in character artwork.
@@ -358,7 +363,7 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
                 // Complex illustrations often contain tiny anti-alias islands.
                 // Compare one physically scaled cleanup candidate, not a blind
                 // reduction in colors or a destructive global hue merge.
-                if attempt==0 && cleanup && options.colors==0 && options.threads.is_empty()
+                if attempt==0 && cleanup && !monochrome && options.colors==0 && options.threads.is_empty()
                     && !options.lines && t.shapes>40 && t.shapes<600 {
                     let mut simplified=candidate.clone();
                     simplified.speckle_mm=simplified.speckle_mm.max(0.85);
@@ -781,6 +786,7 @@ fn to_svg(
         if !representatives.contains(&match_color) { representatives.push(match_color); }
         mapping.insert(c, match_color);
     }
+    let ink_mask = remove_white && r.rgba.chunks_exact(4).all(|px|px[3]<128 || px[..3].iter().all(|&v|v<32));
     for (k, p) in t.paths.iter().enumerate() {
         // Thousandths of a pixel: plenty, and a third the size of kurbo's
         // full-precision numbers (every parse, undo step and save is faster).
@@ -793,7 +799,7 @@ fn to_svg(
             .map(|&v| (255.0 - f64::from(v)).powi(2))
             .sum::<f64>()
             <= 900.0;
-        if d.is_empty() || (remove_white && white && p.stroke.is_some()) {
+        if d.is_empty() || (remove_white && white && (p.stroke.is_some() || ink_mask)) {
             continue;
         }
         let c = nearest(if consolidate && threads.is_empty() { *mapping.get(&p.color).unwrap_or(&p.color) } else { p.color }, threads);
