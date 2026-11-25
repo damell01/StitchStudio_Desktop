@@ -21,6 +21,8 @@ function ProjectThumbnail({project}:{project:Project}) {
   useEffect(()=>{let active=true;const cached=project.thumbnail||projectThumbnailCache.get(cacheKey)||'';setImage(cached);if(!cached)void invoke<ThumbnailPlan>('project_thumbnail',{file:project.file}).then(plan=>{if(active){const next=thumbnailOf(plan);if(projectThumbnailCache.size>=100)projectThumbnailCache.delete(projectThumbnailCache.keys().next().value!);projectThumbnailCache.set(cacheKey,next);setImage(next)}}).catch(()=>{});return()=>{active=false}},[project.file,cacheKey,project.thumbnail]);
   return <div className="library-thumb">{image?<img src={image} alt="Project stitch preview"/>:<File size={25}/>}</div>;
 }
+function readProjectLibrary():Project[]{try{const saved:Project[]=JSON.parse(localStorage.getItem('studio-project-library')||'[]');const recent:Project[]=JSON.parse(localStorage.getItem('studio-recent-projects')||'[]');return Array.from(new Map([...saved,...recent].map(p=>[p.file,p])).values())}catch{return []}}
+function addProjectFiles(files:Project[]){const next=Array.from(new Map([...readProjectLibrary(),...files].map(p=>[p.file,p])).values());localStorage.setItem('studio-project-library',JSON.stringify(next));return next}
 export function RecentProjects({onOpen}:{onOpen:()=>void}) {
   const [projects,setProjects]=useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
   const [error,setError]=useState('');
@@ -32,7 +34,7 @@ export function RecentProjects({onOpen}:{onOpen:()=>void}) {
 export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;initialTab?:'embroidery'|'projects'|'artwork' }) {
   const [tab, setTab] = useState<'embroidery' | 'projects' | 'artwork'>(initialTab);
   const [files, setFiles] = useState<string[]>([]);
-  const [projects, setProjects] = useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
+  const [projects, setProjects] = useState<Project[]>(readProjectLibrary);
   const [query, setQuery] = useState('');
   const [layout,setLayout]=useState<'grid'|'list'>(()=>localStorage.getItem('studio-library-layout')==='list'?'list':'grid');
   useEffect(()=>{localStorage.setItem('studio-library-layout',layout)},[layout]);
@@ -78,10 +80,11 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
   function scan() {
     void run(async () => {
       const result = await invoke<Project[] | null>('scan_projects');
-      if (result) { setProjects(result); [...result].sort((a,b)=>a.modified-b.modified).slice(-5).forEach(rememberProject); }
+      if (result) { setProjects(addProjectFiles(result)); [...result].sort((a,b)=>a.modified-b.modified).slice(-5).forEach(rememberProject); }
     });
   }
 
+  function importProjects(){void run(async()=>{const result=await invoke<Project[]|null>('import_project_files');if(result===null)return;setProjects(addProjectFiles(result));setMessage(result.length?result.length+' project files added to library.':'No valid project files selected.');});}
   function open(project: Project) {
     void run(async () => {
       if (!await confirmAction('Open this project? Save existing work first.')) return;
@@ -107,11 +110,11 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
     <div className="library-filters">
       <label className="library-search"><Search size={16} /><input aria-label="Search designs" placeholder="Search designs" value={query} onChange={event => setQuery(event.target.value)} /></label>
       {tab === 'embroidery' ? <>
-        <button className="primary" disabled={busy} onClick={() => importDesigns('files')}><FilePlus size={16} /> Import files</button>
+        <button className="primary" disabled={busy} onClick={() => importDesigns('files')}><FilePlus size={16} /> Import design files</button>
         <button disabled={busy} onClick={() => importDesigns('folder')}><FolderOpen size={16} /> Import folder</button>
         <button disabled={busy} onClick={() => importDesigns('zip')}><FileArchive size={16} /> Import ZIP</button>
       </> : <>
-        <button className="primary" disabled={busy} onClick={scan}><FolderOpen size={16} /> Scan project folder</button>
+        <button className="primary" disabled={busy} onClick={importProjects}><FilePlus size={16}/> Import project files</button><button disabled={busy} onClick={scan}><FolderOpen size={16} /> Scan project folder</button>
         <select aria-label="Sort projects" value={sort} onChange={event => setSort(event.target.value)}>
           <option value="recent">Recently modified</option><option value="name">Name A–Z</option><option value="stitches">Stitch count</option>
         </select>
