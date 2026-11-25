@@ -463,49 +463,83 @@ fn optimized_density(source:&zigzag::document::Document, original:&Design)->Opti
 }
 // Simplification keeps original outlines, lettering and underlay. Test several
 // density levels, and accept only a measurable improvement with intact coverage.
-fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design,strength:u8)->Option<(zigzag::document::Document,Design)>{
-    use zigzag::{params::Kind,svg::Geometry};
+fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool)->Option<(zigzag::document::Document,Design)>{
+    use zigzag::{params::Kind,svg::Geometry,bezier::{Anchor,SubPath}};
     if original.stitch_count()==0||original.stitch_count()>200_000{return None}
+    let selected=|uid:usize|uids.is_none_or(|ids|ids.contains(&uid));
     let mut best=None;let cost=|d:&Design|d.stitch_count().saturating_add(d.trim_count().saturating_mul(40));
-    let before=measure_stitches(original);
-    let original_bounds=original.bounds();
+    let before=measure_stitches(original);let original_bounds=original.bounds();
     for factor in [1.05,1.10,1.18,1.25].into_iter().take(strength.clamp(1,3) as usize+1){
-        let mut next=source.clone();
-        let fabric=next.plan_options().fabric;
-        let mut changed=false;
-        for shape in &mut next.shapes{
-            if shape.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill || shape.groups.iter().any(|g|g.starts_with("tl-lettering-")){continue}
-            if !matches!(shape.geometry,Geometry::Fill{..}){continue}
+        let mut next=source.clone();let fabric=next.plan_options().fabric;let mut changed=false;
+        let mut paths=Vec::new();let mut remove=Vec::new();
+        for (i,shape) in next.shapes.iter_mut().enumerate(){
+            if !selected(shape.uid)||shape.groups.iter().any(|g|g.starts_with("tl-lettering-")){continue}
             let b=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
-            if b.width().min(b.height())<60.0{continue}
-            let spacing=shape.params.fill_spacing(&fabric);
-            let target=(spacing*factor).min(0.48);
-            if target>spacing+0.005{shape.params.spacing=Some(target);changed=true;}
+            let kind=shape.params.kind.unwrap_or(Kind::Fill);
+            if kind==Kind::Manual{
+                if let Geometry::Stroke{lines,..}=&shape.geometry{
+                    let mut edited=false;let mut subpaths=Vec::new();
+                    for (line,closed) in lines{
+                        let pts=if *closed{line.clone()}else{resize_fixed_run(line,true)};
+                        edited|=pts.len()<line.len();
+                        subpaths.push(SubPath{anchors:pts.into_iter().map(Anchor::corner).collect(),closed:*closed});
+                    }
+                    if edited{paths.push((i,subpaths));changed=true;}
+                }
+                continue
+            }
+            if remove_detail&&strength>=2&&kind!=Kind::Skip&&!b.is_empty()&&b.width().max(b.height())<if strength==3{12.0}else{7.0}{
+                // Only remove isolated tiny elements, never a fill/stroke part
+                // of a larger element or a recorded lettering object.
+                remove.push(i);continue
+            }
+            if kind==Kind::Fill&&matches!(shape.geometry,Geometry::Fill{..})&&b.width().min(b.height())>=60.0{
+                let spacing=shape.params.fill_spacing(&fabric);let target=(spacing*factor).min(0.48);
+                if target>spacing+0.005{shape.params.spacing=Some(target);changed=true;}
+            }
+            if kind==Kind::Satin&&b.width().min(b.height())>=25.0{
+                let spacing=shape.params.satin_spacing(&fabric);let target=(spacing*factor).min(0.45);
+                if target>spacing+0.005{shape.params.spacing=Some(target);changed=true;}
+            }
+        }
+        // Protect recorded text and any element with an unselected or larger part.
+        remove.retain(|&i|{
+            let shape=&next.shapes[i];
+            !next.records_text(i)&&next.shapes.iter().enumerate().all(|(j,s)|s.id!=shape.id||j==i||(selected(s.uid)&&{
+                let b=zigzag::svg::shapes_bounds(std::slice::from_ref(s));b.width().max(b.height())<if strength==3{12.0}else{7.0}
+            }))
+        });
+        if !paths.is_empty()&&next.set_paths(&paths).is_err(){continue}
+        if !remove.is_empty(){
+            // Path rewrites preserve UIDs; resolve the original identities again.
+            let ids:Vec<_>=remove.iter().map(|&i|source.shapes[i].uid).collect();
+            let indices:Vec<_>=next.shapes.iter().enumerate().filter(|(_,s)|ids.contains(&s.uid)).map(|(i,_)|i).collect();
+            if indices.len()>=next.shapes.len()||next.delete_many(&indices).is_err(){continue}
+            changed=true;
         }
         if !changed{continue}
+        if next.sync().is_err(){continue}
         let d=next.plan();let after=measure_stitches(&d);let b=d.bounds();
         if d.stitch_count()==0||cost(&d)>=cost(original)||d.stitch_count()<original.stitch_count()*65/100
             ||d.trim_count()>original.trim_count()||after.long>before.long||after.zero>before.zero
             ||after.short>before.short.saturating_add(5)
             ||original_bounds.min.dist(b.min)>5.0||original_bounds.max.dist(b.max)>5.0
-            ||!original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
-            ||original.per_shape.len()!=d.per_shape.len()
-            ||!original.per_shape.iter().zip(&d.per_shape).all(|(&a,&b)|a==0||b>0){continue}
+            ||!original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color)){continue}
+        if remove.is_empty()&&(original.per_shape.len()!=d.per_shape.len()||!original.per_shape.iter().zip(&d.per_shape).all(|(&a,&b)|a==0||b>0)){continue}
         if best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|cost(&d)<cost(old)){best=Some((next,d));}
     }
     best
 }
 #[tauri::command]
-async fn simplify_current_design(strength:u8,app:tauri::AppHandle)->Result<Preview,String>{
+async fn simplify_current_design(strength:u8,uids:Option<Vec<usize>>,remove_detail:Option<bool>,app:tauri::AppHandle)->Result<Preview,String>{
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move||{
         let state=app.state::<Mutex<Workspace>>();
         let mut w=state.lock().map_err(|e|e.to_string())?;
         let original=w.current.as_ref().ok_or("Open a design first")?;
-        let source=w.source.as_ref().ok_or("Open editable artwork first")?;
-        let (mut doc,_)=simplify_design_candidate(source,original,strength).ok_or("No safe reduction found at this level. Original design retained.")?;
-        doc.sync().map_err(|e|e.to_string())?;
-        let design=doc.plan();
+        let source=editable_base(&w,"Simplified design")?;
+        if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
+        let (doc,design)=simplify_design_candidate(&source,original,strength,uids.as_deref(),remove_detail.unwrap_or(false)).ok_or("No safe reduction found at this level. Original design retained.")?;
         let result=preview(&design);
         w.checkpoint_named("Simplify design");w.source=Some(doc);w.current=Some(design);Ok(result)
     }).await.map_err(|e|e.to_string())?
