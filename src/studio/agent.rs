@@ -1448,19 +1448,22 @@ impl Studio {
             let indices = self.sel_indices();
             let prompt = std::mem::take(&mut self.agent.prompt);
             self.agent.log.push(Entry::You(prompt));
-            let mut changed = 0;
-            for i in indices {
-                if let Some(shape) = self.doc.shapes.get_mut(i) {
-                    if matches!(shape.params.kind, Some(zigzag::params::Kind::Fill | zigzag::params::Kind::Satin)) {
-                        shape.params.spacing = Some(spacing);
-                        changed += 1;
-                    }
-                }
-            }
-            if changed == 0 {
-                self.agent.log.push(Entry::Error("Select explicit fill or satin objects first.".into()));
+            let indices: Vec<_> = indices.into_iter().filter(|&i| {
+                self.doc.shapes.get(i).is_some_and(|shape|
+                    matches!(shape.params.kind, Some(zigzag::params::Kind::Fill | zigzag::params::Kind::Satin))
+                    && shape.params.spacing != Some(spacing))
+            }).collect();
+            if indices.is_empty() {
+                self.agent.log.push(Entry::Error("Select fill or satin objects with different spacing first.".into()));
             } else {
-                self.agent.log.push(Entry::Done(format!("Set spacing to {spacing:.2} mm on {changed} objects.")));
+                let changed = indices.len();
+                match self.structural(|doc| {
+                    for i in indices { doc.shapes[i].params.spacing = Some(spacing); }
+                    Ok(())
+                }) {
+                    Ok(()) => self.agent.log.push(Entry::Done(format!("Set spacing to {spacing:.2} mm on {changed} objects."))),
+                    Err(e) => self.agent.log.push(Entry::Error(e.to_string())),
+                }
             }
             ctx.request_repaint();
             return;
