@@ -416,6 +416,7 @@ impl Studio {
     /// The vertical tool strip, Illustrator-style.
     pub fn tool_strip(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
+        egui::ScrollArea::vertical().id_salt("studio-tool-rail").auto_shrink([false, false]).show(ui, |ui| {
         ui.vertical_centered(|ui| {
             ui.spacing_mut().item_spacing.y = 4.0;
             ui.add_space(8.0);
@@ -454,6 +455,9 @@ impl Studio {
                 };
                 let r = icon_button(ui, icon, label, self.tool == t, 30.0).on_hover_text(tip);
                 if r.clicked() {
+                    self.set_tool(t);
+                }
+                if ui.small_button(if t == Tool::Text { "Text" } else { label }).clicked() {
                     self.set_tool(t);
                 }
             }
@@ -558,7 +562,7 @@ impl Studio {
                 }
             }
             // At the bottom, apart from the tools: the agent's panel.
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+            ui.vertical_centered(|ui| {
                 ui.add_space(10.0);
                 let on = self.agent_showing();
                 let r = icon_button(ui, Icon::Sparkle, "Agent", on, 30.0).on_hover_text(format!(
@@ -574,6 +578,7 @@ impl Studio {
                     self.toggle_agent();
                 }
             });
+        });
         });
     }
 
