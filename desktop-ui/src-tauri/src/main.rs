@@ -136,13 +136,24 @@ fn regenerate_satin_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::
     let mut lengths=vec![0.0];
     for q in mid.windows(2){lengths.push(lengths.last().copied().unwrap_or(0.0)+q[0].dist(q[1]));}
     let length=*lengths.last()?;
-    let count=(length/pitch).round().max(1.0) as usize;
-    if count>100_000{return None}
+    // Curved columns need enough stitches on the outer rail, without
+    // crowding the inner rail. Accumulate local effective advance and
+    // use its arc length to interpolate paired edges.
+    let mut advance=vec![0.0];
+    for i in 0..pairs.len()-1{
+        let outer=pairs[i].0.dist(pairs[i+1].0).max(pairs[i].1.dist(pairs[i+1].1));
+        let center=mid[i].dist(mid[i+1]);
+        let effective=center.max(outer*0.8);
+        advance.push(advance.last().copied().unwrap_or(0.0)+effective);
+    }
+    let effective=*advance.last()?;
+    let count=(effective/pitch).round().max(1.0) as usize;
+    if count>100_000||length<=0.0{return None}
     let mut out=Vec::with_capacity((count+1)*2);let mut k=0;
     for i in 0..=count{
-        let target=length*i as f64/count as f64;
-        while k+1<lengths.len()-1&&lengths[k+1]<target{k+=1;}
-        let t=((target-lengths[k])/(lengths[k+1]-lengths[k]).max(1e-9)).clamp(0.0,1.0);
+        let target=effective*i as f64/count as f64;
+        while k+1<advance.len()-1&&advance[k+1]<target{k+=1;}
+        let t=((target-advance[k])/(advance[k+1]-advance[k]).max(1e-9)).clamp(0.0,1.0);
         let a=pairs[k].0.lerp(pairs[k+1].0,t);
         let b=pairs[k].1.lerp(pairs[k+1].1,t);
         out.extend([a,b]);
@@ -176,7 +187,7 @@ fn regenerate_fill_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::g
     }
     if sign!=0{rows.push((start,end,sign));}
     if rows.len()<6||rows.first()?.0!=0||rows.last()?.1!=p.len()-1{return None}
-    let mut edges=Vec::new();let mut pitch=Vec::new();let mut width=Vec::new();
+    let mut edges:Vec<(P,P)>=Vec::new();let mut pitch=Vec::new();let mut width=Vec::new();
     let mut row_segments=0usize;
     for (i,&(a,b,dir)) in rows.iter().enumerate(){
         if b-a<2{return None}
@@ -198,7 +209,7 @@ fn regenerate_fill_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::g
     if !(2.0..=8.0).contains(&spacing)||pitch.iter().any(|v|v.signum()!=pitch[0].signum()||v.abs()<spacing*0.55||v.abs()>spacing*1.6){return None}
     let min_width=width.iter().copied().fold(f64::INFINITY,f64::min);
     let max_width=width.iter().copied().fold(0.0,f64::max);
-    if min_width<30.0||max_width>min_width*1.8{return None}
+    if min_width<30.0||max_width>min_width*4.0{return None}
     // Reject abrupt edge changes so a hole or a split fill cannot be
     // mistaken for a single solid panel.
     for q in edges.windows(2){
@@ -218,9 +229,18 @@ fn regenerate_fill_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::g
         let t=((target-lengths[k])/(lengths[k+1]-lengths[k]).max(1e-9)).clamp(0.0,1.0);
         let l=edges[k].0.lerp(edges[k+1].0,t);let r=edges[k].1.lerp(edges[k+1].1,t);
         let (a,b)=if (i%2==0)==(rows[0].2>0){(l,r)}else{(r,l)};
-        let step_count=(a.dist(b)/30.0).ceil().max(1.0) as usize;
-        if result.len().saturating_add(step_count+1)>2_000_000{return None}
-        for j in 0..=step_count{result.push(a.lerp(b,j as f64/step_count as f64));}
+        // Stagger interior needle penetrations in adjacent rows rather than
+        // lining up all punctures into visible perforation columns.
+        let distance=a.dist(b);
+        let phase=if i%2==0{0.0}else{15.0};
+        let mut step=30.0-phase;
+        result.push(a);
+        while step<distance-8.0{
+            if result.len()>=2_000_000{return None}
+            result.push(a.lerp(b,step/distance));step+=30.0;
+        }
+        result.push(b);
+        if result.len()>2_000_000{return None}
     }
     Some(result)
 }
@@ -1935,6 +1955,7 @@ fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).inv
 #[cfg(test)]
 mod fixed_resize_tests {
  use super::*;use zigzag::geom::P;
+ #[test] fn curved_satin_preserves_endpoints(){let mut p=Vec::new();for i in 0..16{let a=i as f64*0.08;for r in [40.,60.]{p.push(P::new(r*a.cos()*1.5,r*a.sin()*1.5));}}let q=regenerate_satin_run(&p,1.5,1.5).unwrap();assert!(q.len()>p.len());assert!(q[0].dist(p[0])<0.001);assert!(q.last().unwrap().dist(*p.last().unwrap())<0.001);}
  #[test] fn running_stitch_pitch_survives_resize(){let p:Vec<_>=(0..12).map(|i|P::new(i as f64*40.,0.)).collect();let q=regenerate_running_run(&p,2.,1.).unwrap();assert!(q.len()>p.len());assert_eq!(q.first(),p.first());assert_eq!(q.last(),p.last());assert!(reconstruction_ok(&p,&q));}
  #[test] fn rejects_reconstruction_outside_original(){let a=vec![P::new(0.,0.),P::new(100.,0.)];let b=vec![a[0],P::new(50.,100.),a[1]];assert!(!reconstruction_ok(&a,&b));}
  #[test] fn mixed_run_keeps_leading_and_trailing_ties(){let mut p=vec![P::new(-20.,0.),P::new(-20.,0.)];for i in 0..32{p.push(P::new(0.,i as f64*8.));p.push(P::new(30.,i as f64*8.+4.));}p.extend([P::new(40.,260.),P::new(40.,260.)]);let q=regenerate_mixed_run(&p,1.,2.);assert_eq!(&q[..2],&p[..2]);assert_eq!(&q[q.len()-2..],&p[p.len()-2..]);}
