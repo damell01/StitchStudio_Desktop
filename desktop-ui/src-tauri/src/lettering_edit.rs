@@ -1,7 +1,7 @@
 use crate::{Preview, Workspace, editable_base, preview};
 use zigzag::document::{Align, Document, TextSpec};
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize,serde::Serialize)]
 pub(crate) struct LetteringSettings {
     pub text: String,
     pub font: String,
@@ -74,6 +74,30 @@ pub(crate) async fn preview_lettering(settings: LetteringSettings) -> Result<Pre
     }).await.map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+pub(crate) fn lettering_settings(uid:usize,state:tauri::State<'_,std::sync::Mutex<Workspace>>) -> Result<Option<LetteringSettings>,String>{
+ let w=state.lock().map_err(|e|e.to_string())?;
+ let Some(doc)=w.source.as_ref() else{return Ok(None)};
+ let Some(index)=doc.shapes.iter().position(|s|s.uid==uid) else{return Ok(None)};
+ Ok(doc.lettering(index).map(|s|LetteringSettings{text:s.text,font:s.font,size:s.size_mm,spacing:s.spacing_mm,arc:s.arc_mm,bold:s.bold,italic:s.italic,color:s.color,align:s.align.name().into()}))
+}
+#[tauri::command]
+pub(crate) async fn update_lettering(uid:usize,settings:LetteringSettings,app:tauri::AppHandle)->Result<Preview,String>{
+ use tauri::Manager;
+ tauri::async_runtime::spawn_blocking(move||{
+ let next=settings.spec()?;
+ let state=app.state::<std::sync::Mutex<Workspace>>();
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ let mut doc=w.source.clone().ok_or("No editable design")?;
+ let index=doc.shapes.iter().position(|s|s.uid==uid).ok_or("Text object not found")?;
+ let mut spec=doc.lettering(index).ok_or("Selected object is not editable text")?;
+ spec.text=next.text;spec.font=next.font;spec.size_mm=next.size_mm;spec.spacing_mm=next.spacing_mm;spec.arc_mm=next.arc_mm;spec.bold=next.bold;spec.italic=next.italic;spec.color=next.color;spec.align=next.align;
+ doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+ let design=doc.plan();
+ if design.stitch_count()==0{return Err("No stitches generated".into())}
+ let result=preview(&design);w.checkpoint();w.current=Some(design);w.source=Some(doc);Ok(result)
+ }).await.map_err(|e|e.to_string())?
+}
 #[cfg(test)]
 mod tests {
     use super::*;
