@@ -411,7 +411,7 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
         corners: 60.0,
         noise: speck_area.round().clamp(0.0, 1e6) as u32,
         ignore_white: o.remove_background,
-        snap_curves_to_lines: true,
+        snap_curves_to_lines: false,
         fills: true,
         strokes: o.lines,
         stroke_width: px(o.line_width_mm).max(1.0),
@@ -423,9 +423,9 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
         paths: detail,
         corners: 50.0,
         // Logo mode drops areas under noise/10 px².
-        noise: (speck_area * 10.0).round().clamp(0.0, 1e7) as u32,
+        noise: (speck_area * 5.0).round().clamp(0.0, 1e7) as u32,
         ignore_white: o.remove_background,
-        snap_curves_to_lines: true,
+        snap_curves_to_lines: false,
         ..TraceParams::default()
     };
 
