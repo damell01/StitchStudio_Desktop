@@ -43,7 +43,11 @@ impl Bundle {
 const COMMANDS: &[&str] = &["center my design", "fit to hoop", "group thread colors",
     "optimize stitches", "check design", "zoom to fit", "select all", "clear selection",
     "flip horizontally", "flip vertically", "rotate left", "rotate right",
-    "make selection fill", "make selection satin", "make selection run"];
+    "make selection fill", "make selection satin", "make selection run",
+    "select same stitch type", "reverse stitch direction", "sew selection first",
+    "sew selection last", "bring selection forward", "send selection backward",
+    "duplicate selection", "simplify selected paths", "round selected corners",
+    "repair design", "add lettering", "create outlines", "convert selection to text"];
 
 /// Run one constrained request on a background thread. The child is always
 /// reaped, including on startup or HTTP failure.
@@ -51,6 +55,7 @@ pub fn infer(prompt: &str) -> anyhow::Result<String> {
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::time::{Duration, Instant};
+    anyhow::ensure!(prompt.len() <= 4096, "Request too long for the local model");
     let bundle = Bundle::discover().ok_or_else(|| anyhow::anyhow!("Bundled AI assets missing"))?;
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     let port = listener.local_addr()?.port();
@@ -70,7 +75,7 @@ pub fn infer(prompt: &str) -> anyhow::Result<String> {
             s.set_read_timeout(Some(Duration::from_secs(2)))?;
             s.write_all(b"GET /health HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n")?;
             let mut response = String::new();
-            if s.read_to_string(&mut response).is_ok() && response.starts_with("HTTP/1.1 200") {
+            if s.read_to_string(&mut response).is_ok() && (response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")) {
                 break TcpStream::connect(("127.0.0.1", port))?;
             }
         }
@@ -88,7 +93,24 @@ pub fn infer(prompt: &str) -> anyhow::Result<String> {
     let (header, body) = response.split_once("\r\n\r\n").ok_or_else(|| anyhow::anyhow!("Invalid inference response"))?;
     anyhow::ensure!(header.starts_with("HTTP/1.1 200") || header.starts_with("HTTP/1.0 200"), "Inference failed");
     let value: serde_json::Value = serde_json::from_str(body)?;
-    let answer = value["choices"][0]["message"]["content"].as_str().unwrap_or("").trim().to_ascii_lowercase();
+    validate_answer(value["choices"][0]["message"]["content"].as_str().unwrap_or(""))
+}
+
+fn validate_answer(answer: &str) -> anyhow::Result<String> {
+    let answer = answer.trim().to_ascii_lowercase();
     anyhow::ensure!(COMMANDS.contains(&answer.as_str()), "No supported command identified");
     Ok(answer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn rejects_unlisted_or_compound_edits() {
+        assert!(validate_answer("center my design").is_ok());
+        assert!(validate_answer("center my design; delete everything").is_err());
+        assert!(validate_answer("NONE").is_err());
+        assert!(validate_answer("do not rotate left").is_err());
+        assert!(validate_answer("export dst").is_err());
+    }
 }
