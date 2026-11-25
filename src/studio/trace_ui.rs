@@ -54,45 +54,52 @@ struct RecognizedLine {
     enabled: bool,
 }
 
-// Tesseract runs locally, never uploads artwork. The executable and English
-// language data must be installed (or supplied by the application distributor).
+// Pure Rust CPU inference. Both model files are embedded at compile time.
 fn recognize(image: &Image) -> Result<Vec<RecognizedLine>, String> {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
+    recognize_embedded(image).map_err(|e| format!("Local OCR failed: {e:#}"))
+}
+
+fn recognize_embedded(image: &Image) -> anyhow::Result<Vec<RecognizedLine>> {
+    use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem};
+    use rten::Model;
     let (w, h) = image.size();
-    let mut command = Command::new(std::env::var_os("STITCHSTUDIO_TESSERACT")
-        .unwrap_or_else(|| "tesseract".into()));
-    command.args(["stdin", "stdout", "-l", "eng", "--psm", "11", "tsv"])
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
-    let mut child = command.spawn().map_err(|e| format!(
-        "Local OCR unavailable: {e}. Install Tesseract with English language data, or set STITCHSTUDIO_TESSERACT to its executable."
-    ))?;
-    let input_result = (|| -> std::io::Result<()> {
-        let mut input = std::io::BufWriter::new(child.stdin.take().unwrap());
-        write!(input, "P6\n{w} {h}\n255\n")?;
-        for px in image.rgba().chunks_exact(4) {
-            let a = u16::from(px[3]);
-            let blend = |v: u8| ((u16::from(v)*a + 255*(255-a))/255) as u8;
-            input.write_all(&[blend(px[0]), blend(px[1]), blend(px[2])])?;
+    let mut rgb = Vec::with_capacity(image.rgba().len()/4*3);
+    for px in image.rgba().chunks_exact(4) {
+        let a = u16::from(px[3]);
+        for &v in &px[..3] {
+            rgb.push(((u16::from(v)*a + 255*(255-a))/255) as u8);
         }
-        input.flush()
-    })();
-    let output = child.wait_with_output().map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(format!("Local OCR failed: {}", String::from_utf8_lossy(&output.stderr)));
     }
-    input_result.map_err(|e| e.to_string())?;
-    let mut lines = parse_ocr(&String::from_utf8_lossy(&output.stdout), zigzag::document::default_font());
+    let engine = OcrEngine::new(OcrEngineParams {
+        detection_model: Some(Model::load(include_bytes!(concat!(env!("OUT_DIR"), "/text-detection.rten")).to_vec())?),
+        recognition_model: Some(Model::load(include_bytes!(concat!(env!("OUT_DIR"), "/text-recognition.rten")).to_vec())?),
+        ..Default::default()
+    })?;
+    let input = engine.prepare_input(ImageSource::from_bytes(&rgb, (w,h))?)?;
+    let words = engine.detect_words(&input)?;
+    let regions = engine.find_text_lines(&input, &words);
+    let recognized = engine.recognize_text(&input, &regions)?;
     let fonts = zigzag::document::font_families();
-    for line in &mut lines { line.font = recommend_font(line, &fonts); }
+    let mut lines = Vec::new();
+    for text in recognized.into_iter().flatten() {
+        let rect = text.bounding_rect();
+        let value = text.to_string();
+        if value.trim().is_empty() || rect.width() <= 0 || rect.height() <= 0 { continue; }
+        let mut line = RecognizedLine {
+            text: value,
+            // This backend does not expose a calibrated confidence score.
+            confidence: -1.0,
+            rect: [rect.left() as f64, rect.top() as f64, rect.right() as f64, rect.bottom() as f64],
+            font: zigzag::document::default_font(),
+            enabled: false,
+        };
+        line.font = recommend_font(&line, &fonts);
+        lines.push(line);
+    }
     Ok(lines)
 }
 
+#[cfg(test)]
 fn parse_ocr(tsv: &str, font: String) -> Vec<RecognizedLine> {
     let mut lines = std::collections::BTreeMap::<(u32,u32,u32,u32), (String, f64, usize, [f64;4])>::new();
     for row in tsv.lines().skip(1) {
@@ -554,7 +561,7 @@ impl Studio {
                     egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
                         for (i, line) in t.recognized.iter_mut().enumerate() {
                             ui.horizontal(|ui| {
-                                changed |= ui.checkbox(&mut line.enabled, format!("{:.0}%", line.confidence)).changed();
+                                changed |= ui.checkbox(&mut line.enabled, if line.confidence < 0.0 { "Review".to_string() } else { format!("{:.0}%", line.confidence) }).changed();
                                 changed |= ui.text_edit_singleline(&mut line.text).changed();
                                 egui::ComboBox::from_id_salt(("ocr-font", i)).selected_text(&line.font).show_ui(ui, |ui| {
                                     for font in zigzag::document::font_families() {
