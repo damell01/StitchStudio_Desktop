@@ -52,10 +52,20 @@ fn prepare_ocr_models() {
             fs::copy(source, &dest).expect("copy OCR model");
         } else if !valid(&dest) {
             let tmp = out.join(format!("{name}.download"));
-            let url = format!("https://ocrs-models.s3-accelerate.amazonaws.com/{name}");
-            let status = Command::new("curl").args(["--fail", "--location", "--silent", "--show-error", "--retry", "2", "--connect-timeout", "15", "--max-time", "180", "--output"])
-                .arg(&tmp).arg(url).status().expect("curl is needed for the first OCR model build; alternatively set STITCHSTUDIO_OCR_MODELS");
-            assert!(status.success() && valid(&tmp), "OCR model download or checksum failed: {name}");
+            let urls = [
+                format!("https://github.com/deeplabua/deepocr/releases/download/models-v1/{name}"),
+                format!("https://raw.githubusercontent.com/baras-app/ocr-models/main/{name}"),
+                format!("https://ocrs-models.s3-accelerate.amazonaws.com/{name}"),
+            ];
+            let mut verified = false;
+            for url in urls {
+                let _ = fs::remove_file(&tmp);
+                let status = Command::new("curl").args(["--fail", "--location", "--silent", "--show-error", "--retry", "1", "--connect-timeout", "15", "--max-time", "180", "--output"])
+                    .arg(&tmp).arg(&url).status().expect("curl is required for the first OCR build");
+                if status.success() && valid(&tmp) { verified = true; break; }
+                println!("cargo:warning=OCR model mirror failed verification: {url}");
+            }
+            assert!(verified, "All OCR mirrors failed for {name}. Set STITCHSTUDIO_OCR_MODELS to a directory containing the verified model files.");
             if dest.exists() { fs::remove_file(&dest).expect("remove invalid OCR model"); }
             fs::rename(tmp, &dest).expect("cache verified OCR model");
         }
