@@ -1022,3 +1022,22 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .home-workspace .compact-home-help{display:none}
 @media(max-width:1150px){.home-workspace .home-actions{grid-template-columns:repeat(3,minmax(0,1fr))}.recent-project-grid,.home-workspace .home-resources{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.home-workspace .home-actions,.recent-project-grid,.home-workspace .home-resources{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Lavender studio: keep creation commands visible and inspector controls compact. */
+[data-palette="lavender"][data-theme="light"] .app:has(.editor-workspace) .desktop-nav,
+[data-palette="lavender"][data-theme="light"] .studio-edit-bar{background:#fff;color:#30243e;border-color:#e3dbea}
+[data-palette="lavender"][data-theme="light"] .app:has(.editor-workspace) .desktop-nav summary,
+[data-palette="lavender"][data-theme="light"] .studio-edit-bar :is(.studio-document,.studio-document h1,.studio-tool-icon,.workspace-options summary){color:#38294b}
+[data-palette="lavender"][data-theme="light"] .studio-edit-bar .studio-command-group{border-color:#e3dbea}
+[data-palette="lavender"][data-theme="light"] .studio-edit-bar .studio-tool-icon:is(:hover,[aria-pressed=true]){background:#eee6fa;color:#6945a2}
+.studio-edit-bar .studio-add-text{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;background:#eee6fa;color:#6945a2;border:1px solid #d9c9ef;font-weight:650;padding:6px 9px}
+[data-palette="lavender"][data-theme="light"] .studio-edit-bar .studio-insert-action{background:#f7f3fc;color:#6945a2;border-color:#d9c9ef}
+[data-palette="lavender"][data-theme="light"] .studio-edit-bar .studio-export{background:#754bb0;border-color:#754bb0;color:white}
+.editor-workspace .workspace-sidebar{border-radius:10px;border:1px solid var(--workspace-border);padding:10px}
+.editor-workspace .workspace-sidebar label{margin-block:5px;gap:4px;font-size:12px}
+.editor-workspace .workspace-sidebar :is(input:not([type=checkbox]):not([type=range]),select){padding:6px 8px;min-height:30px;font-size:13px}
+.editor-workspace .workspace-sidebar h3{margin:10px 0 6px}
+.editor-workspace .object-layer-row{min-height:34px;padding:4px 6px}
+.editor-workspace .layers-row-text small{letter-spacing:normal}
+.editor-lettering-modal{width:min(900px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto}
+.editor-lettering-modal .lettering-workspace{margin:0;grid-template-columns:minmax(240px,1fr) minmax(0,1fr)}
