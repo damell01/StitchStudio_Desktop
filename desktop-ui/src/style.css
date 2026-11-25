@@ -1616,3 +1616,9 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .multi-align{display:grid;gap:6px;border-bottom:1px solid var(--workspace-border);padding-bottom:10px!important}
 .multi-align label:has(input[type=checkbox]){display:flex;align-items:center;gap:7px}
 .multi-align small{font-size:11px;letter-spacing:normal}
+
+/* Explicit selection modes for beginner-friendly design movement. */
+.editor-workspace .studio-camera .studio-selection-mode{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:12px;padding:5px 8px}
+.editor-workspace .studio-camera .studio-selection-mode[aria-pressed=true]{background:var(--brand);color:white;border-color:var(--brand)}
+.editor-workspace .design-canvas[data-mode=design] [data-design-group]{cursor:move}
+@media(max-width:1000px){.editor-workspace .studio-camera .studio-selection-mode{font-size:10px;padding:4px}}
