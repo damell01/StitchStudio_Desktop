@@ -52,16 +52,16 @@ impl Studio {
     /// Labeled, discoverable shortcuts backed by the existing editor commands.
     pub fn workspace_toolbar(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
-        ui.horizontal_centered(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 5.0;
             let compact = ui.available_width() < 1180.0;
             for (label, action) in [
                 ("New", Action::New), ("Open", Action::Open), ("Save", Action::Save),
                 ("Undo", Action::Undo), ("Redo", Action::Redo),
                 ("Digitize", Action::Place), ("Add Text", Action::AddText),
-                ("Center", Action::CenterInHoop),
+                ("Center", Action::CenterInHoop), ("Optimize", Action::OptimizeStitches), ("Inspect", Action::ShowIssues),
             ] {
-                let button = if label == "Digitize" {
+                let button = if label == "Digitize" || label == "Add Text" {
                     egui::Button::new(egui::RichText::new(label).strong().color(
                         if p.dark { Color32::from_rgb(23, 30, 26) } else { Color32::WHITE }
                     )).fill(p.accent)
@@ -183,7 +183,7 @@ impl Studio {
                 }
             });
             let tools = [("Resize to hoop", Action::FitToHoop), ("Fit view", Action::ZoomFit),
-                ("Simulate", Action::PlayPause), ("Density", Action::ToggleDensity), ("Inspect", Action::ShowIssues)];
+                ("Simulate", Action::PlayPause), ("Density", Action::ToggleDensity)];
             if compact {
                 ui.menu_button("Design tools", |ui| {
                     for (label, action) in tools {
@@ -203,7 +203,7 @@ impl Studio {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let export = ui.add_enabled(
                     !self.design.blocks.is_empty(),
-                    egui::Button::new(egui::RichText::new("Export").strong()).min_size(Vec2::new(64.0, 28.0))
+                    egui::Button::new(egui::RichText::new("Export design").strong().color(if p.dark { p.desk } else { Color32::WHITE })).fill(p.accent).min_size(Vec2::new(64.0, 28.0))
                 );
                 egui::Popup::menu(&export).show(|ui| {
                     ui.set_min_width(250.0);
@@ -265,7 +265,7 @@ impl Studio {
             ("Choose your hoop", "Choose the hoop matching your machine from the top toolbar."),
             ("Import artwork", "Use Import artwork to trace a picture into editable embroidery shapes."),
             ("Layers and stitches", "Select an object in Layers to change its thread and stitch properties."),
-            ("Fit and position", "Use Fit hoop to resize explicitly, and Fit view to zoom without resizing."),
+            ("Fit and position", "Use Resize to hoop to resize explicitly, and Fit view to zoom without resizing."),
             ("Preview and inspect", "Simulate the sewing order and use Inspect to review potential issues."),
             ("Export", "Choose Export design and select your machine format, such as DST or PES."),
         ];
