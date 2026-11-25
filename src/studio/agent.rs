@@ -112,6 +112,9 @@ pub struct AgentState {
     /// Focus the prompt field next frame.
     pub focus: bool,
     run: Option<Run>,
+    local_result: Option<Receiver<Result<String, String>>>,
+    local_pending: Option<(String, u32)>,
+    local_tab: Option<u32>,
     /// When the running prompt was sent.
     pub started: Option<Instant>,
     /// What agents are doing on the canvas.
@@ -224,7 +227,7 @@ impl AgentState {
     }
 
     pub fn running(&self) -> bool {
-        self.run.is_some()
+        self.run.is_some() || self.local_result.is_some()
     }
 
     /// What it's doing now: the step of a tool call still running, else thinking.
@@ -236,6 +239,9 @@ impl AgentState {
     }
 
     pub fn stop(&mut self) {
+        self.local_result = None;
+        self.local_pending = None;
+        self.local_tab = None;
         if let Some(r) = self.run.take() {
             if let Ok(mut c) = r.child.lock() {
                 let _ = c.kill();
@@ -887,6 +893,24 @@ impl Studio {
     /// Take in the agent's output; every frame, whether its panel shows or not.
     pub fn agent_tick(&mut self, ctx: &egui::Context) {
         self.agent.poll();
+        if let Some(rx) = &self.agent.local_result {
+            match rx.try_recv() {
+                Ok(result) => {
+                    self.agent.local_result = None;
+                    match result {
+                        Ok(command) => if let Some(tab) = self.agent.local_tab.take() {
+                            self.agent.local_pending = Some((command, tab));
+                        },
+                        Err(e) => self.agent.log.push(Entry::Error(e)),
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.agent.local_result = None;
+                    self.agent.log.push(Entry::Error("Local AI worker disconnected.".into()));
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+        }
         if self.agent.running() {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
@@ -1137,6 +1161,25 @@ impl Studio {
         let mut send = false;
         let top = ui.cursor().top();
 
+        if let Some((command, tab)) = self.agent.local_pending.clone() {
+            ui.label(format!("Suggested edit: {command}"));
+            ui.horizontal(|ui| {
+                if ui.button("Apply").clicked() {
+                    self.agent.local_pending = None;
+                    if self.tabs.list[self.active_tab()].rec == tab {
+                        if let Some(action) = quick_action(&command) {
+                            if self.action_enabled(action) {
+                                self.run_action(action);
+                                self.agent.log.push(Entry::Done("Applied local AI suggestion.".into()));
+                            }
+                        }
+                    } else {
+                        self.agent.log.push(Entry::Error("Document changed; request the edit again.".into()));
+                    }
+                }
+                if ui.button("Dismiss").clicked() { self.agent.local_pending = None; }
+            });
+        }
         let a = &mut self.agent;
         caption(ui, "Native commands are free and offline. External agents use your own account.");
         if ui.checkbox(&mut a.inference_enabled, "Enable AI inference").on_hover_text("Off: only instant native commands; no external AI process is started.").changed() {
@@ -1173,14 +1216,14 @@ impl Studio {
                     }
                     // Its program isn't on this Mac: how to install it instead.
                     let kind = a.kind;
-                    if a.inference_enabled && a.installed(kind, &ui.ctx().clone()) == Some(false) {
+                    if a.inference_enabled && crate::local_ai::Bundle::discover().is_none() {
                         let mut child = ui.new_child(
                             egui::UiBuilder::new()
                                 .max_rect(r)
                                 .layout(egui::Layout::top_down(egui::Align::Min)),
                         );
                         child.add_space((inner_h * 0.5 - 170.0).max(8.0));
-                        install_steps(&mut child, a);
+                        caption(&mut child, "Bundled AI assets are missing. Native commands remain available.");
                         return;
                     }
                     // Nothing yet: what it can do, and a few ideas to start from.
@@ -1388,6 +1431,22 @@ impl Studio {
             ctx.request_repaint();
             return;
         }
+        if crate::local_ai::Bundle::discover().is_some() {
+            let prompt = std::mem::take(&mut self.agent.prompt);
+            self.agent.log.push(Entry::You(prompt.clone()));
+            let (tx, rx) = std::sync::mpsc::channel();
+            self.agent.local_result = Some(rx);
+            self.agent.local_tab = Some(self.tabs.list[self.active_tab()].rec);
+            let ctx = ctx.clone();
+            std::thread::spawn(move || {
+                let _ = tx.send(crate::local_ai::infer(&prompt).map_err(|e| e.to_string()));
+                ctx.request_repaint();
+            });
+            return;
+        }
+        self.agent.log.push(Entry::Error("Bundled AI assets are missing. Native commands remain available.".into()));
+        return;
+        #[allow(unreachable_code)]
         let addr = self.mcp.as_ref().map(|m| m.addr);
         self.agent.send(addr, ctx);
         if self.agent.running() {
