@@ -1756,6 +1756,43 @@ pub fn plan_cached(
                         }
                     }
                 }
+                // The nearest endpoint may be across a hole or between
+                // disconnected islands. For automatic fills, prefer a slightly
+                // farther endpoint reachable by a covered straight stitch.
+                // Bound the geometry checks and preserve reserved end pieces.
+                if opt.hat_order && !force_trim && !from_start && !finishing
+                    && same_shape && cursor.is_some()
+                    && let Some((rings, rule)) = sr.area.as_ref()
+                {
+                    let endpoint = if best_alt {
+                        group[best].alt.as_ref().unwrap()[0]
+                    } else { group[best].pts[best_at] };
+                    let limit = opt.travel_inside.max(100.0);
+                    if best_d > 2.0 && (best_d > limit
+                        || !segment_inside(rings, *rule, here, endpoint, 1.0))
+                    {
+                        let mut nearby = Vec::new();
+                        for (i, piece) in group.iter().enumerate() {
+                            if held == Some(i) { continue; }
+                            let (d, at) = piece.nearest_start(here);
+                            if d <= limit && d <= best_d + 40.0 {
+                                nearby.push((d, i, false, at, piece.pts[at]));
+                            }
+                            if let Some(alt) = &piece.alt {
+                                let d = here.dist(alt[0]);
+                                if d <= limit && d <= best_d + 40.0 {
+                                    nearby.push((d, i, true, 0, alt[0]));
+                                }
+                            }
+                        }
+                        nearby.sort_by(|a,b| a.0.total_cmp(&b.0));
+                        if let Some((_, i, alt, at, _)) = nearby.into_iter().take(8)
+                            .find(|(_,_,_,_,q)| segment_inside(rings,*rule,here,*q,1.0))
+                        {
+                            best=i;best_alt=alt;best_at=at;
+                        }
+                    }
+                }
                 let last_piece = group.len() == 1;
                 let piece = group.swap_remove(best);
                 // (That moved the last piece into the gap: the one kept
