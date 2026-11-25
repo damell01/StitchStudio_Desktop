@@ -220,7 +220,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         if(!active)return;
         const result={art,settings,lines:lines.map(l=>({...l,enabled:true}))};
         setOcr(result);setApproved(result);setOcrFonts(fonts);
-        setOcrMessage(lines.length? `${lines.length} text regions detected automatically. Review or correct the lettering below.`:'No text regions detected; using normal artwork tracing.');
+        setOcrMessage(lines.length? `${lines.length} text regions detected automatically. Expand Review lettering to make corrections.`:'No text regions detected; using normal artwork tracing.');
       } catch(err){if(active){setOcr(null);setApproved(null);setOcrMessage('Lettering recognition unavailable; normal tracing will continue. '+String(err));}}
       finally{if(active){setOcrAttempt(request);setOcrBusy(false);}}
     },250);
@@ -320,14 +320,20 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
           <label><input type="checkbox" checked={autoOcr} onChange={e=>{setAutoOcr(e.target.checked);setOcrAttempt(null);setApproved(null);setOcrMessage('');}}/> Automatically recognize and reconstruct lettering</label>
           {ocrBusy&&<small role="status">Detecting text and matching fonts…</small>}
           {ocrMessage&&<p role="status">{ocrMessage}</p>}
-          {autoOcr&&activeOcr&&<div style={{maxHeight:240,overflow:'auto'}}>
-            {activeOcr.lines.map((line,i)=><div key={i} style={{padding:'8px 0'}}>
-              <label><input type="checkbox" checked={line.enabled} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,enabled:e.target.checked}:l)})}/> Replace region {i+1}</label>
+          {autoOcr&&activeOcr&&<details style={{border:'1px solid var(--border,#ddd)',borderRadius:8,padding:8}}>
+            <summary style={{cursor:'pointer',fontWeight:600}}>Review lettering · {activeOcr.lines.filter(l=>l.enabled).length}/{activeOcr.lines.length} selected</summary>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
+              <button type="button" onClick={()=>setOcr({...activeOcr,lines:activeOcr.lines.map(l=>({...l,enabled:true}))})}>Select all</button>
+              <button type="button" onClick={()=>setOcr({...activeOcr,lines:activeOcr.lines.map(l=>({...l,enabled:false}))})}>Keep all traced</button>
+            </div>
+            {activeOcr.lines.map((line,i)=><details key={i} style={{padding:'6px 0',borderBottom:'1px solid var(--border,#ddd)'}}>
+              <summary style={{cursor:'pointer',fontSize:13}}>{line.enabled?'Replace':'Keep traced'} · {line.text||'Empty region'}</summary>
+              <label><input type="checkbox" checked={line.enabled} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,enabled:e.target.checked}:l)})}/> Replace with editable text</label>
               <input aria-label={'Recognized text '+(i+1)} value={line.text} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,text:e.target.value}:l)})}/>
               <select aria-label={'Font for region '+(i+1)} value={line.font} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,font:e.target.value}:l)})}>{ocrFonts.map(font=><option key={font}>{font}</option>)}</select>
-            </div>)}
-          </div>}
-          {autoOcr&&activeOcr&&<button type="button" disabled={busy||processing} onClick={()=>{setApproved(activeOcr);setStarted(true);setMode('compare')}}>Update lettering preview</button>}
+            </details>)}
+            <button type="button" disabled={busy||processing} onClick={()=>{setApproved(activeOcr);setStarted(true);setMode('compare')}}>Update lettering preview</button>
+          </details>}
           {selected&&<button type="button" onClick={()=>{setAutoOcr(false);setApproved(null);setOcrMessage('Using original traced lettering.')}}>Restore traced lettering</button>}
         </section>}
         {!started&&<button className="primary" disabled={busy||!valid} onClick={()=>setStarted(true)}>Start digitizing · {outputFormat.toUpperCase()}</button>}
