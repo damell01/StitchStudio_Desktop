@@ -613,6 +613,26 @@ fn to_svg(
     let mut body = String::new();
     let mut used: Vec<([u8; 3], usize)> = Vec::new();
     let (mut shapes, mut lines) = (0, 0);
+    // Consolidate perceptually close thread shades, preferring the color
+    // covering the most artwork. Keep neutral and chromatic colors separate.
+    let mut palette: Vec<([u8; 3], usize)> = Vec::new();
+    for p in &t.paths {
+        if let Some(entry) = palette.iter_mut().find(|e| e.0 == p.color) {
+            entry.1 += p.pixels;
+        } else { palette.push((p.color, p.pixels)); }
+    }
+    palette.sort_by_key(|e| std::cmp::Reverse(e.1));
+    let neutral = |c: [u8; 3]| c.iter().max().unwrap() - c.iter().min().unwrap() < 24;
+    let mut representatives: Vec<[u8; 3]> = Vec::new();
+    let mut mapping = std::collections::HashMap::new();
+    for (c, _) in palette {
+        let match_color = representatives.iter().copied().find(|&q| {
+            neutral(c) == neutral(q) &&
+            c.iter().zip(q.iter()).map(|(&a,&b)| (f64::from(a)-f64::from(b)).powi(2)).sum::<f64>() <= 32.0_f64.powi(2)
+        }).unwrap_or(c);
+        if !representatives.contains(&match_color) { representatives.push(match_color); }
+        mapping.insert(c, match_color);
+    }
     for (k, p) in t.paths.iter().enumerate() {
         // Thousandths of a pixel: plenty, and a third the size of kurbo's
         // full-precision numbers (every parse, undo step and save is faster).
@@ -628,7 +648,7 @@ fn to_svg(
         if d.is_empty() || (remove_white && white && p.stroke.is_some()) {
             continue;
         }
-        let c = nearest(p.color, threads);
+        let c = nearest(if threads.is_empty() { *mapping.get(&p.color).unwrap_or(&p.color) } else { p.color }, threads);
         match used.iter_mut().find(|(u, _)| *u == c) {
             Some(u) => u.1 += p.pixels,
             None => used.push((c, p.pixels)),
