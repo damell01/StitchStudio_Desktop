@@ -24,6 +24,7 @@ const patchSequence = [
 ] as const;
 
 export function Specialty({ applique, onDone }: { applique: boolean; onDone: () => void }) {
+  const [previewStage,setPreviewStage]=useState(2);
   const [shape, setShape] = useState<(typeof shapes)[number]>(shapes[0]);
   const [inches, setInches] = useState(String(Number((65 / 25.4).toFixed(3))));
   const [busy, setBusy] = useState<'design' | 'export' | null>(null);
@@ -62,9 +63,9 @@ export function Specialty({ applique, onDone }: { applique: boolean; onDone: () 
 
   return <div className="specialty-workspace">
     <article className="specialty-preview">
-      <div className="specialty-figure">
+      <div className="specialty-preview-heading"><h2>Design preview</h2><span>Illustrative stitch finish</span></div><div className="specialty-stage-tabs" role="group" aria-label="Preview sewing stage">{(applique?appliqueSequence:patchSequence).map(([label],i)=><button key={label} aria-pressed={previewStage===i} onClick={()=>setPreviewStage(i)}>{i+1}. {label}</button>)}</div><div className="specialty-figure">
         <svg viewBox="0 0 120 120" role="img" aria-label={shape[1] + ' artwork outline'}>
-          <path transform="translate(10 10)" d={shape[2]} fill="var(--specialty-fill)" stroke="var(--specialty-accent)" strokeWidth="2.5" />
+          <defs><pattern id="specialty-fabric" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#f9f4ff"/><path d="M0 2H8 M2 0V8" stroke="#b89ad9" strokeWidth="3" opacity=".4"/></pattern></defs><path transform="translate(10 10)" d={shape[2]} fill={previewStage===0?"none":"url(#specialty-fabric)"} stroke="var(--specialty-accent)" strokeWidth={previewStage===2?"4":"1.3"} strokeDasharray={previewStage===2?undefined:"2 1.5"}/>{previewStage===2&&<path transform="translate(10 10)" d={shape[2]} fill="none" stroke="#e3d0f7" strokeWidth="2.6" strokeDasharray=".35 .8"/>}
         </svg>
       </div>
       <div className="specialty-figure-caption">
