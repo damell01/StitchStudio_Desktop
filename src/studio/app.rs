@@ -428,6 +428,11 @@ impl Studio {
                     "Couldn't update the stitches ({}); showing the last plan.",
                     crate::planner::panic_text(&e)
                 );
+                self.issues = vec![zigzag::checks::Issue {
+                    shape: None,
+                    level: zigzag::checks::Level::Error,
+                    message: "Stitch planning failed. The displayed stitches are stale; edit or regenerate the design before export.".into(),
+                }];
                 self.dirty = false;
                 self.planner.superseded();
                 return;
