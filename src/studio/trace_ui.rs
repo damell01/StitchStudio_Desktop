@@ -87,8 +87,10 @@ fn recognize(image: &Image) -> Result<Vec<RecognizedLine>, String> {
         return Err(format!("Local OCR failed: {}", String::from_utf8_lossy(&output.stderr)));
     }
     input_result.map_err(|e| e.to_string())?;
-    Ok(parse_ocr(&String::from_utf8_lossy(&output.stdout),
-        zigzag::document::default_font()))
+    let mut lines = parse_ocr(&String::from_utf8_lossy(&output.stdout), zigzag::document::default_font());
+    let fonts = zigzag::document::font_families();
+    for line in &mut lines { line.font = recommend_font(line, &fonts); }
+    Ok(lines)
 }
 
 fn parse_ocr(tsv: &str, font: String) -> Vec<RecognizedLine> {
@@ -115,6 +117,30 @@ fn parse_ocr(tsv: &str, font: String) -> Vec<RecognizedLine> {
     }).collect();
     result.sort_by(|a,b| a.rect[1].total_cmp(&b.rect[1]).then(a.rect[0].total_cmp(&b.rect[0])));
     result
+}
+
+fn recommend_font(line: &RecognizedLine, fonts: &[String]) -> String {
+    use zigzag::{document::{Document, TextSpec}, svg::shapes_bounds};
+    let aspect = (line.rect[2]-line.rect[0])/(line.rect[3]-line.rect[1]);
+    let mut best = (f64::INFINITY, line.font.clone());
+    // A small, common installed-font shortlist avoids measuring hundreds
+    // of fonts on the OCR worker. Match proportions, not font identity.
+    for font in std::iter::once(&line.font).chain(fonts.iter().filter(|f|
+        ["Arial", "Arial Narrow", "Helvetica", "Times New Roman", "Georgia",
+         "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Liberation Serif",
+         "Poppins", "Inter", "Verdana", "Courier New"].contains(&f.as_str()))) {
+        let mut doc = Document::empty();
+        let spec = TextSpec { text: line.text.clone(), font: font.clone(),
+            spacing_mm: 0.0, ..TextSpec::default() };
+        if let Ok(i) = doc.add_lettering(&spec, (0.0,0.0)) {
+            let b = shapes_bounds(std::slice::from_ref(&doc.shapes[i]));
+            if b.width() > 0.0 && b.height() > 0.0 {
+                let score = ((b.width()/b.height())/aspect).ln().abs();
+                if score < best.0 { best = (score, font.clone()); }
+            }
+        }
+    }
+    best.1
 }
 
 fn reconstruct(r: &Traced, lines: &[RecognizedLine], mm_per_px: f64) -> anyhow::Result<Traced> {
@@ -159,8 +185,8 @@ const PREVIEW: Vec2 = Vec2::new(380.0, 300.0);
 
 /// Draw SVG text into an image that fits `max` (for the preview).
 fn rasterize(svg: &str, max: Vec2) -> Option<egui::ColorImage> {
-    use resvg::{tiny_skia, usvg};
-    let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).ok()?;
+    use resvg::tiny_skia;
+    let tree = zigzag::svg::parse_tree(svg.as_bytes()).ok()?;
     let size = tree.size();
     // Twice the window size, so it's sharp on a Retina screen.
     let s = ((max.x * 2.0) / size.width()).min((max.y * 2.0) / size.height());
@@ -604,6 +630,17 @@ mod tests {
     use super::*;
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
+
+    #[test]
+    fn ocr_groups_words_and_requires_explicit_review() {
+        let tsv = "header\n5\t1\t1\t1\t1\t1\t10\t20\t30\t10\t90\tMATTHEW\n5\t1\t1\t1\t1\t2\t45\t20\t20\t10\t80\t17:20\n5\t1\t1\t1\t2\t1\t15\t40\t30\t10\t95\tSEED";
+        let lines = parse_ocr(tsv, "Test".into());
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].text, "MATTHEW 17:20");
+        assert_eq!(lines[0].rect, [10.0,20.0,65.0,30.0]);
+        assert_eq!(lines[0].confidence, 85.0);
+        assert!(lines.iter().all(|l| !l.enabled));
+    }
 
     fn logo_png(dir: &Path) -> PathBuf {
         let png = vectorcraft_trace::Raster::from_fn(160, 80, |x, y| {
