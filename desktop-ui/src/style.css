@@ -857,3 +857,61 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .editor-workspace .studio-camera-grip { cursor: grab; touch-action: none; }
 .editor-workspace .studio-camera-grip:active { cursor: grabbing; }
 .object-layer-row small { flex-shrink: 0; white-space: nowrap; }
+
+.layers-dock-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  gap: 7px;
+  padding-bottom: 8px;
+  background: var(--workspace-surface);
+}
+.layers-dock-title { display: flex; align-items: center; gap: 7px; color: var(--workspace-accent); }
+.editor-workspace .layers-dock-title h2 {
+  position: static;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--workspace-text);
+  font-size: 14px;
+}
+.layers-dock-header .workspace-segments { margin: 0; }
+.layers-dock-header .workspace-segments button { justify-content: space-between; gap: 4px; }
+.layers-dock-header .workspace-segments button span {
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--workspace-surface);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.layers-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-inline: 8px;
+  margin: 0 0 7px;
+  color: var(--workspace-accent);
+  border: 1px solid var(--workspace-border);
+  border-radius: 7px;
+}
+.editor-workspace .layers-search input { min-width: 0; width: 100%; border: 0; padding: 5px 0; background: transparent; }
+.editor-workspace .layers-search:focus-within { outline: 2px solid var(--workspace-accent); outline-offset: 1px; }
+.editor-workspace .object-layer-row { margin: 0 0 4px; padding: 5px 7px; min-height: 41px; gap: 8px; }
+.layers-swatch { display: block; width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--workspace-border); }
+.object-layer-row .layers-swatch { flex: 0 0 15px; }
+.object-layer-row .layers-row-text, .layers-row-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.layers-row-text :is(strong,small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layers-row-text strong { font-size: 12px; }
+.layers-row-text small { font-size: 10px; opacity: .82; margin-left: 0; text-transform: capitalize; }
+.layers-object-properties { padding-top: 8px; border-top: 1px solid var(--workspace-border); }
+.layers-object-properties h3 { font-size: 12px; }
+.layers-thread-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0,1fr) auto;
+  gap: 6px;
+  padding: 5px 2px;
+  border-color: var(--workspace-border);
+}
+.layers-thread-row select { grid-column: 1 / -1; width: 100%; }

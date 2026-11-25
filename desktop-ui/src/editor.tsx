@@ -8,7 +8,7 @@ import {ExportCenter} from './export-center';
 import {readThreads} from './threads';
 import {StitchPicker} from './stitch-guide';
 import {useState,useEffect,useRef,useMemo,type PointerEvent as ReactPointerEvent} from 'react';
-import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2,GripHorizontal} from 'lucide-react';
+import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2,GripHorizontal,Search,X,Waypoints} from 'lucide-react';
 import {invoke,isTauri} from '@tauri-apps/api/core';
 type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
 type EditableObject={uid:number;label:string;color:number[];kind:string;bounds?:[number,number,number,number];path?:string;fill_rule?:'evenodd'|'nonzero';stroke_width?:number};
@@ -34,7 +34,7 @@ const [resizePreview,setResizePreview]=useState<ResizeOperation|null>(null);
 const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchorX:number;anchorY:number}|null>(null);
 const objectGesture=useRef<{uid:number;x:number;y:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
-const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,8);
+const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
 const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'>('hoop');
 const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(''),[hoop,setHoop]=useState('');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
@@ -50,6 +50,7 @@ useEffect(()=>{
   if(plan)void invoke<string|null>('current_fabric').then(value=>{if(active&&value)setFabric(value);}).catch(()=>{});
   return ()=>{active=false;};
 },[plan]);
+const threadPage=usePagedList(plan?.blocks??[],'layer-threads',6);
 const resizeHandles:ResizeHandle[]=selected?.bounds&&selected.kind!=='manual'
   &&selected.bounds[2]>.001&&selected.bounds[3]>.001
   ? [[-1,-1,'nwse-resize'],[0,-1,'ns-resize'],[1,-1,'nesw-resize'],[1,0,'ew-resize'],
@@ -275,16 +276,55 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </div>
 {busy&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:'minmax(0,1fr)'}}>
 <article className="workspace-sidebar studio-layers-dock" style={{width:`min(${leftWidth}px, 36vw)`}}>
-  <h2>Layers</h2>
-  <div className="workspace-segments" role="group" aria-label="Layers">
-    <button aria-pressed={layerTab==='objects'} onClick={()=>setLayerTab('objects')}>Objects{objects.length>0?` (${objects.length})`:''}</button>
-    <button aria-pressed={layerTab==='threads'} onClick={()=>setLayerTab('threads')}>Threads</button>
+  <div className="layers-dock-header">
+    <div className="layers-dock-title"><Layers3 size={17} aria-hidden="true"/><h2>Layers</h2>
+      <button className="studio-tool-icon" title="Close layers" aria-label="Close layers" onClick={()=>setLeft(false)}><X size={15}/></button>
+    </div>
+    <div className="workspace-segments" role="group" aria-label="Layers">
+      <button aria-pressed={layerTab==='objects'} onClick={()=>setLayerTab('objects')}>Objects <span>{objects.length}</span></button>
+      <button aria-pressed={layerTab==='threads'} onClick={()=>setLayerTab('threads')}>Threads <span>{plan?.blocks.length??0}</span></button>
+    </div>
   </div>
   {layerTab==='objects' && (objects.length ? <section className="workspace-object-list">
-    <p className="inspector-label">{objects.length} editable {objects.length===1?"object":"objects"}</p><input aria-label="Search objects" placeholder="Search objects" value={objectQuery} onChange={e=>setObjectQuery(e.target.value)}/><div>{objectPage.items.map(o=><button key={o.uid} aria-pressed={selectedObject===o.uid} onClick={()=>selectObject(o)} className="object-layer-row"><span style={{background:'rgb('+o.color.join(',')+')',width:12,height:12,borderRadius:3}}/>{o.label||'Object '+o.uid}<small>{o.kind}</small></button>)}</div><ListNavigation {...objectPage}/>{selectedObject!==null&&<><h3>Selected object stitch type</h3><StitchPicker value={objectKind} onChange={setObjectKind}/><button disabled={busy||objectKind==='manual'} onClick={()=>edit('set_object_kind',{uid:selectedObject,kind:objectKind})}>Apply to selected object</button></>}
-  </section> : <p className="workspace-helper">{plan ? 'This design contains machine stitch paths. Use Threads to inspect its color blocks.' : 'Artwork and templates appear here after you open a design.'}</p>)}
+    <label className="layers-search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Search objects"
+      placeholder="Find an object" value={objectQuery} onChange={event=>setObjectQuery(event.target.value)}/></label>
+    {!objectPage.total&&<p className="workspace-helper">No objects match your search.</p>}
+    <div className="layers-object-rows">
+      {objectPage.items.map(object=>{
+        const name=object.label||`Object ${object.uid+1}`;
+        return <button key={object.uid} aria-pressed={selectedObject===object.uid} onClick={()=>selectObject(object)} className="object-layer-row" title={name}>
+          <span className="layers-swatch" style={{backgroundColor:`rgb(${object.color.join(',')})`}}/>
+          <span className="layers-row-text"><strong>{name}</strong><small>{object.kind==='manual'?'Fixed stitch path':object.kind==='auto'?'Automatic stitch type':object.kind}</small></span>
+        </button>;
+      })}
+    </div>
+    <ListNavigation {...objectPage}/>
+    {selected?.kind==='manual'&&<p className="workspace-helper"><Waypoints size={14} aria-hidden="true"/> This stitched path can be moved. Use the Size inspector for resizing.</p>}
+    {selected&&selected.kind!=='manual'&&<div className="layers-object-properties">
+      <h3>Selected object stitch type</h3><StitchPicker value={objectKind} onChange={setObjectKind}/>
+      <button disabled={busy||objectKind==='manual'} onClick={()=>edit('set_object_kind',{uid:selected.uid,kind:objectKind})}>Apply to selected object</button>
+    </div>}
+  </section> : <p className="workspace-helper">{plan ? 'This design has stitch paths. Open Threads to inspect the color blocks.' : 'Open artwork or insert a design to see its objects.'}</p>)}
   {layerTab==='threads' && (plan ? <section className="workspace-thread-list">
-    {plan?.blocks.map((b,i)=><div className="thread-row" key={i}><span style={{display:'inline-block',width:16,height:16,background:'rgb('+b.color.join(',')+')'}}/> Thread {i+1}<input aria-label={"Thread "+(i+1)+" color"} type="color" disabled={busy} value={"#"+b.color.map(v=>v.toString(16).padStart(2,"0")).join("")} onChange={e=>{const v=e.target.value;void edit("recolor_block",{index:i,color:[1,3,5].map(n=>parseInt(v.slice(n,n+2),16))})}}/>{threadLibrary.length>0&&<select aria-label={'Assign saved thread '+(i+1)} value="" disabled={busy} onChange={e=>{const t=threadLibrary.find(t=>t.id===e.target.value);if(t)void edit('recolor_block',{index:i,color:[1,3,5].map(n=>parseInt(t.color.slice(n,n+2),16))})}}><option value="">Saved thread…</option>{threadLibrary.map(t=><option key={t.id} value={t.id}>{t.brand} {t.code} {t.name}</option>)}</select>}<button title={hidden.includes(i)?"Show this thread in the preview":"Hide this thread in the preview"} aria-label={hidden.includes(i)?"Show thread preview":"Hide thread preview"} onClick={()=>setHidden(h=>h.includes(i)?h.filter(x=>x!==i):[...h,i])}>{hidden.includes(i)?<EyeOff size={15}/>:<Eye size={15}/>}</button></div>)}
+    {threadPage.items.map((block,offset)=>{
+      const index=threadPage.start+offset;
+      const color='#'+block.color.map(value=>value.toString(16).padStart(2,'0')).join('');
+      const concealed=hidden.includes(index);
+      function recolor(value:string) {
+        void edit('recolor_block',{index,color:[1,3,5].map(position=>parseInt(value.slice(position,position+2),16))});
+      }
+      return <div className="thread-row layers-thread-row" key={index}>
+        <input aria-label={`Thread ${index+1} color`} type="color" disabled={busy} value={color} onChange={event=>recolor(event.target.value)}/>
+        <div className="layers-row-text"><strong>Thread {index+1}</strong><small>{color.toUpperCase()}</small></div>
+        <button title={concealed?'Show this thread in the preview':'Hide this thread in the preview'} aria-label={concealed?'Show thread preview':'Hide thread preview'}
+          onClick={()=>setHidden(items=>concealed?items.filter(item=>item!==index):[...items,index])}>{concealed?<EyeOff size={15}/>:<Eye size={15}/>}</button>
+        {!!threadLibrary.length&&<select aria-label={`Assign saved thread ${index+1}`} value="" disabled={busy} onChange={event=>{
+          const thread=threadLibrary.find(item=>item.id===event.target.value);
+          if(thread)recolor(thread.color);
+        }}><option value="">Saved thread…</option>{threadLibrary.map(thread=><option key={thread.id} value={thread.id}>{thread.brand} {thread.code} {thread.name}</option>)}</select>}
+      </div>;
+    })}
+    <ListNavigation {...threadPage}/>
   </section> : <p className="workspace-helper">Open a design to see its thread order.</p>)}
   <details className="workspace-disclosure">
     <summary>Artwork import settings</summary>
