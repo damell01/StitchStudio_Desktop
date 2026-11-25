@@ -496,8 +496,9 @@ fn fill_runs(
     });
     let light_underlay = opt.hat_order && f.id == "standard"
         && p.underlay.is_none() && small_detail && compact_detail && f.fill_edge_walk;
-    // Avoid a second fill layer on tiny stable-woven automatic details.
-    if p.underlay_on() && !(opt.hat_order && f.id == "standard" && p.underlay.is_none() && narrow) {
+    // Omit cross-hatch only when an actual edge-support path survives inset.
+    if p.underlay_on() {
+        let mut has_edge_support = false;
         if f.fill_edge_walk {
             let inset = boolean::offset(rings, rule, -5.0);
             let walk: Vec<Piece> = inset
@@ -506,6 +507,7 @@ fn fill_runs(
                 .map(|r| Piece::reversible(running(r, true, mm(2.0), 1)))
                 .collect();
             if !walk.is_empty() {
+                has_edge_support = true;
                 groups.push(walk);
             }
         }
@@ -518,7 +520,7 @@ fn fill_runs(
             stagger: 1,
             bottom_up: opt.hat_order,
         };
-        let u: Vec<Piece> = if light_underlay { Vec::new() } else { tatami(rings, rule, &under)
+        let u: Vec<Piece> = if light_underlay && has_edge_support { Vec::new() } else { tatami(rings, rule, &under)
             .into_iter()
             .map(Piece::reversible)
             .collect() };
