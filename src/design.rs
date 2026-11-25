@@ -479,7 +479,14 @@ fn fill_runs(
     let mut region = Bounds::empty();
     rings.iter().flatten().for_each(|&point| region.add(point));
     let narrow = region.width().min(region.height()) < mm(1.5);
-    let small_detail = region.width() * region.height() < 600.0;
+    // Use actual connected filled areas, not a single bounding box around
+    // disconnected letters or a large hollow outline.
+    let components = satin::components(rings, rule);
+    let small_detail = !components.is_empty() && components.iter().all(|comp| {
+        let area = comp.first().map(|r| boolean::ring_area(r).abs()).unwrap_or(0.0)
+            - comp.iter().skip(1).map(|r| boolean::ring_area(r).abs()).sum::<f64>();
+        area < 600.0
+    });
     let light_underlay = opt.hat_order && f.id == "standard" && p.underlay.is_none() && small_detail;
     // Avoid a second fill layer on tiny stable-woven automatic details.
     if p.underlay_on() && !(opt.hat_order && f.id == "standard" && p.underlay.is_none() && narrow) {
@@ -516,7 +523,7 @@ fn fill_runs(
         // Automatic artwork uses a moderate density floor on stable woven.
         // Explicit object spacing and other fabric presets remain untouched.
         spacing: mm(if p.spacing.is_none() && opt.hat_order && f.id == "standard" {
-            if narrow { p.fill_spacing(f) } else { p.fill_spacing(f).max(0.36) }
+            if narrow || small_detail { p.fill_spacing(f) } else { p.fill_spacing(f).max(0.36) }
         } else { p.fill_spacing(f) }),
         len: mm(p.fill_len(f)),
         inset: 0.0,
