@@ -59,6 +59,7 @@ impl Studio {
                 ("New", Action::New), ("Open", Action::Open), ("Save", Action::Save),
                 ("Undo", Action::Undo), ("Redo", Action::Redo),
                 ("Digitize", Action::Place), ("Lettering", Action::AddText),
+                ("Center", Action::CenterInHoop),
             ] {
                 let button = if label == "Digitize" {
                     egui::Button::new(egui::RichText::new(label).strong().color(
@@ -66,7 +67,7 @@ impl Studio {
                     )).fill(p.accent)
                 } else { egui::Button::new(label) };
                 if ui.add_enabled(self.action_enabled(action), button.min_size(Vec2::new(0.0, 28.0)))
-                    .on_hover_text(if label == "Digitize" { "Import artwork and convert it into embroidery objects" } else { label })
+                    .on_hover_text(if label == "Digitize" { "Import artwork and convert it into embroidery objects" } else if label == "Center" { "Center the selection or design in the hoop without resizing" } else { label })
                     .clicked() {
                     self.run_action(action);
                 }
