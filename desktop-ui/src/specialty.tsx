@@ -1,9 +1,10 @@
 import { ArrowUpRight, Download } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { confirmAction, toast } from './dialogs';
 import './specialty.css';
 
+type StitchPlan={stitches:number;blocks:{color:number[];runs:number[][][]}[]};
 const shapes = [
   ['circle', 'Circle', 'M50 5 A45 45 0 0 1 50 95 A45 45 0 0 1 50 5 Z'],
   ['shield', 'Shield', 'M10 10 H90 V48 Q90 75 50 95 Q10 75 10 48 Z'],
@@ -32,6 +33,22 @@ export function Specialty({ applique, onDone }: { applique: boolean; onDone: () 
   const width = Number(inches) * 25.4;
   const validWidth = inches.trim() !== '' && width >= 20 && width <= 200;
 
+  const [actual,setActual]=useState<StitchPlan|null>(null);
+  const [previewStatus,setPreviewStatus]=useState('');
+  useEffect(()=>{
+    setActual(null);setPreviewStatus('');
+    if(!validWidth)return;
+    let active=true;
+    setPreviewStatus('Preparing stitch preview…');
+    const timer=window.setTimeout(()=>{
+      void invoke<StitchPlan>('preview_specialty',{shape:shape[0],style:applique?'applique':'patch',width}).then(plan=>{
+        if(active){setActual(plan);setPreviewStatus('')}
+      }).catch(()=>{if(active)setPreviewStatus('Stitch preview unavailable; showing shape illustration.')});
+    },220);
+    return()=>{active=false;window.clearTimeout(timer)};
+  },[shape,applique,width,validWidth]);
+  const blocks=actual?.blocks.slice(0,applique?previewStage+1:previewStage===0?0:actual.blocks.length)??[];
+  const bounds=(()=>{let x=Infinity,y=Infinity,X=-Infinity,Y=-Infinity;for(const b of actual?.blocks??[])for(const run of b.runs)for(const [a,b] of run){x=Math.min(x,a);y=Math.min(y,b);X=Math.max(X,a);Y=Math.max(Y,b)}return Number.isFinite(x)?[x-4,y-4,Math.max(1,X-x)+8,Math.max(1,Y-y)+8].join(' '):'0 0 120 120'})();
   async function create() {
     if (!await confirmAction('Replace the current design? Save any existing work first.')) return;
     setBusy('design');
@@ -63,13 +80,13 @@ export function Specialty({ applique, onDone }: { applique: boolean; onDone: () 
 
   return <div className="specialty-workspace">
     <article className="specialty-preview">
-      <div className="specialty-preview-heading"><h2>Design preview</h2><span>Illustrative stitch finish</span></div><div className="specialty-stage-tabs" role="group" aria-label="Preview sewing stage">{(applique?appliqueSequence:patchSequence).map(([label],i)=><button key={label} aria-pressed={previewStage===i} onClick={()=>setPreviewStage(i)}>{i+1}. {label}</button>)}</div><div className="specialty-figure">
-        <svg viewBox="0 0 120 120" role="img" aria-label={shape[1] + ' artwork outline'}>
+      <div className="specialty-preview-heading"><h2>Design preview</h2><span>{actual?'Generated stitch preview':'Illustrative stitch finish'}</span></div><div className="specialty-stage-tabs" role="group" aria-label="Preview sewing stage">{(applique?appliqueSequence:patchSequence).map(([label],i)=><button key={label} aria-pressed={previewStage===i} onClick={()=>setPreviewStage(i)}>{i+1}. {label}</button>)}</div><div className="specialty-figure">
+        {actual&&blocks.length>0?<svg className="specialty-real-stitches" viewBox={bounds} role="img" aria-label="Generated stitch paths">{blocks.map((block,i)=><g key={i} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth=".35" strokeLinecap="round">{block.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg>:<svg viewBox="0 0 120 120" role="img" aria-label={shape[1] + ' artwork outline'}>
           <defs><pattern id="specialty-fabric" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#f9f4ff"/><path d="M0 2H8 M2 0V8" stroke="#b89ad9" strokeWidth="3" opacity=".4"/></pattern></defs><path transform="translate(10 10)" d={shape[2]} fill={previewStage===0?"none":"url(#specialty-fabric)"} stroke="var(--specialty-accent)" strokeWidth={previewStage===2?"4":"1.3"} strokeDasharray={previewStage===2?undefined:"2 1.5"}/>{previewStage===2&&<path transform="translate(10 10)" d={shape[2]} fill="none" stroke="#e3d0f7" strokeWidth="2.6" strokeDasharray=".35 .8"/>}
-        </svg>
-      </div>
+        </svg>}
+      </div>{previewStatus&&<p className="muted" role="status">{previewStatus}</p>}
       <div className="specialty-figure-caption">
-        <strong>{shape[1]}</strong>
+        <strong>{shape[1]}</strong>{actual&&<small>{actual.stitches.toLocaleString()} stitch points</small>}
         {validWidth && <span>{Number(inches).toFixed(2)} in · {width.toFixed(1)} mm wide</span>}
       </div>
       <div className="specialty-sequence">
