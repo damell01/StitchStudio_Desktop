@@ -1,5 +1,5 @@
 import {rememberProject,thumbnailOf,type Project} from './library';
-import {Lettering} from './lettering';
+import {InlineLettering} from './lettering';
 import {Type} from 'lucide-react';
 import {GarmentPreview} from './garment-preview';
 import {ThreadOrder,type ThreadAssignments} from './thread-order';
@@ -25,7 +25,7 @@ function panelWidth(key: string, fallback: number, min: number, max: number) {
   const value = Number(localStorage.getItem(key));
   return value >= min && value <= max ? value : fallback;
 }
-export function Editor({beginner=true,navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const textDialog=useRef<HTMLDialogElement>(null);const [focusCanvas,setFocusCanvas]=useState(false);
+export function Editor({beginner=true,navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const [focusCanvas,setFocusCanvas]=useState(false);
 const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
@@ -49,7 +49,7 @@ const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchor
 const objectGesture=useRef<{uid:number;x:number;y:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
 const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
-const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'>('hoop');
+const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'>('hoop');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);setRight(true);setInspectorTab('text')};
 const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(''),[hoop,setHoop]=useState('');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 async function edit(command:string,args:Record<string,unknown>){setBusy(true);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null)}catch(e){setMessage(String(e))}finally{setBusy(false)}}
@@ -102,7 +102,7 @@ useEffect(()=>{if(stitchIndex>=points.length)setPlaying(false);},[stitchIndex,po
 
 function selectObject(object:EditableObject|null) {
   setSelectedObject(object?.uid??null);
-  if(object){setObjectKind(object.kind);setRight(true);setInspectorTab(object.kind==="manual"?"transform":"stitches");}
+  if(object){setObjectKind(object.kind);setRight(true);setInspectorTab(object.kind==="manual"?"transform":"stitches");void invoke<unknown>("lettering_settings",{uid:object.uid}).then(settings=>{if(settings)setSelectedObject(current=>{if(current===object.uid){openText(object.uid)}return current})}).catch(()=>{});}
 }
 
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
@@ -266,7 +266,7 @@ if(e.key==='F11'){e.preventDefault();toggleFocus();return;}
 if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='i'){e.preventDefault();openInsertDialog();return;}
 if(selectedObject!==null&&e.key==='Delete'){e.preventDefault();editSelection({kind:'delete'});return;}
 if(selectedObject!==null&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();editSelection({kind:'duplicate'});return;}
-if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right]);return <><dialog ref={textDialog} className="studio-modal editor-lettering-modal" aria-label="Add text"><div className="studio-modal-heading"><h2>Add text</h2><button onClick={()=>textDialog.current?.close()}>Close</button></div><Lettering monogram={false} onDone={()=>{textDialog.current?.close();void invoke<Plan|null>("current_preview").then(p=>{if(p){setThreadAssignments({});setPlan(p);setPlayhead(null);setPlaying(false);setHidden([])}}).catch(e=>setMessage(String(e)))}}/></dialog><InsertDesignDialog<Plan> dialogRef={insertDialog} onInsert={result=>{
+if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} onInsert={result=>{
   setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);setMessage('');
 }}/><div className={`studio-edit-bar ${focusCanvas?'studio-focus-active':''}`} role="group" aria-label="Design commands">
   <div className="studio-document">
@@ -282,7 +282,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="studio-tool-icon" title="Undo" aria-label="Undo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:false})}><Undo2 size={17}/></button>
     <button className="studio-tool-icon" title="Redo" aria-label="Redo" disabled={!plan||busy} onClick={()=>edit('history_step',{redo:true})}><Redo2 size={17}/></button>
   </div>
-  <div className="studio-command-group studio-design-tools"><button className="studio-add-text" disabled={busy} onClick={()=>textDialog.current?.showModal()}><Type size={17}/> Add Text</button>
+  <div className="studio-command-group studio-design-tools"><button className="studio-add-text" disabled={busy} onClick={()=>openText()}><Type size={17}/> Add Text</button>
     <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/></button>
     <button className="studio-tool-icon" title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('transform')}}><Move size={17}/></button>
     <button className="studio-tool-icon" title="Stitch tools" aria-label="Stitch tools" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('stitches')}}><Scissors size={17}/></button>
@@ -301,7 +301,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {label:'Hoop and machine',group:'Inspector',run:()=>{setRight(true);setInspectorTab('hoop')}},
     {label:'Transform and resize',group:'Inspector',run:()=>{setRight(true);setInspectorTab('transform')},disabled:!plan},
     {label:'Stitch tools and quality',group:'Inspector',run:()=>{setRight(true);setInspectorTab('stitches')},disabled:!plan},
-    {label:'Add Text',group:'Create',run:()=>textDialog.current?.showModal(),disabled:busy},
+    {label:'Add Text',group:'Create',run:()=>openText(),disabled:busy},
     {label:'Insert design',group:'File',run:openInsertDialog,disabled:busy},
     {label:'Duplicate selection',group:'Edit',run:()=>editSelection({kind:'duplicate'}),disabled:busy||!selected},
     {label:'Delete selection',group:'Edit',run:()=>editSelection({kind:'delete'}),disabled:busy||!selected},
@@ -333,7 +333,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 <button aria-pressed={left} onClick={()=>setLeft(v=>!v)}><Layers3 size={24}/><small>Layers</small></button>
 <button disabled={busy} onClick={openInsertDialog}><FilePlus size={23}/><small>Insert</small></button>
 <button onClick={()=>{setRight(true);setInspectorTab('transform')}}><Scissors size={23}/><small>Edit</small></button>
-<button disabled={busy} onClick={()=>textDialog.current?.showModal()}><Type size={23}/><small>Text</small></button>
+<button disabled={busy} onClick={()=>openText()}><Type size={23}/><small>Text</small></button>
 <button disabled={busy} onClick={openInsertDialog} title="Browse shapes and templates"><Shapes size={23}/><small>Shapes</small></button>
 <button disabled={busy} onClick={()=>{const command=navigation.find(n=>n.label==='Digitize an image');if(command)command.run();else void open()}}><Wrench size={23}/><small>Digitize</small></button>
 <button onClick={()=>{setLeft(true);setLayerTab('threads')}}><Palette size={23}/><small>Color</small></button>
@@ -472,8 +472,9 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}><Layers3 size={19}/>Design</button>
     <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={19}/>Sequence</button>
     <button aria-pressed={inspectorTab==='threads'} onClick={()=>setInspectorTab('threads')}><Palette size={19}/>Threads</button>
-    <button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={19}/>Properties</button>
+    <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={19}/>Text</button><button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={19}/>Properties</button>
   </div>
+  {inspectorTab==='text'&&<InlineLettering key={textSession} uid={textTarget} disabled={busy} onBusy={setBusy} onDone={()=>{void invoke<Plan|null>('current_preview').then(p=>{if(p){setPlan(p);setPlayhead(null);setPlaying(false);setHidden([])}}).catch(e=>setMessage(String(e)))}}/>}
   {inspectorTab==='hoop'&&<section className="workspace-inspector-group">
     <h3><SquareDashed size={18}/> Machine setup</h3><label>Machine<select value={machine} onChange={e=>{setMachine(e.target.value);const m=machines.find(p=>p.id===e.target.value);if(m){setWidth(m.width);setHeight(m.height);setHoop("");if(m.format)setFormat(m.format.toLowerCase())}}}><option value="">Manual setup</option>{machines.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label><label>Saved hoop<select value={hoop} onChange={e=>{setHoop(e.target.value);const h=hoops.find(p=>p.id===e.target.value);if(h){setWidth(h.width);setHeight(h.height)}}}><option value="">Custom dimensions</option>{hoops.map(h=><option key={h.id} value={h.id}>{h.name} — {h.width} × {h.height}</option>)}</select></label><div className="workspace-hoop-fields"><label>Width (in) <small>({width.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((width/25.4).toFixed(3))} onChange={e=>{setHoop("");setWidth(Number(e.target.value)*25.4)}}/></label><label>Height (in) <small>({height.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((height/25.4).toFixed(3))} onChange={e=>{setHoop("");setHeight(Number(e.target.value)*25.4)}}/></label></div>
     <label>Export format<select value={format} onChange={e=>setFormat(e.target.value)}>
