@@ -957,7 +957,7 @@ async fn create_lettering(
 ) -> Result<Preview, String> {
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move || {
-        let settings = lettering_edit::LetteringSettings { text, font, size, spacing, arc, bold, italic, color, align, h_scale:None,v_scale:None,kern:None };
+        let settings = lettering_edit::LetteringSettings { text, font, size, spacing, arc, bold, italic, color, align, h_scale:None,v_scale:None,kern:None,path:None,path_offset:None,path_flip:None };
         let spec = settings.spec()?;
         let state = app.state::<Mutex<Workspace>>();
         let mut workspace = state.lock().map_err(|err| err.to_string())?;
