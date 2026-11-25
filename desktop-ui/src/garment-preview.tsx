@@ -57,8 +57,18 @@ const garments = {
       {label:'Right leg (wearer)',x:209,y:294,widthMm:125,heightMm:112},
     ],
   },
+
+  polo:{label:'Collared polo',outline:'M220 43 L172 65 88 144 147 216 195 185 183 405 Q300 423 417 405 L405 185 453 216 512 144 428 65 380 43 Q300 85 220 43Z',zone:'M198 120 H402 L415 395 H185Z',seams:'M220 43 L264 115 300 80 336 115 380 43 M300 80 V158 H315 V100 M94 139 L151 208 M506 139 L449 208 M187 398 Q300 414 413 398',pxPerMm:.48,placements:[{label:'Left chest (wearer)',x:354,y:168,widthMm:100,heightMm:100},{label:'Right chest (wearer)',x:246,y:168,widthMm:100,heightMm:100},{label:'Center front',x:300,y:245,widthMm:270,heightMm:235}]},
+  sweatshirt:{label:'Crewneck sweatshirt',outline:'M230 40 L174 65 Q125 83 104 180 L72 354 132 375 190 222 182 406 Q300 423 418 406 L410 222 468 375 528 354 496 180 Q475 83 426 65 L370 40 Q300 110 230 40Z',zone:'M196 114 H404 L416 390 H184Z',seams:'M230 46 Q300 120 370 46 M80 334 L139 355 M520 334 L461 355 M185 383 Q300 400 415 383',pxPerMm:.46,placements:[{label:'Center front',x:300,y:220,widthMm:280,heightMm:260},{label:'Left chest (wearer)',x:354,y:155,widthMm:105,heightMm:105}]},
+  bubble:{label:'Bubble romper',outline:'M230 45 L174 68 119 127 157 185 192 160 Q155 244 173 330 Q185 390 238 390 L269 414 H331 L362 390 Q415 390 427 330 Q445 244 408 160 L443 185 481 127 426 68 370 45 Q300 100 230 45Z',zone:'M203 110 Q300 130 397 110 L414 300 Q300 342 186 300Z',seams:'M230 49 Q300 110 370 49 M122 126 L160 177 M478 126 L440 177 M180 315 Q240 325 270 410 M420 315 Q360 325 330 410 M280 398 H320 M290 405 h1 M310 405 h1',pxPerMm:.98,placements:[{label:'Center front',x:300,y:205,widthMm:120,heightMm:110},{label:'Upper chest',x:300,y:140,widthMm:100,heightMm:60}]},
+  onesie:{label:'Infant bodysuit',outline:'M230 40 L175 64 112 124 153 190 195 160 194 305 Q218 312 245 375 L265 409 H335 L355 375 Q382 312 406 305 L405 160 447 190 488 124 425 64 370 40 Q300 95 230 40Z',zone:'M205 112 H395 V302 H205Z',seams:'M230 44 Q300 105 370 44 M175 65 Q190 95 224 102 M425 65 Q410 95 376 102 M195 305 Q238 315 265 399 M405 305 Q362 315 335 399 M275 397 H325',pxPerMm:.94,placements:[{label:'Center front',x:300,y:195,widthMm:140,heightMm:150}]},
+  smocked:{label:'Smocked dress',outline:'M232 40 L178 58 120 112 Q115 154 161 178 L192 150 211 180 133 400 Q300 438 467 400 L389 180 408 150 439 178 Q485 154 480 112 L422 58 368 40 Q300 95 232 40Z',zone:'M215 185 H385 L443 385 Q300 415 157 385Z',seams:'M232 44 Q300 105 368 44 M192 148 Q300 191 408 148 M211 180 Q300 208 389 180 M205 155 L215 172 225 161 235 181 245 167 255 187 265 172 275 190 285 174 295 193 305 174 315 190 325 172 335 187 345 167 355 181 365 161 375 172 385 155 M235 208 L214 385 M275 216 L267 400 M325 216 L333 400 M365 208 L386 385',pxPerMm:.78,placements:[{label:'Front below smocking',x:300,y:260,widthMm:155,heightMm:120}]},
+  bishop:{label:'Smocked bishop gown',outline:'M232 42 Q300 92 368 42 L432 63 Q490 112 465 170 L411 180 486 403 Q300 440 114 403 L189 180 135 170 Q110 112 168 63Z',zone:'M207 192 H393 L459 392 Q300 418 141 392Z',seams:'M232 46 Q300 103 368 46 M170 100 Q300 204 430 100 M184 120 Q300 216 416 120 M198 140 Q300 226 402 140 M220 200 L193 389 M270 215 L258 400 M330 215 L342 400 M380 200 L407 389',pxPerMm:.72,placements:[{label:'Front below smocking',x:300,y:275,widthMm:165,heightMm:140}]},
+  dress:{label:'Sleeveless dress',outline:'M225 40 L190 50 180 120 Q205 155 214 165 L132 402 Q300 438 468 402 L386 165 Q395 155 420 120 L410 50 375 40 Q300 105 225 40Z',zone:'M220 128 H380 L450 390 H150Z',seams:'M225 45 Q300 112 375 45 M214 165 Q300 190 386 165 M234 186 L215 395 M366 186 L385 395',pxPerMm:.75,placements:[{label:'Center chest',x:300,y:142,widthMm:120,heightMm:65},{label:'Skirt front',x:300,y:265,widthMm:175,heightMm:140}]},
+  zip:{label:'Zip hoodie',outline:'M232 79 Q221 39 248 24 Q300 -4 352 24 Q379 39 368 79 L419 102 Q474 122 493 247 L513 371 L460 384 L412 252 L423 410 Q300 423 177 410 L188 252 L140 384 L87 371 L107 247 Q126 122 181 102Z',zone:'M195 123 H405 L416 395 H184Z',seams:'M232 79 Q300 155 368 79 M300 119 V410 M185 398 Q300 412 415 398 M210 310 L280 300 V366 H200Z M390 310 L320 300 V366 H400Z',pxPerMm:.47,placements:[{label:'Left chest (wearer)',x:355,y:169,widthMm:105,heightMm:105},{label:'Right chest (wearer)',x:245,y:169,widthMm:105,heightMm:105}]},
 } satisfies Record<string, Garment>;
 type GarmentName = keyof typeof garments;
+const catalog: {id:GarmentName;label:string;group:string;size:SizeName;color:string}[]=[{id:'shirt',label:'Adult T-shirt',group:'Adult',size:'adult',color:'#f9f8f5'},{id:'shirt',label:'Youth T-shirt',group:'Kids',size:'kids',color:'#b4d4ee'},{id:'shirt',label:'Toddler T-shirt',group:'Kids',size:'toddler',color:'#d9c4ef'},{id:'polo',label:'Collared polo',group:'Kids',size:'kids',color:'#344967'},{id:'sweatshirt',label:'Sweatshirt',group:'Adult',size:'adult',color:'#c7c7cc'},{id:'hoodie',label:'Hoodie',group:'Adult',size:'adult',color:'#c9b3e6'},{id:'zip',label:'Zip hoodie',group:'Adult',size:'adult',color:'#9ebbd6'},{id:'bubble',label:'Bubble romper',group:'Infant',size:'toddler',color:'#b4d4ee'},{id:'onesie',label:'Onesie',group:'Infant',size:'toddler',color:'#f9f8f5'},{id:'smocked',label:'Smocked dress',group:'Infant',size:'toddler',color:'#ebadc8'},{id:'bishop',label:'Bishop gown',group:'Infant',size:'toddler',color:'#f2e4db'},{id:'dress',label:'Dress',group:'Kids',size:'kids',color:'#c9b3e6'},{id:'shorts',label:'Shorts',group:'Kids',size:'kids',color:'#a6bca8'},{id:'cap',label:'Cap',group:'Accessories',size:'adult',color:'#344967'}];
 
 function paintMockup(
   canvas: HTMLCanvasElement, garment: Garment, placement: Placement, blocks: Block[],
@@ -143,6 +153,7 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [open,setOpen] = useState(false);
+  const [query,setQuery]=useState(''),[category,setCategory]=useState('All');
   const [garmentName,setGarment] = useState<GarmentName>('shirt');
   const [sizeName,setSizeName] = useState<SizeName>('adult');
   const [angle,setAngle]=useState(0);
@@ -162,7 +173,7 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
   const garment = garments[garmentName];
   const placement = garment.placements[placementIndex];
   const garmentSize = sizes[sizeName];
-  const scale = garment.pxPerMm / garmentSize.ratio;
+  const scale = garment.pxPerMm / (['bubble','onesie','smocked','bishop'].includes(garmentName)?1:garmentSize.ratio);
   const xOffset = (Number(x)||0)*25.4;
   const yOffset = (Number(y)||0)*25.4;
   const bounds=useMemo(()=>{
@@ -172,11 +183,12 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
     }
     return {left,right,top,bottom};
   },[blocks]);
+  const placementRatio=['bubble','onesie','smocked','bishop'].includes(garmentName)?1:garmentSize.ratio;
   const insideZone=!open||!Number.isFinite(bounds.left)||(
-    bounds.left+xOffset>=-placement.widthMm*garmentSize.ratio/2 &&
-    bounds.right+xOffset<=placement.widthMm*garmentSize.ratio/2 &&
-    bounds.top+yOffset>=-placement.heightMm*garmentSize.ratio/2 &&
-    bounds.bottom+yOffset<=placement.heightMm*garmentSize.ratio/2);
+    bounds.left+xOffset>=-placement.widthMm*placementRatio/2 &&
+    bounds.right+xOffset<=placement.widthMm*placementRatio/2 &&
+    bounds.top+yOffset>=-placement.heightMm*placementRatio/2 &&
+    bounds.bottom+yOffset<=placement.heightMm*placementRatio/2);
   function centerDesign(){
     if(!Number.isFinite(bounds.left))return;
     setX((-(bounds.left+bounds.right)/2/25.4).toFixed(3));
@@ -196,10 +208,10 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
       onClick={()=>{dialog.current?.showModal();setOpen(true);}}><Shirt size={18}/></button>
     <dialog ref={dialog} className="studio-modal garment-preview" aria-label="Garment mockup" onClose={()=>setOpen(false)}>
       {open&&<>
-        <div className="studio-modal-heading"><h2>Garment mockup</h2>
+        <div className="studio-modal-heading"><h2>Garment Preview Studio</h2>
           <button onClick={()=>dialog.current?.close()} aria-label="Close garment mockup"><X size={17} aria-hidden="true"/></button>
         </div>
-        <div className="garment-preview-layout">
+        <div className="garment-preview-layout"><aside className="garment-catalog"><h3>Garment catalog</h3><input type="search" aria-label="Search garments" placeholder="Search garments…" value={query} onChange={e=>setQuery(e.target.value)}/><div className="garment-categories">{["All","Infant","Kids","Adult","Accessories"].map(g=><button key={g} aria-pressed={category===g} onClick={()=>setCategory(g)}>{g}</button>)}</div><div className="garment-card-grid">{catalog.filter(g=>(category==="All"||category===g.group)&&g.label.toLowerCase().includes(query.toLowerCase())).map(g=><button key={g.label} aria-pressed={garmentName===g.id&&sizeName===g.size} onClick={()=>{setGarment(g.id);setSizeName(g.size);setColor(g.color);setPlacement(0);setX("");setY("");setAngle(0);setZoom(1)}}><svg viewBox="65 0 470 440" aria-hidden="true"><path d={garments[g.id].outline} fill={g.color} stroke="#6a587e" strokeWidth="2"/><path d={garments[g.id].seams} fill="none" stroke="#6a587e" strokeOpacity=".55" strokeWidth="2"/></svg><strong>{g.label}</strong></button>)}</div></aside>
           <div className="garment-preview-display"><div className="garment-stage-heading"><strong>{garment.label} · {garmentSize.label}</strong><small>{is3d?'3D fabric preview':'Stitched garment preview'}</small></div><div className="garment-preview-stage" data-rotatable={is3d}
             onPointerDown={event=>{
               if(!is3d||event.button!==0)return;
@@ -244,8 +256,8 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
               }}
               aria-label={`Design on ${garmentSize.label.toLowerCase()} ${garment.label}, ${placement.label.toLowerCase()}`}/>}
           </div><div className="garment-stage-footer"><span>{placement.label}</span><span>{insideZone?'Within suggested placement':'Outside suggested placement'}</span></div></div>
-          <div className="garment-preview-options"><h3>Garment setup</h3>
-            <label>Garment<select aria-label="Garment" value={garmentName} onChange={event=>{
+          <div className="garment-preview-options"><h3>Selected garment</h3>
+            <label>Style<select aria-label="Garment" value={garmentName} onChange={event=>{
               setGarment(event.target.value as GarmentName);setPlacement(0);setX('');setY('');
             }}>
               {Object.entries(garments).map(([name,item])=><option key={name} value={name}>{item.label}</option>)}
