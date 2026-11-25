@@ -82,8 +82,8 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
   function open(project: Project) {
     void run(async () => {
       if (!await confirmAction('Open this project? Save existing work first.')) return;
-      const { width, height, format } = await invoke<{ width: number; height: number; format: string }>('library_open', { file: project.file });
-      sessionStorage.setItem('studio-open-project-settings', JSON.stringify({ width, height, format }));
+      const { width, height, format, thread_assignments } = await invoke<{ width: number; height: number; format: string;thread_assignments?:Record<number,string> }>('library_open', { file: project.file });
+      sessionStorage.setItem('studio-open-project-settings', JSON.stringify({ width, height, format, thread_assignments }));
       onDone();
     });
   }
