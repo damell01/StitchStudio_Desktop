@@ -1085,6 +1085,7 @@ struct DigitizerReview {
     jumps: usize,
     dst_stitches: usize,
     color_changes: usize,
+    optimization: Option<[usize;2]>,
 }
 
 #[tauri::command]
@@ -1156,6 +1157,46 @@ async fn digitize_artwork(
                 }
             }
         }
+        // Conservative automatic density optimization for generated raster
+        // artwork only. Keep explicit stitch settings, small details, satin,
+        // specialty stitches and manually imported needle paths unchanged.
+        let mut optimization = None;
+        if mime != "image/svg+xml" && fabric == "standard" && design.stitch_count() <= 100_000 {
+            let mut alternate = document.clone();
+            let mut changed = 0usize;
+            for shape in &mut alternate.shapes {
+                use zigzag::params::Kind;
+                if shape.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill || shape.params.spacing.is_some(){continue}
+                if let zigzag::svg::Geometry::Fill{rings,rule}=&shape.geometry {
+                    let comps=zigzag::stitch::satin::components(rings,*rule);
+                    if comps.len()!=1 || comps[0].len()!=1 {continue}
+                    let area=zigzag::boolean::ring_area(&comps[0][0]).abs();
+                    let bounds=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
+                    if area<20_000.0 || bounds.width().min(bounds.height())<80.0 {continue}
+                    let spacing=shape.params.fill_spacing(zigzag::params::Fabric::standard()).max(0.38);
+                    shape.params.spacing=Some((spacing+0.02).min(0.40).max(spacing));
+                    changed+=1;
+                }
+            }
+            if changed>0 {
+                let candidate=alternate.plan();
+                let before=measure_stitches(&design);
+                let after=measure_stitches(&candidate);
+                let old_bounds=design.bounds();let new_bounds=candidate.bounds();
+                let same_extent=(old_bounds.min.dist(new_bounds.min)<=5.0)&&(old_bounds.max.dist(new_bounds.max)<=5.0);
+                let same_colors=design.blocks.iter().map(|b|b.color).eq(candidate.blocks.iter().map(|b|b.color));
+                let all_preserved=design.per_shape.iter().zip(&candidate.per_shape).all(|(&a,&b)|a==0||b>0);
+                if same_extent && same_colors && all_preserved
+                    && candidate.stitch_count()>=design.stitch_count()*9/10
+                    && candidate.stitch_count()<design.stitch_count()
+                    && candidate.trim_count()<=design.trim_count()
+                    && after.long<=before.long && after.zero<=before.zero
+                    && after.short<=before.short {
+                    optimization=Some([design.stitch_count(),candidate.stitch_count()]);
+                    document=alternate;design=candidate;
+                }
+            }
+        }
         let count = design.stitch_count();
         if count == 0 { return Err("No stitchable artwork found".into()); }
         if count > 2_000_000 { return Err("Design exceeds the two million stitch limit".into()); }
@@ -1204,6 +1245,7 @@ async fn digitize_artwork(
             jumps,
             dst_stitches,
             color_changes,
+            optimization,
         };
         Ok((document, design, review))
     }).await.map_err(|err| err.to_string())??;
