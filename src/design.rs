@@ -1289,7 +1289,7 @@ fn effective_geometry_cached(
         }
         let remaining: Vec<Polyline> = boolean::difference(rings, *rule, &shrunk)
             .into_iter()
-            .filter(|r| r.len() >= 3 && boolean::ring_area(r) > 150.0)
+            .filter(|r| r.len() >= 3 && boolean::ring_area(r) > 12.0)
             .collect();
         out[i] = Geometry::Fill {
             rings: remaining,
