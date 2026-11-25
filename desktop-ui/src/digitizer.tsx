@@ -80,6 +80,21 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const artworkUrl = useArtworkUrl(original);
   const vector = art?.mime === 'image/svg+xml';
   const review = generated?.art === art && generated?.settings === settings && generated.lettering===selected ? generated.review : null;
+  const [comparison,setComparison]=useState<{id:number;variants:{strength:number;plan:Plan|null;reason:string|null}[]}|null>(null);
+  const [compareBusy,setCompareBusy]=useState(false);
+  const [compareError,setCompareError]=useState('');
+  const [chosen,setChosen]=useState(0);
+  const activeComparison=comparison?.id===review?.id?comparison:null;
+  useEffect(()=>{
+    setChosen(0);setCompareError('');setCompareBusy(false);
+    if(!review)return;
+    let active=true;setCompareBusy(true);
+    invoke<{strength:number;plan:Plan|null;reason:string|null}[]>('compare_digitizer_draft',{id:review.id}).then(variants=>{
+      if(!active)return;setComparison({id:review.id,variants});
+    }).catch(e=>{if(active)setCompareError(String(e))}).finally(()=>{if(active)setCompareBusy(false)});
+    return()=>{active=false};
+  },[review?.id]);
+  
   const threadUsage=useMemo(()=>{
     const usage=new Map<string,number>();
     for(const block of review?.plan.blocks??[]){const key=block.color.join(',');let length=0;for(const run of block.runs)for(let i=1;i<run.length;i++)length+=Math.hypot(run[i][0]-run[i-1][0],run[i][1]-run[i-1][1]);usage.set(key,(usage.get(key)??0)+length/1000);}
@@ -231,7 +246,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     if (!review) return;
     setBusy(true);
     try {
-      await invoke('apply_digitizer_draft', { id: review.id });
+      await invoke('apply_digitizer_draft', { id: review.id, strength:activeComparison?chosen:0 });
       sessionStorage.setItem('studio-digitizer-output-format',outputFormat);
       onDone();
     } catch (err) {
@@ -405,11 +420,12 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
             const link=document.createElement('a');link.href=url;link.download=(art?.name||'design')+'-thread-sequence.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
           }}>Download thread sequence CSV</button>
         </section></div>
-        <div className="wizard-actions"><button className="primary" disabled={busy} onClick={openDraft}>Open in design studio · {outputFormat.toUpperCase()} <ArrowRight size={16} /></button></div>
+        <div className="wizard-actions"><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Edit selected design · {outputFormat.toUpperCase()} <ArrowRight size={16} /></button></div>
       </>}
     </article>
     <article className={`artwork-preview review-${mode === 'density' || mode === 'thread' ? 'stitches' : mode}`}>
       <div className="preview-heading"><div><small>DESIGN REVIEW</small><strong title={art?.name}>{art?.name}</strong></div><span className="digitizer-preview-state" role="status">{processing?"Generating":review?"Preview ready":"Artwork"}</span></div>
+      {review&&<section className="digitizer-variant-review" aria-label="Compare embroidery-ready designs"><div className="digitizer-variant-heading"><div><strong>Choose your stitch plan</strong><small>Compare actual stitch paths before editing or exporting.</small></div>{compareBusy&&<span role="status">Optimizing alternatives…</span>}</div>{compareError&&<p role="status">Alternative preview unavailable: {compareError}. Original still available.</p>}<DigitizerVariants base={review.plan} variants={activeComparison?.variants??[]} chosen={chosen} onChoose={setChosen}/><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Use {['original','gentle','balanced','maximum'][activeComparison?chosen:0]} design <ArrowRight size={16}/></button><small>Detailed quality and density report below describes the original digitized plan; inspect the chosen version in the editor.</small></section>}
       {plan&&<div className="digitizer-preview-metrics"><div><small>Stitch points</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Unique colors</small><strong>{colors.size}</strong></div><div><small>Color blocks</small><strong>{plan.blocks.length}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div></div>}<div className="review-switch" role="group" aria-label="Preview options">
         {(['compare', 'stitches', 'original'] as const).map(view =>
           <button key={view} aria-pressed={mode === view} onClick={() => setMode(view)}>
@@ -451,4 +467,12 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       </>}
     </article>
   </div>;
+}
+
+function DigitizerVariants({base,variants,chosen,onChoose}:{base:Plan;variants:{strength:number;plan:Plan|null;reason:string|null}[];chosen:number;onChoose:(n:number)=>void}){
+ const all=[{strength:0,plan:base,reason:null},...variants];
+ const view=useMemo(()=>{let l=Infinity,t=Infinity,r=-Infinity,b=-Infinity;for(const v of all)for(const block of v.plan?.blocks??[])for(const run of block.runs)for(const [x,y] of run){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);b=Math.max(b,y)}return Number.isFinite(l)?[l-3,t-3,Math.max(6,r-l+6),Math.max(6,b-t+6)].join(' '):'0 0 100 100'},[base,variants]);
+ const minutes=(p:Plan)=>p.stitches/800+p.trims*3/60+Math.max(0,p.blocks.length-1)*8/60;
+ const fastest=all.filter(v=>v.plan).reduce((a,b)=>minutes(a.plan!)<=minutes(b.plan!)?a:b);
+ return <><div className="digitizer-variant-grid">{all.map(v=><button type="button" key={v.strength} disabled={!v.plan} aria-pressed={chosen===v.strength} onClick={()=>onChoose(v.strength)} className="digitizer-variant-card"><strong>{['Original','Gentle','Balanced','Maximum'][v.strength]}</strong>{v.plan?<><svg viewBox={view} aria-label="Stitch paths">{v.plan.blocks.map((b,i)=><g key={i} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".3" strokeLinecap="round">{b.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg><b>{v.plan.stitches.toLocaleString()} stitches</b><span>{v.plan.trims} trims · ~{Math.ceil(minutes(v.plan))} min</span>{v.strength===fastest.strength&&<small>Fastest available</small>}{v.strength>0&&<small>{Math.round((minutes(base)-minutes(v.plan))/Math.max(.01,minutes(base))*100)}% estimated time saved</small>}</>:<small title={v.reason??''}>No eligible improvement</small>}</button>)}</div><small>Estimates: 800 stitches/min, 3 sec/trim, 8 sec/color change. Test sew for coverage.</small></>
 }
