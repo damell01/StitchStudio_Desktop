@@ -36,7 +36,7 @@ async fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, app: taur
     if let Some(mut doc)=guard.source.clone(){
         let indices:Vec<usize>=(0..doc.shapes.len()).collect();
         doc.transform(&indices,[scale*c,scale*s,-scale*s,scale*c,dx*10.0,dy*10.0]).map_err(|e|e.to_string())?;
-        if scale!=1.0 {let uids:Vec<_>=doc.shapes.iter().map(|s|s.uid).collect();correct_resized_manual_paths(&mut doc,&uids,scale<1.0)?;}
+        if scale!=1.0 {let uids:Vec<_>=doc.shapes.iter().map(|s|s.uid).collect();correct_resized_manual_paths(&mut doc,&uids,scale,scale)?;}
         let design=doc.plan();if design.blocks.is_empty(){return Err("Transformation produced no stitches".into())}
         let p=preview(&design);guard.checkpoint_named("Transform design");guard.current=Some(design);guard.source=Some(doc);return Ok(p)
     }
@@ -93,7 +93,7 @@ fn resize_fixed_run(points:&[zigzag::geom::P],shrink:bool)->Vec<zigzag::geom::P>
                 let len=ab.len();
                 // Do not remove ties, direction reversals, or sharp turns.
                 if a.dist(p)>0.001 && a.dist(p)<2.0 && p.dist(b)>0.001 && len>0.001 && len<=35.0 &&
-                    ap.dot(ab)>0.0 && ap.dot(ab)<len*len && ap.cross(ab).abs()/len<0.5 {continue}
+                    ap.dot(ab)>0.0 && ap.dot(ab)<len*len && zigzag::geom::cross(ap,ab).abs()/len<0.5 {continue}
             }
         }
         kept.push(p);
@@ -108,7 +108,49 @@ fn resize_fixed_run(points:&[zigzag::geom::P],shrink:bool)->Vec<zigzag::geom::P>
     }
     out
 }
-fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize],shrink:bool)->Result<(),String>{
+// Rebuild a confidently identified alternating satin section using the
+// original along-column pitch. Coordinates here are already transformed.
+fn regenerate_satin_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::geom::P>>{
+    use zigzag::geom::P;
+    if p.len()<12||p.len()>100_000||p.len()%2!=0{return None}
+    let original=|v:P|P::new(v.x/sx,v.y/sy);
+    let pairs:Vec<(P,P)>=p.chunks_exact(2).map(|q|(q[0],q[1])).collect();
+    let mid:Vec<P>=pairs.iter().map(|(a,b)|a.lerp(*b,0.5)).collect();
+    let mut pitches=Vec::new();let mut widths=Vec::new();
+    for (a,b) in &pairs{widths.push(original(*b-*a).len());}
+    for q in mid.windows(2){pitches.push(original(q[1]-q[0]).len());}
+    let median=|v:&[f64]|{let mut v=v.to_vec();v.sort_by(f64::total_cmp);v[v.len()/2]};
+    let pitch=median(&pitches);let width=median(&widths);
+    if !(1.5..=12.0).contains(&pitch)||width<8.0||width<pitch*1.8||width>100.0{return None}
+    // Reject irregular, intersecting, retracing and underlay-like runs.
+    for i in 0..pairs.len()-1 {
+        let (a,b)=pairs[i];let(c,d)=pairs[i+1];
+        let va=original(b-a);let vb=original(d-c);
+        let step=original(mid[i+1]-mid[i]);let l=step.len();
+        if l<pitch*0.35||l>pitch*2.3||va.len()<width*0.45||va.len()>width*1.8
+            ||va.dot(vb)<0.65*va.len()*vb.len()
+            ||va.dot(step).abs()>0.65*va.len()*l
+            ||original(c-b).len()<width*0.45{return None}
+        if i>0{let prev=original(mid[i]-mid[i-1]);if prev.dot(step)<0.0{return None}}
+    }
+    let mut lengths=vec![0.0];
+    for q in mid.windows(2){lengths.push(lengths.last().copied().unwrap_or(0.0)+q[0].dist(q[1]));}
+    let length=*lengths.last()?;
+    let count=(length/pitch).round().max(1.0) as usize;
+    if count>100_000{return None}
+    let mut out=Vec::with_capacity((count+1)*2);let mut k=0;
+    for i in 0..=count{
+        let target=length*i as f64/count as f64;
+        while k+1<lengths.len()-1&&lengths[k+1]<target{k+=1;}
+        let t=((target-lengths[k])/(lengths[k+1]-lengths[k]).max(1e-9)).clamp(0.0,1.0);
+        let a=pairs[k].0.lerp(pairs[k+1].0,t);
+        let b=pairs[k].1.lerp(pairs[k+1].1,t);
+        out.extend([a,b]);
+    }
+    // Preserve run endpoints and existing sewing order.
+    Some(out)
+}
+fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize],sx:f64,sy:f64)->Result<(),String>{
     use zigzag::{bezier::{Anchor,SubPath},svg::Geometry,params::Kind};
     let mut edits=Vec::new();let mut total=0usize;
     for (i,s) in doc.shapes.iter().enumerate(){
@@ -118,7 +160,7 @@ fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize
             for (line,closed) in lines{
                 // Imported machine runs are open paths. Preserve closed paths
                 // without attempting to infer their stitch semantics.
-                let pts=if *closed{line.clone()}else{resize_fixed_run(line,shrink)};
+                let pts=if *closed{line.clone()}else{let rebuilt=regenerate_satin_run(line,sx,sy);resize_fixed_run(rebuilt.as_deref().unwrap_or(line),sx<1.0||sy<1.0)};
                 total=total.saturating_add(pts.len());
                 if total>2_000_000{return Err("Resized stitch paths exceed the safety limit.".into())}
                 paths.push(SubPath{anchors:pts.into_iter().map(Anchor::corner).collect(),closed:*closed});
@@ -140,7 +182,7 @@ async fn resize_artwork_selection(uids:Vec<usize>,sx:f64,sy:f64,x:f64,y:f64,app:
         if indices.is_empty()||indices.len()!=uids.len(){return Err("Selection changed; select the artwork again.".into())}
         let has_fixed=indices.iter().any(|&i|doc.shapes[i].params.kind==Some(zigzag::params::Kind::Manual));
         doc.transform(&indices,[sx,0.0,0.0,sy,x*10.0*(1.0-sx),y*10.0*(1.0-sy)]).map_err(|e|e.to_string())?;
-        if has_fixed {correct_resized_manual_paths(&mut doc,&uids,sx<1.0||sy<1.0)?;}
+        if has_fixed {correct_resized_manual_paths(&mut doc,&uids,sx,sy)?;}
         let design=doc.plan_cached(&mut w.plan_cache);
         if design.stitch_count()==0||design.stitch_count()>2_000_000{return Err("Resize produced an invalid stitch plan.".into())}
         let result=preview(&design);w.checkpoint_named("Resize and regenerate stitches");w.source=Some(doc);w.current=Some(design);Ok(result)
@@ -1738,6 +1780,7 @@ fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).inv
 #[cfg(test)]
 mod fixed_resize_tests {
  use super::*;use zigzag::geom::P;
+ #[test] fn satin_density_is_rebuilt_when_column_length_doubles(){let mut p=Vec::new();for i in 0..10{p.push(P::new(0.,i as f64*8.));p.push(P::new(30.,i as f64*8.+4.));}let result=regenerate_satin_run(&p,1.,2.).unwrap();assert!(result.len()>p.len());assert_eq!(result.first(),p.first());assert_eq!(result.last(),p.last());}
  #[test] fn long_moves_are_split_and_endpoints_preserved(){let a=P::new(0.,0.);let b=P::new(250.,0.);let r=resize_fixed_run(&[a,b],false);assert_eq!(r.first(),Some(&a));assert_eq!(r.last(),Some(&b));assert!(r.windows(2).all(|p|p[0].dist(p[1])<=100.001));}
  #[test] fn direction_reversals_and_ties_survive(){let a=P::new(0.,0.);let b=P::new(1.,0.);let r=resize_fixed_run(&[a,a,b,a,b,a,b,a],true);assert_eq!(r,vec![a,a,b,a,b,a,b,a]);}
 }
