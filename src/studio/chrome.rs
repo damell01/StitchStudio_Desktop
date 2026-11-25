@@ -97,9 +97,27 @@ impl Studio {
                 );
                 egui::Popup::menu(&export).show(|ui| {
                     ui.set_min_width(250.0);
+                    use zigzag::checks::Level;
+                    let errors = self.issues.iter().filter(|i| i.level == Level::Error).count();
+                    let warnings = self.issues.iter().filter(|i| i.level == Level::Warning).count();
+                    ui.label(egui::RichText::new("Export preflight").strong());
+                    caption(ui, format!("{} stitches · {} color blocks · {} trims",
+                        fmt_int(self.design.stitch_count()), self.design.blocks.len(), self.design.trim_count()));
+                    if self.planner.pending {
+                        ui.label("Stitch plan is updating. Wait before exporting.");
+                    } else if errors + warnings > 0 {
+                        ui.label(format!("{errors} errors · {warnings} warnings"));
+                        if ui.button("Review design issues").clicked() {
+                            self.run_action(Action::ShowIssues);
+                            ui.close();
+                        }
+                    } else {
+                        caption(ui, "No issues detected by the current checks.");
+                    }
+                    ui.separator();
                     caption(ui, "Choose your machine format");
                     for (ext, label) in zigzag::formats::MACHINE_FORMATS {
-                        if ui.button(label).clicked() {
+                        if ui.add_enabled(!self.planner.pending && errors == 0, egui::Button::new(label)).clicked() {
                             self.run_action(Action::Export(ext));
                             ui.close();
                         }
