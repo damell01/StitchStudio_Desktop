@@ -150,6 +150,80 @@ fn regenerate_satin_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::
     // Preserve run endpoints and existing sewing order.
     Some(out)
 }
+// Detect simple serpentine fills: long straight passes, alternating
+// direction, joined by short perpendicular advances. Rebuild the rows
+// between their existing endpoints rather than drawing across holes.
+fn regenerate_fill_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::geom::P>>{
+    use zigzag::geom::P;
+    if p.len()<24||p.len()>100_000{return None}
+    let original=|v:P|P::new(v.x/sx,v.y/sy);
+    let longest=p.windows(2).map(|q|original(q[1]-q[0])).max_by(|a,b|a.len().total_cmp(&b.len()))?;
+    if longest.len()<12.0{return None}
+    let axis=longest*(1.0/longest.len());let normal=P::new(-axis.y,axis.x);
+    let mut rows:Vec<(usize,usize,i32)>=Vec::new();
+    let mut start=0;let mut end=0;let mut sign=0;
+    for i in 0..p.len()-1{
+        let d=original(p[i+1]-p[i]);let along=d.dot(axis);
+        let is_row=d.len()>=4.0&&along.abs()>=0.96*d.len();
+        if is_row{
+            let dir=if along>0.0{1}else{-1};
+            if sign==dir&&end==i{end=i+1;}
+            else{
+                if sign!=0{rows.push((start,end,sign));}
+                start=i;end=i+1;sign=dir;
+            }
+        }else if sign!=0{rows.push((start,end,sign));sign=0;}
+    }
+    if sign!=0{rows.push((start,end,sign));}
+    if rows.len()<6||rows.first()?.0!=0||rows.last()?.1!=p.len()-1{return None}
+    let mut edges=Vec::new();let mut pitch=Vec::new();let mut width=Vec::new();
+    let mut row_segments=0usize;
+    for (i,&(a,b,dir)) in rows.iter().enumerate(){
+        if b-a<2{return None}
+        row_segments+=b-a;
+        let (l,r)=if dir>0{(p[a],p[b])}else{(p[b],p[a])};
+        width.push(original(r-l).len());edges.push((l,r));
+        if i>0{
+            let (_,prev_end,prev_dir)=rows[i-1];
+            if dir==prev_dir||a<prev_end||a-prev_end>2{return None}
+            let bridge=original(p[a]-p[prev_end]);
+            if bridge.len()>15.0{return None}
+            let prev=edges[i-1];
+            pitch.push(original(l.lerp(r,0.5)-prev.0.lerp(prev.1,0.5)).dot(normal));
+        }
+    }
+    if row_segments*10<(p.len()-1)*7{return None}
+    let mut sorted:Vec<f64>=pitch.iter().map(|v|v.abs()).collect();sorted.sort_by(f64::total_cmp);
+    let spacing=sorted[sorted.len()/2];
+    if !(2.0..=8.0).contains(&spacing)||pitch.iter().any(|v|v.signum()!=pitch[0].signum()||v.abs()<spacing*0.55||v.abs()>spacing*1.6){return None}
+    let min_width=width.iter().copied().fold(f64::INFINITY,f64::min);
+    let max_width=width.iter().copied().fold(0.0,f64::max);
+    if min_width<30.0||max_width>min_width*1.8{return None}
+    // Reject abrupt edge changes so a hole or a split fill cannot be
+    // mistaken for a single solid panel.
+    for q in edges.windows(2){
+        if original(q[1].0-q[0].0).dot(axis).abs()>spacing*2.0||original(q[1].1-q[0].1).dot(axis).abs()>spacing*2.0{return None}
+    }
+    let mids:Vec<P>=edges.iter().map(|(l,r)|l.lerp(*r,0.5)).collect();
+    let mut lengths=vec![0.0];for q in mids.windows(2){lengths.push(lengths.last().copied().unwrap_or(0.0)+q[0].dist(q[1]));}
+    let length=*lengths.last()?;
+    let mut n=(length/spacing).round().max(1.0) as usize;
+    // Keep row parity so the original first and last side remain intact.
+    if n%2!=(rows.len()-1)%2{n+=1;}
+    if n>20_000{return None}
+    let mut result=Vec::new();let mut k=0;
+    for i in 0..=n{
+        let target=length*i as f64/n as f64;
+        while k+1<lengths.len()-1&&lengths[k+1]<target{k+=1;}
+        let t=((target-lengths[k])/(lengths[k+1]-lengths[k]).max(1e-9)).clamp(0.0,1.0);
+        let l=edges[k].0.lerp(edges[k+1].0,t);let r=edges[k].1.lerp(edges[k+1].1,t);
+        let (a,b)=if (i%2==0)==(rows[0].2>0){(l,r)}else{(r,l)};
+        let step_count=(a.dist(b)/30.0).ceil().max(1.0) as usize;
+        if result.len().saturating_add(step_count+1)>2_000_000{return None}
+        for j in 0..=step_count{result.push(a.lerp(b,j as f64/step_count as f64));}
+    }
+    Some(result)
+}
 fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize],sx:f64,sy:f64)->Result<(),String>{
     use zigzag::{bezier::{Anchor,SubPath},svg::Geometry,params::Kind};
     let mut edits=Vec::new();let mut total=0usize;
@@ -160,7 +234,7 @@ fn correct_resized_manual_paths(doc:&mut zigzag::document::Document,uids:&[usize
             for (line,closed) in lines{
                 // Imported machine runs are open paths. Preserve closed paths
                 // without attempting to infer their stitch semantics.
-                let pts=if *closed{line.clone()}else{let rebuilt=regenerate_satin_run(line,sx,sy);resize_fixed_run(rebuilt.as_deref().unwrap_or(line),sx<1.0||sy<1.0)};
+                let pts=if *closed{line.clone()}else{let rebuilt=regenerate_satin_run(line,sx,sy).or_else(||regenerate_fill_run(line,sx,sy));resize_fixed_run(rebuilt.as_deref().unwrap_or(line),sx<1.0||sy<1.0)};
                 total=total.saturating_add(pts.len());
                 if total>2_000_000{return Err("Resized stitch paths exceed the safety limit.".into())}
                 paths.push(SubPath{anchors:pts.into_iter().map(Anchor::corner).collect(),closed:*closed});
@@ -1780,6 +1854,7 @@ fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).inv
 #[cfg(test)]
 mod fixed_resize_tests {
  use super::*;use zigzag::geom::P;
+ #[test] fn regular_fill_adds_rows_when_enlarged(){let mut p=Vec::new();for row in 0..8{for i in 0..5{let x=if row%2==0{i}else{4-i};p.push(P::new(x as f64*20.,row as f64*8.));}}let rebuilt=regenerate_fill_run(&p,1.,2.).unwrap();assert!(rebuilt.len()>p.len());assert_eq!(rebuilt.first(),p.first());assert_eq!(rebuilt.last(),p.last());}
  #[test] fn satin_density_is_rebuilt_when_column_length_doubles(){let mut p=Vec::new();for i in 0..10{p.push(P::new(0.,i as f64*8.));p.push(P::new(30.,i as f64*8.+4.));}let result=regenerate_satin_run(&p,1.,2.).unwrap();assert!(result.len()>p.len());assert_eq!(result.first(),p.first());assert_eq!(result.last(),p.last());}
  #[test] fn long_moves_are_split_and_endpoints_preserved(){let a=P::new(0.,0.);let b=P::new(250.,0.);let r=resize_fixed_run(&[a,b],false);assert_eq!(r.first(),Some(&a));assert_eq!(r.last(),Some(&b));assert!(r.windows(2).all(|p|p[0].dist(p[1])<=100.001));}
  #[test] fn direction_reversals_and_ties_survive(){let a=P::new(0.,0.);let b=P::new(1.,0.);let r=resize_fixed_run(&[a,a,b,a,b,a,b,a],true);assert_eq!(r,vec![a,a,b,a,b,a,b,a]);}
