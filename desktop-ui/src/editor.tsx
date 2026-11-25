@@ -50,6 +50,10 @@ const designGesture=useRef<{pointer:number;x:number;y:number;uids?:number[]}|nul
 const [activeGroup,setActiveGroup]=useState<string|null>(null);
 const groupResizeGesture=useRef<{pointer:number;uids:number[];cx:number;cy:number;x:number;y:number}|null>(null);
 const [groupScalePreview,setGroupScalePreview]=useState(1);
+const rotationGesture=useRef<{pointer:number;uids:number[];cx:number;cy:number;start:number}|null>(null);
+const [rotationPreview,setRotationPreview]=useState(0);
+function rotationAt(position:DOMPoint,shift:boolean){const g=rotationGesture.current;if(!g)return 0;let degrees=(Math.atan2(position.y-g.cy,position.x-g.cx)-g.start)*180/Math.PI;degrees=((degrees+540)%360)-180;return shift?Math.round(degrees/15)*15:degrees}
+
 function groupScaleAt(position:DOMPoint){const g=groupResizeGesture.current;if(!g)return 1;const x=g.x-g.cx,y=g.y-g.cy;return Math.max(.1,Math.min(10,((position.x-g.cx)*x+(position.y-g.cy)*y)/Math.max(.0001,x*x+y*y)))}
 const [groupWidth,setGroupWidth]=useState(''),[groupRotation,setGroupRotation]=useState('0');
 useEffect(()=>{setGroupWidth('');setGroupRotation('0')},[activeGroup]);
@@ -81,7 +85,7 @@ const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'seq
 const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>localStorage.getItem('studio-default-machine')||''),[hoop,setHoop]=useState(()=>localStorage.getItem('studio-default-hoop')||'');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 const editLock=useRef(false);const [inlineWork,setInlineWork]=useState('');
-async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return;editLock.current=true;setInlineWork(command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null)}catch(e){setMessage(String(e))}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview(1);setBusy(false)}}
+async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return;editLock.current=true;setInlineWork(command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null)}catch(e){setMessage(String(e))}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview(1);setRotationPreview(0);setBusy(false)}}
 useEffect(()=>{if(!plan||busy)return;const save=()=>{invoke('recovery_save',{width,height,format,threadAssignments}).then(()=>setRecoveryStatus('Recovery copy saved')).catch(e=>setRecoveryStatus('Recovery save failed: '+String(e)))};const timer=setTimeout(save,1500);return()=>clearTimeout(timer)},[plan,width,height,format,busy,threadAssignments]);
 async function recover(){if(plan&&!await confirmAction('Replace the current design with the recovery copy?'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string;thread_assignments?:ThreadAssignments}|null>('recovery_open');if(p){setThreadAssignments(p.thread_assignments??{});setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null);setMessage('Recovery copy opened. Save as a project to keep it.')}else setMessage('No recovery copy found.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
@@ -261,6 +265,12 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const target=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;
   const object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))):undefined;
   const position=pointerPosition(event);
+  if(event.button===0&&position&&event.target instanceof Element&&event.target.hasAttribute('data-rotation-handle')){
+    const group=canvasMode==='design'?designGroups.find(g=>g.key===activeGroup):null;
+    const b=group?.bounds??(canvasMode==='select'?selected?.bounds:null);
+    const ids=group?group.members.map(o=>o.uid):selected?[selected.uid]:[];
+    if(b&&ids.length){const cx=b[0]+b[2]/2,cy=b[1]+b[3]/2;rotationGesture.current={pointer:event.pointerId,uids:ids,cx,cy,start:Math.atan2(position.y-cy,position.x-cx)};setRotationPreview(0);event.currentTarget.setPointerCapture(event.pointerId);return}
+  }
   if(canvasMode==='design'&&event.button===0&&position&&event.target instanceof Element&&event.target.hasAttribute('data-group-resize')){
     const group=designGroups.find(g=>g.key===activeGroup);
     if(group?.bounds){const [x,y,w,h]=group.bounds;const corner=Number(event.target.getAttribute('data-group-resize'));groupResizeGesture.current={pointer:event.pointerId,uids:group.members.map(o=>o.uid),cx:x+w/2,cy:y+h/2,x:x+(corner%2)*w,y:y+Math.floor(corner/2)*h};event.currentTarget.setPointerCapture(event.pointerId);return}
@@ -295,6 +305,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const position=pointerPosition(event);
   if(!position)return;
+  if(rotationGesture.current?.pointer===event.pointerId){setRotationPreview(rotationAt(position,event.shiftKey));return}
   if(groupResizeGesture.current?.pointer===event.pointerId){setGroupScalePreview(groupScaleAt(position));return}
   if(designGesture.current?.pointer===event.pointerId){
     const offset=snapped(position.x-designGesture.current.x,position.y-designGesture.current.y,designGesture.current.uids,true) as [number,number];if(designGesture.current.uids)setObjectOffset(offset);else setDesignOffset(offset);
@@ -317,6 +328,12 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 
 function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boolean) {
   setGuides({x:null,y:null});
+  if(rotationGesture.current?.pointer===event.pointerId){
+    const g=rotationGesture.current,position=commit?pointerPosition(event):null;
+    const degrees=position?rotationAt(position,event.shiftKey):0;rotationGesture.current=null;
+    if(Math.abs(degrees)>.5){setRotationPreview(degrees);void edit('transform_artwork_group',{uids:g.uids,scale:1,rotation:degrees})}else setRotationPreview(0);
+    return;
+  }
   if(groupResizeGesture.current?.pointer===event.pointerId){
     const g=groupResizeGesture.current,position=commit?pointerPosition(event):null;
     const factor=position?groupScaleAt(position):1;groupResizeGesture.current=null;
@@ -564,7 +581,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   fill="transparent" pointerEvents="all" stroke="#8543aa" strokeWidth="1.5"
   vectorEffect="non-scaling-stroke" strokeDasharray="5 4"><title>Drag to move the whole design</title></rect>}</g>
 {canvasMode==='design'&&independentGroups&&designGroups.map((group,i)=>{const b=group.bounds;if(!b)return null;return <g key={group.key} transform={activeGroup===group.key?'translate('+objectOffset.join(' ')+')':undefined}><rect data-design-group={group.key} x={b[0]-1} y={b[1]-1} width={b[2]+2} height={b[3]+2} fill="transparent" pointerEvents="all" stroke={activeGroup===group.key?'#754bb0':'#b49acb'} strokeDasharray="5 4" vectorEffect="non-scaling-stroke"><title>Move design {i+1}</title></rect></g>})}
-{canvasMode==='design'&&designGroups.filter(g=>g.key===activeGroup&&g.bounds&&g.bounds[2]>.01&&g.bounds[3]>.01).map(g=>{const [x,y,w,h]=g.bounds!;const cx=x+w/2,cy=y+h/2;const s=groupScalePreview;const tx=cx-w*s/2+objectOffset[0],ty=cy-h*s/2+objectOffset[1];return <g key={'resize-'+g.key}><rect x={tx} y={ty} width={w*s} height={h*s} fill="none" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" pointerEvents="none"/>{[0,1,2,3].map(i=><circle key={i} cx={tx+(i%2)*w*s} cy={ty+Math.floor(i/2)*h*s} r={Math.max(.65,1.2*100/zoom)} fill="white" stroke="#754bb0" vectorEffect="non-scaling-stroke" data-group-resize={i} style={{cursor:i===0||i===3?'nwse-resize':'nesw-resize'}}><title>Drag to resize proportionally</title></circle>)}</g>})}
+{canvasMode==='design'&&designGroups.filter(g=>g.key===activeGroup&&g.bounds&&g.bounds[2]>.01&&g.bounds[3]>.01).map(g=>{const [x,y,w,h]=g.bounds!;const cx=x+w/2,cy=y+h/2;const s=groupScalePreview;const tx=cx-w*s/2+objectOffset[0],ty=cy-h*s/2+objectOffset[1];return <g key={'resize-'+g.key} transform={`rotate(${rotationPreview} ${cx} ${cy})`}><rect x={tx} y={ty} width={w*s} height={h*s} fill="none" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" pointerEvents="none"/>{[0,1,2,3].map(i=><circle key={i} cx={tx+(i%2)*w*s} cy={ty+Math.floor(i/2)*h*s} r={Math.max(.65,1.2*100/zoom)} fill="white" stroke="#754bb0" vectorEffect="non-scaling-stroke" data-group-resize={i} style={{cursor:i===0||i===3?'nwse-resize':'nesw-resize'}}><title>Drag to resize proportionally</title></circle>)}<line x1={tx+w*s/2} x2={tx+w*s/2} y1={ty} y2={ty-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke" pointerEvents="none"/><circle cx={tx+w*s/2} cy={ty-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" style={{cursor:'grab'}}><title>Rotate design · Shift snaps to 15°</title></circle></g>})}
 {snap&&<g pointerEvents="none" stroke="#a84bc5" strokeDasharray="4 3" strokeWidth="1" vectorEffect="non-scaling-stroke">{guides.x!==null&&<line x1={guides.x} x2={guides.x} y1={-height/2} y2={height/2} vectorEffect="non-scaling-stroke"/>}{guides.y!==null&&<line x1={-width/2} x2={width/2} y1={guides.y} y2={guides.y} vectorEffect="non-scaling-stroke"/>}</g>}
 {canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
  {objects.filter(object=>object.path).map(object=><path key={object.uid} d={object.path}
@@ -572,7 +589,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
    fillRule={object.fill_rule} stroke={object.fill_rule?'none':'transparent'}
    strokeWidth={object.stroke_width} pointerEvents={object.fill_rule?'fill':'stroke'}/>)}
 </g>}
-{selectionIds.length>0&&canvasMode==='select'&&<g pointerEvents="none" transform={`translate(${objectOffset.join(' ')})`}>{objects.filter(o=>selectionIds.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="none" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke"/>)}</g>}{!selectionIds.length&&selected?.bounds&&canvasMode==='select'&&<g className="studio-selection" pointerEvents="none" transform={selectionTransform}>
+{selectionIds.length>0&&canvasMode==='select'&&<g pointerEvents="none" transform={`translate(${objectOffset.join(' ')})`}>{objects.filter(o=>selectionIds.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="none" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke"/>)}</g>}{!selectionIds.length&&selected?.bounds&&canvasMode==='select'&&<g className="studio-selection" pointerEvents="none" transform={selectionTransform+(rotationPreview?` rotate(${rotationPreview} ${selected.bounds[0]+selected.bounds[2]/2} ${selected.bounds[1]+selected.bounds[3]/2})`:'')}>
  {(objectGesture.current||resizePreview||objectOffset.some(v=>v!==0))&&<path d={selected.path} fill={selected.fill_rule?'#8d53a333':'none'} fillRule={selected.fill_rule}
    stroke="#8d53a3" strokeWidth={selected.stroke_width||.3}/>}
  <rect x={selected.bounds[0]-.6} y={selected.bounds[1]-.6} width={selected.bounds[2]+1.2} height={selected.bounds[3]+1.2}
@@ -582,6 +599,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
    data-resize-handle={index} pointerEvents={busy?'none':'all'} style={{cursor:handle.cursor}}>
    <title>{handle.dx&&handle.dy?'Drag corner to resize':'Drag side to resize'}</title>
  </circle>)}
+<line x1={selected.bounds[0]+selected.bounds[2]/2} x2={selected.bounds[0]+selected.bounds[2]/2} y1={selected.bounds[1]} y2={selected.bounds[1]-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke"/><circle cx={selected.bounds[0]+selected.bounds[2]/2} cy={selected.bounds[1]-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" pointerEvents={busy?'none':'all'} style={{cursor:'grab'}}><title>Rotate object · Shift snaps to 15°</title></circle>
 </g>}</svg>{selected&&canvasMode==='select'&&<div className="studio-selection-actions" role="group" aria-label="Selected object actions">
   <span>{selected.label||'Object '+selected.uid}</span>
   <button className="studio-tool-icon" title="Rotate selection 90°" aria-label="Rotate selection 90 degrees" disabled={busy} onClick={()=>editSelection({kind:'rotate'})}><RotateCw size={16}/></button>
