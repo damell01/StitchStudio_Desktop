@@ -5,6 +5,11 @@ on:
   pull_request:
     branches: [Dev]
   workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   desktop:
     strategy:
@@ -12,6 +17,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: desktop-ui
@@ -33,6 +39,18 @@ jobs:
         run: npm run tauri build -- --bundles app dmg -- --locked
       - if: runner.os == 'macOS'
         run: ditto -c -k --keepParent 'src-tauri/target/release/bundle/macos/Stitch Studio.app' src-tauri/target/release/bundle/Stitch-Studio-macOS.zip
+      - if: runner.os == 'Windows'
+        name: Verify Windows installer and record checksums
+        run: node ../.github/scripts/verify-desktop-bundles.mjs win32 src-tauri/target/release/bundle
+      - if: runner.os == 'macOS'
+        name: Verify macOS archives and record checksums
+        run: |
+          unzip -tq src-tauri/target/release/bundle/Stitch-Studio-macOS.zip
+          node ../.github/scripts/verify-desktop-bundles.mjs darwin src-tauri/target/release/bundle
+          cd src-tauri/target/release/bundle
+          for image in dmg/*.dmg; do
+            hdiutil verify "$image"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: stitch-studio-tauri-${{ matrix.os }}
@@ -40,9 +58,11 @@ jobs:
             desktop-ui/src-tauri/target/release/bundle/nsis/*.exe
             desktop-ui/src-tauri/target/release/bundle/Stitch-Studio-macOS.zip
             desktop-ui/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop-ui/src-tauri/target/release/bundle/SHA256SUMS.txt
           if-no-files-found: error
   browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: desktop-ui
@@ -53,4 +73,10 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm test
+      - run: npm test -- --trace retain-on-failure
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-traces
+          path: desktop-ui/test-results
+          if-no-files-found: ignore
