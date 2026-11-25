@@ -1438,7 +1438,20 @@ impl Studio {
         };
         let fonts = self.fonts();
         let mut filter = std::mem::take(&mut self.lettering.font_filter);
-        let commit = Self::text_fields(ui, &mut spec, &fonts, &mut filter, "edit-text");
+        ui.label(egui::RichText::new("Edit lettering").strong());
+        let mut commit = Self::text_fields(ui, &mut spec, &fonts, &mut filter, "edit-text");
+        if spec != current {
+            ui.horizontal_wrapped(|ui| {
+                commit |= ui.add_enabled(!spec.text.trim().is_empty(), egui::Button::new("Apply changes")).clicked();
+                if ui.button("Discard changes").clicked() {
+                    spec = current.clone();
+                    commit = false;
+                }
+            });
+            if spec.text.trim().is_empty() {
+                ui.label("Enter lettering before applying changes.");
+            }
+        }
         self.lettering.font_filter = filter;
         if commit && spec != current && !spec.text.trim().is_empty() {
             match self.update_lettering(index, &spec) {
