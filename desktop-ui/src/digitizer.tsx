@@ -280,6 +280,33 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         </div>
         <p>{(review.quality.sewn_mm / 1000).toFixed(2)} m of sewn path</p>
         <p>DST preview · {review.jumps} jumps · {review.color_changes} color changes</p>
+        <details className="digitizer-options" open>
+          <summary>Thread setup · {new Set(review.plan.blocks.map(b=>b.color.join(','))).size} unique colors</summary>
+          <p>Follow this sewing order on your machine. Repeated colors reuse the same thread slot. DST does not store thread colors.</p>
+          <div style={{maxHeight:280,overflow:'auto'}}>
+          {review.plan.blocks.map((b,i)=>{
+            const key=b.color.join(',');
+            const unique=Array.from(new Set(review.plan.blocks.map(x=>x.color.join(','))));
+            const hex='#'+b.color.map(v=>v.toString(16).padStart(2,'0')).join('');
+            const owned=readThreads().find(t=>t.stock>0&&t.color.toLowerCase()===hex);
+            return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0'}}>
+              <span style={{width:24,height:24,borderRadius:5,border:'1px solid #999',background:hex,flexShrink:0}}/>
+              <span>{i+1}. Slot {unique.indexOf(key)+1} · {owned?[owned.brand,owned.code,owned.name].filter(Boolean).join(' '):hex.toUpperCase()}</span>
+            </div>
+          })}
+          </div>
+          <button type="button" onClick={()=>{
+            const unique=Array.from(new Set(review.plan.blocks.map(b=>b.color.join(','))));
+            const rows=review.plan.blocks.map((b,i)=>{
+              const hex='#'+b.color.map(v=>v.toString(16).padStart(2,'0')).join('');
+              const t=readThreads().find(t=>t.stock>0&&t.color.toLowerCase()===hex);
+              return [i+1,unique.indexOf(b.color.join(','))+1,hex,t?.brand||'',t?.code||'',t?.name||''];
+            });
+            const csv=[['Sewing order','Suggested thread slot','RGB','Brand','Thread number','Name'],...rows].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+            const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+            const link=document.createElement('a');link.href=url;link.download=(art?.name||'design')+'-thread-sequence.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+          }}>Download thread sequence CSV</button>
+        </details>
         <p>About {(review.dst_stitches / 600).toFixed(1)} minutes of needle time at 600 stitches/min,
           excluding travel and stops.</p>
         {(review.quality.short > 0 || review.quality.long > 0 || review.quality.zero > 0) &&
