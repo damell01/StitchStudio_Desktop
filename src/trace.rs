@@ -530,6 +530,7 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
         mm,
         &o.threads,
         o.remove_background,
+        o.colors == 0,
         method,
     ))
 }
@@ -607,6 +608,7 @@ fn to_svg(
     mm: f64,
     threads: &[[u8; 3]],
     remove_white: bool,
+    consolidate: bool,
     method: &'static str,
 ) -> Traced {
     let (w, h) = (f64::from(r.width), f64::from(r.height));
@@ -628,7 +630,10 @@ fn to_svg(
     for (c, _) in palette {
         let match_color = representatives.iter().copied().find(|&q| {
             neutral(c) == neutral(q) &&
-            c.iter().zip(q.iter()).map(|(&a,&b)| (f64::from(a)-f64::from(b)).powi(2)).sum::<f64>() <= 32.0_f64.powi(2)
+            // Preserve dark ink and near-white highlights even when adjacent shades are close.
+            (c.iter().max().unwrap() < &55) == (q.iter().max().unwrap() < &55) &&
+            (c.iter().min().unwrap() > &225) == (q.iter().min().unwrap() > &225) &&
+            c.iter().zip(q.iter()).map(|(&a,&b)| (f64::from(a)-f64::from(b)).powi(2)).sum::<f64>() <= 22.0_f64.powi(2)
         }).unwrap_or(c);
         if !representatives.contains(&match_color) { representatives.push(match_color); }
         mapping.insert(c, match_color);
@@ -648,7 +653,7 @@ fn to_svg(
         if d.is_empty() || (remove_white && white && p.stroke.is_some()) {
             continue;
         }
-        let c = nearest(if threads.is_empty() { *mapping.get(&p.color).unwrap_or(&p.color) } else { p.color }, threads);
+        let c = nearest(if consolidate && threads.is_empty() { *mapping.get(&p.color).unwrap_or(&p.color) } else { p.color }, threads);
         match used.iter_mut().find(|(u, _)| *u == c) {
             Some(u) => u.1 += p.pixels,
             None => used.push((c, p.pixels)),
