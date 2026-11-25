@@ -252,8 +252,35 @@ fn reconstruction_ok(original:&[zigzag::geom::P],candidate:&[zigzag::geom::P])->
     };
     covered(&a,&b)&&covered(&b,&a)
 }
+// Recover a consistent running-stitch pitch without cutting corners or
+// deleting repeated penetrations. Only monotonic, nearly straight portions
+// are resampled; decorative zigzags and ambiguous underlay remain untouched.
+fn regenerate_running_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::geom::P>>{
+    use zigzag::geom::P;
+    if p.len()<6||p.len()>100_000{return None}
+    let original=|v:P|P::new(v.x/sx,v.y/sy);
+    let mut steps:Vec<f64>=p.windows(2).map(|q|original(q[1]-q[0]).len()).collect();
+    steps.sort_by(f64::total_cmp);let pitch=steps[steps.len()/2];
+    if !(10.0..=45.0).contains(&pitch)||steps.iter().any(|&v|v<pitch*0.5||v>pitch*1.8){return None}
+    for q in p.windows(3){
+        let a=original(q[1]-q[0]);let b=original(q[2]-q[1]);
+        if a.dot(b)<0.96*a.len()*b.len(){return None}
+    }
+    let mut length=vec![0.0];
+    for q in p.windows(2){length.push(length.last().copied().unwrap_or(0.0)+q[0].dist(q[1]));}
+    let total=*length.last()?;let n=(total/pitch).round().max(1.0) as usize;
+    if n>100_000{return None}
+    let mut out=Vec::with_capacity(n+1);let mut k=0;
+    for i in 0..=n{
+        let target=total*i as f64/n as f64;
+        while k+1<length.len()-1&&length[k+1]<target{k+=1;}
+        let t=((target-length[k])/(length[k+1]-length[k]).max(1e-9)).clamp(0.0,1.0);
+        out.push(p[k].lerp(p[k+1],t));
+    }
+    Some(out)
+}
 fn regenerate_recognized_run(p:&[zigzag::geom::P],sx:f64,sy:f64)->Option<Vec<zigzag::geom::P>>{
-    regenerate_satin_run(p,sx,sy).or_else(||regenerate_fill_run(p,sx,sy)).filter(|q|reconstruction_ok(p,q))
+    regenerate_satin_run(p,sx,sy).or_else(||regenerate_fill_run(p,sx,sy)).or_else(||regenerate_running_run(p,sx,sy)).filter(|q|reconstruction_ok(p,q))
 }
 // Preserve ambiguous portions (ties, travel, underlay and irregular fills).
 // Search bounded windows for coherent top-stitch sections inside mixed runs.
@@ -1908,6 +1935,7 @@ fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).inv
 #[cfg(test)]
 mod fixed_resize_tests {
  use super::*;use zigzag::geom::P;
+ #[test] fn running_stitch_pitch_survives_resize(){let p:Vec<_>=(0..12).map(|i|P::new(i as f64*40.,0.)).collect();let q=regenerate_running_run(&p,2.,1.).unwrap();assert!(q.len()>p.len());assert_eq!(q.first(),p.first());assert_eq!(q.last(),p.last());assert!(reconstruction_ok(&p,&q));}
  #[test] fn rejects_reconstruction_outside_original(){let a=vec![P::new(0.,0.),P::new(100.,0.)];let b=vec![a[0],P::new(50.,100.),a[1]];assert!(!reconstruction_ok(&a,&b));}
  #[test] fn mixed_run_keeps_leading_and_trailing_ties(){let mut p=vec![P::new(-20.,0.),P::new(-20.,0.)];for i in 0..32{p.push(P::new(0.,i as f64*8.));p.push(P::new(30.,i as f64*8.+4.));}p.extend([P::new(40.,260.),P::new(40.,260.)]);let q=regenerate_mixed_run(&p,1.,2.);assert_eq!(&q[..2],&p[..2]);assert_eq!(&q[q.len()-2..],&p[p.len()-2..]);}
  #[test] fn regular_fill_adds_rows_when_enlarged(){let mut p=Vec::new();for row in 0..8{for i in 0..5{let x=if row%2==0{i}else{4-i};p.push(P::new(x as f64*20.,row as f64*8.));}}let rebuilt=regenerate_fill_run(&p,1.,2.).unwrap();assert!(rebuilt.len()>p.len());assert_eq!(rebuilt.first(),p.first());assert_eq!(rebuilt.last(),p.last());}
