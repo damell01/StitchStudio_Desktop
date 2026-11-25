@@ -1574,3 +1574,15 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .inline-lettering-layout button{flex:1}
 .inline-lettering button[aria-pressed=true]{background:var(--brand-soft);border-color:var(--brand-accent);color:var(--brand)}
 .inline-lettering>.primary{justify-content:center;margin-top:4px}
+
+.inline-lettering-fields{display:grid;gap:7px;min-width:0;border:0;margin:0;padding:0}
+.inline-lettering-fields:disabled{opacity:.75}
+.inline-lettering .inline-text-sample{height:78px;box-sizing:border-box;background-image:linear-gradient(#9275b212 1px,transparent 1px),linear-gradient(90deg,#9275b212 1px,transparent 1px);background-size:12px 12px}
+.inline-text-sample svg{width:100%;height:100%;max-height:66px;overflow:visible}
+.inline-color-presets{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:4px 0}
+.inline-color-presets button{width:23px;height:23px;min-height:23px;padding:0;border:1px solid #9e91a8;border-radius:50%}
+.inline-color-presets button[aria-pressed=true]{outline:2px solid var(--brand);outline-offset:2px}
+.inline-lettering-fields .lettering-size-presets button{flex:1}
+.inline-lettering-fields>button[aria-expanded]{justify-content:space-between;font-size:12px}
+.inline-lettering>.primary{position:sticky;bottom:0;z-index:2;min-height:34px}
+.inline-lettering small[role=status]{font-size:11px;letter-spacing:normal}
