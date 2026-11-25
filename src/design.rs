@@ -458,7 +458,23 @@ fn fill_runs(
 ) -> Vec<Vec<Piece>> {
     let p = &shape.params;
     let f = &opt.fabric;
-    let angle = p.fill_angle().to_radians();
+    let mut angle = p.fill_angle().to_radians();
+    // Compare row fragmentation at several orientations for automatic fills.
+    // Preserve explicitly authored angles and avoid repeated work on huge shapes.
+    if opt.hat_order && p.angle.is_none() && rings.iter().map(Vec::len).sum::<usize>() < 4000 {
+        let mut best = f64::INFINITY;
+        for candidate in [angle, 0.0, std::f64::consts::FRAC_PI_4, std::f64::consts::FRAC_PI_2, 3.0*std::f64::consts::FRAC_PI_4] {
+            let probe = FillParams {
+                angle: candidate, spacing: mm(p.fill_spacing(f)).max(6.0),
+                len: mm(p.fill_len(f)), inset: 0.0, pull: 0.0,
+                stagger: 4, bottom_up: opt.hat_order,
+            };
+            let rows = tatami(rings, rule, &probe);
+            if rows.is_empty() { continue; }
+            let cost = rows.len() as f64 * 8.0 + rows.iter().map(Vec::len).sum::<usize>() as f64;
+            if cost < best { best = cost; angle = candidate; }
+        }
+    }
     let mut groups = Vec::new();
     let mut region = Bounds::empty();
     rings.iter().flatten().for_each(|&point| region.add(point));
