@@ -69,6 +69,25 @@ pub(super) fn apply(workspace: &mut Workspace, index: usize, color: [u8; 3]) -> 
     Ok(result)
 }
 
+pub(super) fn replace_color(workspace:&mut Workspace,previous:[u8;3],color:[u8;3])->Result<Preview,String>{
+ let current=workspace.current.as_ref().ok_or("Open artwork first")?;
+ if previous==color{return Ok(preview(current))}
+ let mut expected=current.clone();
+ let mut found=false;
+ for b in &mut expected.blocks {if b.color==previous{b.color=color;found=true}}
+ if !found{return Err("Color no longer exists in the design".into())}
+ if let Some(source)=workspace.source.as_ref(){
+   let mut updated=source.clone();
+   for shape in &mut updated.shapes{
+     if shape.color==previous{shape.color=color;}
+     if let Some(colors)=shape.params.colors.as_mut(){for entry in colors.iter_mut(){if *entry==previous{*entry=color;}}}
+   }
+   let design=updated.plan();
+   let normalize=|d:&Design|{let mut blocks:Vec<([u8;3],Vec<(bool,Vec<(i64,i64)>)>)>=Vec::new();for b in &d.blocks{if blocks.last().is_none_or(|last|last.0!=b.color){blocks.push((b.color,Vec::new()))}blocks.last_mut().unwrap().1.extend(b.runs.iter().map(|r|(r.trim_before,r.pts.iter().map(|p|(p.x.round() as i64,p.y.round() as i64)).collect::<Vec<_>>())));}blocks};
+   if normalize(&design)!=normalize(&expected){return Err("This color is controlled by a special stitch pattern or changing it would alter sewing order. Edit the specific object instead.".into())}
+   let result=preview(&design);workspace.checkpoint();workspace.source=Some(updated);workspace.current=Some(design);Ok(result)
+ }else{let result=preview(&expected);workspace.checkpoint();workspace.current=Some(expected);Ok(result)}
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,6 +115,16 @@ mod tests {
         target.into_inner().unwrap()
     }
 
+    #[test]
+    fn replaces_repeated_colors_with_one_undo_step(){
+      let mut work=design();let before=work.source.as_ref().unwrap().to_svg().unwrap();
+      let previous=[0x88,0x22,0x11];let next=[90,70,150];
+      replace_color(&mut work,previous,next).unwrap();
+      assert_eq!(work.undo.len(),1);
+      assert_eq!(work.undo[0].1.as_ref().unwrap().to_svg().unwrap(),before);
+      assert!(work.current.as_ref().unwrap().blocks.iter().all(|b|b.color!=previous));
+      assert!(same_stitch_plan(&reopen(&work).source.unwrap().plan(),work.current.as_ref().unwrap()));
+    }
     #[test]
     fn recolors_only_objects_in_the_selected_block_and_saves_editable_source() {
         let mut work = reopen(&design());
