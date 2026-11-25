@@ -693,11 +693,11 @@ impl Studio {
                     // A big design re-planning on the worker: the stitches
                     // shown are the last plan's until it's done.
                     ui.label(
-                        egui::RichText::new("Updating stitches…")
+                        egui::RichText::new("Preview updating")
                             .size(11.0)
                             .color(p.secondary),
                     );
-                    ui.add(egui::Spinner::new().size(10.0));
+                    // A quiet status label avoids distracting animation during edits.
                 }
                 ui.label(egui::RichText::new(stats).size(11.0).color(p.secondary))
                     .on_hover_text(format!(
