@@ -105,8 +105,8 @@ pub fn check(
         {
             add(
                 None,
-                Level::Warning,
-                "Design fits the hoop but isn't centered in it.".into(),
+                Level::Error,
+                "Design extends outside the hoop sewing area. Center or reposition it before export.".into(),
             );
         }
     }
@@ -379,6 +379,19 @@ mod tests {
         wide.params.split = Some(0.0);
         let i = issues(&[wide], None);
         assert!(i.iter().any(|x| x.message.contains("loose and snag")));
+    }
+
+    #[test]
+    fn blocks_off_center_design_outside_sewing_area() {
+        let off_center = shape(
+            Geometry::Fill {
+                rings: vec![rect(70.0, -20.0, 40.0, 40.0)],
+                rule: FillRule::NonZero,
+            },
+            Kind::Fill,
+        );
+        let i = issues(&[off_center], Some((10.0, 10.0)));
+        assert!(i.iter().any(|x| x.level == Level::Error && x.message.contains("outside the hoop")));
     }
 
     #[test]
