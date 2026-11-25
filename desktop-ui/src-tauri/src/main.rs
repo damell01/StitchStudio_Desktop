@@ -1082,6 +1082,39 @@ fn apply_digitizer_draft(id: u64, state: tauri::State<'_, Mutex<Workspace>>) -> 
 #[derive(serde::Serialize)]
 struct LibraryEntry {file:String,name:String,stitches:usize,colors:usize,width:f64,height:f64,modified:u64}
 #[tauri::command]
+async fn import_project_files()->Result<Option<Vec<LibraryEntry>>,String>{
+ let Some(files)=rfd::AsyncFileDialog::new().add_filter("Stitch Studio projects",&["stitchstudio"]).pick_files().await else{return Ok(None)};
+ let paths:Vec<_>=files.into_iter().map(|f|f.path().to_owned()).collect();
+ tauri::async_runtime::spawn_blocking(move||{
+ let mut out=Vec::new();
+ for path in paths.into_iter().take(2000){
+ let Ok(meta)=std::fs::symlink_metadata(&path) else{continue};
+ if !meta.is_file()||meta.len()>100_000_000||!path.extension().and_then(|s|s.to_str()).is_some_and(|s|s.eq_ignore_ascii_case("stitchstudio")){continue}
+ let Ok(p)=Project::load(&path) else{continue};if p.version!=1{continue}
+ out.push(LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0)});
+ }Some(out)
+ }).await.map_err(|e|e.to_string())
+}
+#[tauri::command]
+async fn import_artwork_files()->Result<Option<usize>,String>{
+ let Some(files)=rfd::AsyncFileDialog::new().add_filter("Artwork",&["png","jpg","jpeg","webp"]).pick_files().await else{return Ok(None)};
+ let paths:Vec<_>=files.into_iter().map(|f|f.path().to_owned()).collect();
+ tauri::async_runtime::spawn_blocking(move||->Result<Option<usize>,String>{
+ let root=character_root()?;std::fs::create_dir_all(&root).map_err(|e|e.to_string())?;
+ let dir=root.join("My imported artwork");std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+ if !std::fs::symlink_metadata(&dir).map_err(|e|e.to_string())?.file_type().is_dir(){return Err("Invalid artwork folder".into())}
+ let mut count=0;
+ for path in paths.into_iter().take(1000){
+ let Ok(meta)=std::fs::symlink_metadata(&path) else{continue};if !meta.is_file()||meta.len()>20_000_000{continue}
+ let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();if !matches!(ext.as_str(),"png"|"jpg"|"jpeg"|"webp"){continue}
+ let Ok(bytes)=std::fs::read(&path) else{continue};
+ let stem=path.file_stem().unwrap_or_default().to_string_lossy();
+ for n in 0..1000{let name=if n==0{format!("{stem}.{ext}")}else{format!("{stem} ({n}).{ext}")};let dest=dir.join(name);
+ match std::fs::OpenOptions::new().write(true).create_new(true).open(&dest){Ok(mut f)=>{use std::io::Write;if let Err(e)=f.write_all(&bytes){let _=std::fs::remove_file(&dest);return Err(e.to_string())}count+=1;break},Err(e) if e.kind()==std::io::ErrorKind::AlreadyExists=>{if std::fs::read(&dest).ok().as_deref()==Some(bytes.as_slice()){break}},Err(e)=>return Err(e.to_string())}
+ }}Ok(Some(count))
+ }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
 async fn scan_projects()->Result<Option<Vec<LibraryEntry>>,String>{
  let Some(folder)=rfd::AsyncFileDialog::new().pick_folder().await else{return Ok(None)};
  let root=folder.path().to_owned();
@@ -1307,4 +1340,4 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
     window.set_fullscreen(fullscreen).map_err(|error| error.to_string())
 }
 
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
