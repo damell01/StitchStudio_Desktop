@@ -1,4 +1,4 @@
-//! Safe import of machine files from an offline ZIP collection.
+//! Bounded ZIP imports for the offline design and template libraries.
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Cursor, Read, Write};
@@ -130,6 +130,7 @@ fn portable_name(name: &str) -> Result<Option<&str>, String> {
 fn validate_members(
     bytes: &[u8],
     limits: Limits,
+    target: Target,
 ) -> Result<(Vec<(String, Vec<u8>)>, usize), String> {
     let entries = check_directory(bytes, limits)?;
     let config = zip::read::Config {
@@ -181,7 +182,7 @@ fn validate_members(
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_ascii_lowercase();
-        if !formats::READABLE_FORMATS.contains(&extension.as_str()) {
+        if !target.accepts(&extension) {
             skipped += 1;
             continue;
         }
@@ -204,11 +205,7 @@ fn validate_members(
         if data.len() as u64 != size {
             return Err(format!("{filename} has an inconsistent size"));
         }
-        let design = formats::read::read_stitch_file(&data, &extension)
-            .map_err(|e| format!("Cannot read {filename}: {e}"))?;
-        if design.blocks.is_empty() {
-            return Err(format!("{filename} contains no embroidery stitches"));
-        }
+        target.validate(&data, &extension).map_err(|e| format!("Cannot import {filename}: {e}"))?;
         designs.push((filename, data));
     }
     Ok((designs, skipped))
@@ -283,13 +280,48 @@ fn publish(
     Err(format!("Too many library files share the name {name}"))
 }
 
-pub(crate) fn import(path: &Path, destination: &Path) -> Result<Report, String> {
+#[derive(Clone, Copy)]
+pub(crate) enum Target {
+    Designs,
+    Templates,
+}
+
+impl Target {
+    fn accepts(self, extension: &str) -> bool {
+        match self {
+            Self::Designs => formats::READABLE_FORMATS.contains(&extension),
+            Self::Templates => extension == "stitchstudio",
+        }
+    }
+
+    fn validate(self, bytes: &[u8], extension: &str) -> Result<(), String> {
+        match self {
+            Self::Designs => {
+                let design = formats::read::read_stitch_file(bytes, extension).map_err(|error| error.to_string())?;
+                if design.blocks.is_empty() {
+                    return Err("File contains no embroidery stitches".into());
+                }
+            }
+            Self::Templates => {
+                let project: crate::Project = serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
+                if project.validate()?.is_none_or(|document| document.shapes.iter().all(|shape|
+                    matches!(shape.params.kind, Some(zigzag::params::Kind::Manual | zigzag::params::Kind::Skip))))
+                {
+                    return Err("Templates need editable artwork or lettering. Use the design library for machine files.".into());
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+pub(crate) fn import(path: &Path, destination: &Path, target: Target) -> Result<Report, String> {
     let file = File::open(path).map_err(|e| e.to_string())?;
     if file.metadata().map_err(|e| e.to_string())?.len() > LIMITS.archive_bytes as u64 {
         return Err("The ZIP exceeds the 50 MB archive limit".into());
     }
     let bytes = read_limited(file, LIMITS.archive_bytes)?;
-    let (designs, skipped) = validate_members(&bytes, LIMITS)?;
+    let (designs, skipped) = validate_members(&bytes, LIMITS, target)?;
     let mut report = Report {
         skipped,
         ..Default::default()
@@ -381,7 +413,7 @@ mod tests {
         ]);
         let mut source = NamedTempFile::new().unwrap();
         source.write_all(&bundle).unwrap();
-        let result = import(source.path(), destination.path()).unwrap();
+        let result = import(source.path(), destination.path(), Target::Designs).unwrap();
         assert_eq!(
             (result.imported, result.duplicates, result.skipped),
             (2, 1, 1)
@@ -395,8 +427,26 @@ mod tests {
             flower
         );
         assert_eq!(fs::read(destination.path().join("leaf.pes")).unwrap(), leaf);
-        let retry = import(source.path(), destination.path()).unwrap();
+        let retry = import(source.path(), destination.path(), Target::Designs).unwrap();
         assert_eq!((retry.imported, retry.duplicates), (0, 3));
+    }
+
+    #[test]
+    fn nested_archives_route_editable_layouts_and_machine_files_to_the_chosen_library() {
+        let mut workspace = crate::Workspace::default();
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="28mm" height="20mm"><rect x="6" y="4" width="50" height="30" fill="purple"/></svg>"#;
+        crate::insert_editable_artwork(&mut workspace, svg, "badge", 5.0, 0.0, false).unwrap();
+        let project = crate::Project::capture(&workspace, 100.0, 100.0, "dst".into()).unwrap().unwrap();
+        let project = serde_json::to_vec(&project).unwrap();
+        let design = machine("flower", "dst");
+        let bytes = archive(&[("seasonal/badges/badge.stitchstudio", &project), ("seasonal/flower.dst", &design)]);
+
+        let (templates, skipped) = validate_members(&bytes, LIMITS, Target::Templates).unwrap();
+        assert_eq!(skipped, 1);
+        assert_eq!(templates, vec![("badge.stitchstudio".into(), project)]);
+        let (designs, skipped) = validate_members(&bytes, LIMITS, Target::Designs).unwrap();
+        assert_eq!(skipped, 1);
+        assert_eq!(designs, vec![("flower.dst".into(), design)]);
     }
 
     #[test]
@@ -410,7 +460,7 @@ mod tests {
             ]))
             .unwrap();
         assert!(
-            import(source.path(), destination.path())
+            import(source.path(), destination.path(), Target::Designs)
                 .unwrap_err()
                 .contains("broken.pes")
         );
@@ -434,9 +484,9 @@ mod tests {
                 ..LIMITS
             },
         ] {
-            assert!(validate_members(&bundle, limits).is_err());
+            assert!(validate_members(&bundle, limits, Target::Designs).is_err());
         }
-        assert!(validate_members(&bundle[..bundle.len() - 12], LIMITS).is_err());
+        assert!(validate_members(&bundle[..bundle.len() - 12], LIMITS, Target::Designs).is_err());
         for name in [
             "../other.dst",
             "/bad.dst",
@@ -448,6 +498,6 @@ mod tests {
             assert!(portable_name(name).is_err(), "{name}");
         }
         let unsafe_bundle = archive(&[("../other.dst", &machine("flower", "dst"))]);
-        assert!(validate_members(&unsafe_bundle, LIMITS).is_err());
+        assert!(validate_members(&unsafe_bundle, LIMITS, Target::Designs).is_err());
     }
 }
