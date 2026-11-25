@@ -61,10 +61,12 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const [ocr,setOcr]=useState<{art:Art;settings:typeof defaults;lines:OcrLine[]}|null>(null);
   const [ocrFonts,setOcrFonts]=useState<string[]>([]);
   const [ocrBusy,setOcrBusy]=useState(false);
+  const [autoOcr,setAutoOcr]=useState(true);
+  const [ocrAttempt,setOcrAttempt]=useState<{art:Art;removeBackground:boolean;tolerance:number;cleanup:boolean}|null>(null);
   const [ocrMessage,setOcrMessage]=useState('');
   const activeOcr=ocr?.art===art&&ocr.settings.removeBackground===settings.removeBackground&&ocr.settings.tolerance===settings.tolerance&&ocr.settings.cleanup===settings.cleanup?ocr:null;
   const [approved,setApproved]=useState<{art:Art;settings:typeof defaults;lines:OcrLine[]}|null>(null);
-  const selected=approved?.art===art&&approved.settings.removeBackground===settings.removeBackground&&approved.settings.tolerance===settings.tolerance&&approved.settings.cleanup===settings.cleanup?approved:null;
+  const selected=autoOcr&&approved?.art===art&&approved.settings.removeBackground===settings.removeBackground&&approved.settings.tolerance===settings.tolerance&&approved.settings.cleanup===settings.cleanup?approved:null;
   const [inspector,setInspector] = useState<'settings'|'quality'|'threads'>('settings');
   const [generated, setGenerated] = useState<{ art: Art; settings: typeof defaults; review: Review; lettering?: typeof selected } | null>(null);
   const [failed, setFailed] = useState<{ art: Art; settings: typeof defaults; message: string; lettering?: typeof selected } | null>(null);
@@ -85,11 +87,12 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   },[review]);
   const generationError = failed?.art === art && failed?.settings === settings && failed.lettering===selected ? failed.message : '';
   const valid = vector || (settings.widthMm >= 5 && settings.widthMm <= 300);
+  const ocrReady = !autoOcr || vector || (ocrAttempt?.art===art && ocrAttempt?.removeBackground===settings.removeBackground && ocrAttempt?.tolerance===settings.tolerance && ocrAttempt?.cleanup===settings.cleanup);
   const processing = Boolean(started && art && valid && !review && !generationError);
   const processedUrl = processed?.art === art && processed?.settings === settings ? processed.url : '';
 
   useEffect(() => {
-    if (!started || !art || !valid) return;
+    if (!started || !art || !valid || !ocrReady) return;
     let active = true;
     const timer = setTimeout(() => {
       pendingGeneration = pendingGeneration.then(async () => {
@@ -104,7 +107,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       });
     }, art === original ? (settings === defaults ? 0 : 450) : 450);
     return () => { active = false; clearTimeout(timer); };
-  }, [art, original, settings, valid, started, selected]);
+  }, [art, original, settings, valid, started, selected, ocrReady]);
 
   useEffect(() => {
     if (!showProcessed || !art || vector || processing || !valid || processedUrl) return;
@@ -127,7 +130,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   }, [art, settings, showProcessed, vector, processing, valid, processedUrl]);
 
   const acceptArtwork = useCallback((next: Art) => {
-    setOcr(null);setApproved(null);setOcrMessage('');
+    setOcr(null);setApproved(null);setOcrAttempt(null);setOcrMessage('');
     setInspector('settings');
     setStarted(false);
     setArt(next);
@@ -203,19 +206,26 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     }
   }
 
-  async function recognizeLettering() {
-    if(!art||vector)return;
-    setOcrBusy(true);setOcrMessage('Recognizing lettering locally…');
-    try {
-      const [lines,fonts]=await Promise.all([
-        invoke<OcrLine[]>('recognize_artwork_lettering',{bytes:art.bytes,removeBackground:settings.removeBackground,tolerance:settings.tolerance,cleanup:settings.cleanup}),
-        invoke<string[]>('lettering_fonts')
-      ]);
-      setOcr({art,settings,lines});setOcrFonts(fonts);
-      setOcrMessage(lines.length? 'Select the text regions to replace and correct the words or fonts.':'No text regions found. Try a clearer image.');
-    } catch(err){setOcrMessage(String(err));}
-    finally{setOcrBusy(false);}
-  }
+  useEffect(()=>{
+    if(!art||vector||!autoOcr||ocrReady)return;
+    let active=true;
+    const request={art,removeBackground:settings.removeBackground,tolerance:settings.tolerance,cleanup:settings.cleanup};
+    const timer=setTimeout(async()=>{
+      setOcrBusy(true);setOcrMessage('Recognizing lettering locally…');
+      try {
+        const [lines,fonts]=await Promise.all([
+          invoke<OcrLine[]>('recognize_artwork_lettering',{bytes:art.bytes,removeBackground:request.removeBackground,tolerance:request.tolerance,cleanup:request.cleanup}),
+          invoke<string[]>('lettering_fonts')
+        ]);
+        if(!active)return;
+        const result={art,settings,lines:lines.map(l=>({...l,enabled:true}))};
+        setOcr(result);setApproved(result);setOcrFonts(fonts);
+        setOcrMessage(lines.length? `${lines.length} text regions detected automatically. Review or correct the lettering below.`:'No text regions detected; using normal artwork tracing.');
+      } catch(err){if(active){setOcr(null);setApproved(null);setOcrMessage('Lettering recognition unavailable; normal tracing will continue. '+String(err));}}
+      finally{if(active){setOcrAttempt(request);setOcrBusy(false);}}
+    },250);
+    return()=>{active=false;clearTimeout(timer);setOcrBusy(false);};
+  },[art,vector,autoOcr,ocrReady,settings.removeBackground,settings.tolerance,settings.cleanup]);
 
   async function openDraft() {
     if (!review) return;
@@ -307,17 +317,18 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         {!vector&&<section className="digitizer-options" aria-label="Automatic lettering recognition">
           <h3>Automatic lettering recognition</h3>
           <small>Offline · converts traced text into editable lettering.</small>
-          <button type="button" disabled={ocrBusy||busy||processing} onClick={recognizeLettering}>{ocrBusy?'Recognizing…':'Recognize lettering'}</button>
+          <label><input type="checkbox" checked={autoOcr} onChange={e=>{setAutoOcr(e.target.checked);setOcrAttempt(null);setApproved(null);setOcrMessage('');}}/> Automatically recognize and reconstruct lettering</label>
+          {ocrBusy&&<small role="status">Detecting text and matching fonts…</small>
           {ocrMessage&&<p role="status">{ocrMessage}</p>}
-          {activeOcr&&<div style={{maxHeight:240,overflow:'auto'}}>
+          {autoOcr&&activeOcr&&<div style={{maxHeight:240,overflow:'auto'}}>
             {activeOcr.lines.map((line,i)=><div key={i} style={{padding:'8px 0'}}>
               <label><input type="checkbox" checked={line.enabled} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,enabled:e.target.checked}:l)})}/> Replace region {i+1}</label>
               <input aria-label={'Recognized text '+(i+1)} value={line.text} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,text:e.target.value}:l)})}/>
               <select aria-label={'Font for region '+(i+1)} value={line.font} onChange={e=>setOcr({...activeOcr,lines:activeOcr.lines.map((l,j)=>j===i?{...l,font:e.target.value}:l)})}>{ocrFonts.map(font=><option key={font}>{font}</option>)}</select>
             </div>)}
           </div>}
-          {activeOcr&&<button type="button" disabled={busy||processing||!activeOcr.lines.some(l=>l.enabled&&l.text.trim())} onClick={()=>{setApproved(activeOcr);setStarted(true);setMode('compare')}}>Preview editable lettering</button>}
-          {selected&&<button type="button" onClick={()=>setApproved(null)}>Restore traced lettering</button>}
+          {autoOcr&&activeOcr&&<button type="button" disabled={busy||processing} onClick={()=>{setApproved(activeOcr);setStarted(true);setMode('compare')}}>Update lettering preview</button>}
+          {selected&&<button type="button" onClick={()=>{setAutoOcr(false);setApproved(null);setOcrMessage('Using original traced lettering.')}}>Restore traced lettering</button>}
         </section>}
         {!started&&<button className="primary" disabled={busy||!valid} onClick={()=>setStarted(true)}>Start digitizing · {outputFormat.toUpperCase()}</button>}
       </>}
