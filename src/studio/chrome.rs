@@ -16,32 +16,32 @@ impl Studio {
     pub fn welcome_panel(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
         egui::Frame::new().fill(p.desk).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label(egui::RichText::new("Start a design").size(20.0).strong().color(p.text));
-            caption(ui, "Choose a starting point for your next embroidery project.");
-            ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                let width = ((ui.available_width() - 16.0) / 3.0).clamp(130.0, 240.0);
-                for (label, detail, action) in [
-                    ("Digitize artwork", "Convert a picture into stitches", Action::Place),
-                    ("Open design", "Continue an existing project", Action::Open),
-                    ("Create lettering", "Personalize with embroidery text", Action::AddText),
-                ] {
-                    ui.allocate_ui(Vec2::new(width, 52.0), |ui| {
-                        ui.vertical(|ui| {
-                            if ui.add_enabled(self.action_enabled(action),
-                                egui::Button::new(egui::RichText::new(label).strong())
-                                    .min_size(Vec2::new(width, 28.0))).clicked() {
-                                self.run_action(action);
-                            }
-                            caption(ui, detail);
-                        });
-                    });
-                }
-            });
+            ui.label(egui::RichText::new("WELCOME TO STITCH STUDIO").size(11.0).strong().color(p.accent));
+            ui.label(egui::RichText::new("Create beautiful embroidery designs").size(22.0).strong().color(p.text));
+            caption(ui, "Digitize artwork, add lettering, or continue an existing project.");
+            ui.add_space(8.0);
+            for (heading, actions) in [
+                ("Start a design", &[("Digitize artwork", Action::Place), ("Open design", Action::Open), ("Blank design", Action::New)][..]),
+                ("Quick create & edit", &[("Create lettering", Action::AddText), ("Inspect design", Action::ShowIssues), ("Optimize stitches", Action::OptimizeStitches)][..]),
+            ] {
+                ui.label(egui::RichText::new(heading).strong().color(p.text));
+                ui.horizontal_wrapped(|ui| {
+                    let width = ((ui.available_width() - 16.0) / 3.0).clamp(120.0, 240.0);
+                    for &(label, action) in actions {
+                        let mut button = egui::Button::new(egui::RichText::new(label).strong()).min_size(Vec2::new(width, 36.0));
+                        if action == Action::Place {
+                            button = egui::Button::new(egui::RichText::new(label).strong().color(Color32::WHITE)).fill(p.accent).min_size(Vec2::new(width, 36.0));
+                        }
+                        if ui.add_enabled(self.action_enabled(action), button).clicked() {
+                            self.run_action(action);
+                        }
+                    }
+                });
+                ui.add_space(6.0);
+            }
             ui.separator();
             ui.horizontal_wrapped(|ui| {
-                caption(ui, "Workflow: Artwork → Threads → Inspect → Export");
+                caption(ui, "Artwork → Threads → Inspect → Export");
                 if ui.button("Quick tour").clicked() {
                     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("studio-tour"), 0usize));
                 }
