@@ -999,3 +999,26 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .page-workspace .font-list>article{padding:8px;min-height:0}
 .page-workspace .thread-catalog{max-height:calc(100vh - 340px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
 }
+
+/* Compact home dashboard for the React/Tauri desktop target. */
+.home-workspace .home-hero{min-height:0;padding:20px 24px;margin-bottom:0}
+.home-workspace .home-hero h1{font-size:clamp(24px,2.3vw,34px);margin:5px 0 8px}
+.home-eyebrow{font-size:11px;letter-spacing:.12em;font-weight:700;color:var(--lav-accent,#6945a2)}
+.home-workspace .home-hero-art,.home-workspace .home-hero-art svg{max-height:130px}
+.home-workspace .home-section-heading{margin:16px 0 8px}
+.home-workspace .home-actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.home-workspace .home-actions .tile{min-height:86px;padding:10px;gap:8px}
+.home-workspace .home-actions .tile h3{font-size:14px;margin:0 0 4px}
+.home-workspace .home-actions .tile p{font-size:12px;line-height:1.35;margin:0}
+.home-workspace .home-actions .tile>svg{display:none}
+.recent-project-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.recent-project-grid article,.recent-project-grid .recent-scan{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;min-width:0;min-height:105px;padding:12px;margin:0;border:1px solid var(--lav-border,#ded8e8);border-radius:10px;background:var(--lav-panel,#fff)}
+.recent-project-grid article>strong{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent-project-grid article>svg,.recent-scan>svg{color:var(--lav-accent,#6945a2)}
+.recent-project-grid article>button{padding:5px 8px;font-size:12px}
+.home-workspace .home-resources{grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.home-workspace .home-resources>button{min-height:65px;padding:10px}
+.home-workspace .home-resources>button small,.home-workspace .home-resources>button>svg:last-child{display:none}
+.home-workspace .compact-home-help{display:none}
+@media(max-width:1150px){.home-workspace .home-actions{grid-template-columns:repeat(3,minmax(0,1fr))}.recent-project-grid,.home-workspace .home-resources{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.home-workspace .home-actions,.recent-project-grid,.home-workspace .home-resources{grid-template-columns:repeat(2,minmax(0,1fr))}}
