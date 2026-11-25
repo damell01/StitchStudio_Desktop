@@ -805,6 +805,51 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
 // An explicitly visual alternative: restore solid ink even when it costs
 // more stitches. Keep counters and meaningful holes, and never replace
 // specialty stitches, recorded lettering or unselected shapes.
+// Compare spatial occupancy of actual needle paths, not just bounding boxes.
+#[derive(serde::Serialize)]
+struct OptimizationQuality{coverage:f64,density_peak:usize,seconds:f64}
+fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->OptimizationQuality{
+    use std::collections::{HashSet,HashMap};
+    let sample=|d:&Design|{
+        let mut cells=HashSet::new();let mut density=HashMap::<(i32,i32),usize>::new();
+        for run in d.blocks.iter().flat_map(|b|&b.runs){
+            for p in &run.pts{*density.entry(((p.x/10.).floor() as i32,(p.y/10.).floor() as i32)).or_default()+=1;}
+            for pair in run.pts.windows(2){
+                let n=(pair[0].dist(pair[1])/5.).ceil().clamp(1.,100.) as usize;
+                for k in 0..=n{let p=pair[0].lerp(pair[1],k as f64/n as f64);cells.insert(((p.x/10.).floor() as i32,(p.y/10.).floor() as i32));}
+            }
+        }
+        (cells,density.values().copied().max().unwrap_or(0))
+    };
+    let (a,_)=sample(original);let (b,peak)=sample(plan);
+    let overlap=a.intersection(&b).count() as f64/a.union(&b).count().max(1) as f64;
+    OptimizationQuality{coverage:overlap*100.,density_peak:peak,seconds:plan.stitch_count() as f64/speed.clamp(100.,1500.)*60.+plan.trim_count() as f64*trim.clamp(0.,30.)}
+}
+fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
+    let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
+    let score=|d:&Design|d.stitch_count() as f64/speed*60.+d.trim_count() as f64*trim;
+    let mut choices=Vec::new();
+    let mut mode=options.clone();mode.target_minutes=None;mode.solid=true;mode.merge=true;mode.auto_types=true;
+    if let Ok(v)=choose_simplification(source,original,3,uids,false,&mode){choices.push(v);}
+    if uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&s.params.kind!=Some(zigzag::params::Kind::Manual)){
+        // Reuse dependency-aware ordering, without moving overlapping layers.
+        let mut doc=source.clone();doc.settings.hat_order=true;
+        if doc.sync().is_ok(){
+            let plan=doc.plan();
+            if let Ok(v)=choose_simplification(&doc,&plan,3,None,false,&mode){choices.push(v);}
+            choices.push((doc,plan));
+        }
+    }
+    let audit=measure_stitches(original);let bounds=original.bounds();
+    choices.retain(|(_,d)|{let b=d.bounds();let q=measure_stitches(d);
+        d.stitch_count()>0&&score(d)<score(original)&&q.long<=audit.long&&q.zero<=audit.zero
+        &&bounds.min.dist(b.min)<=5.&&bounds.max.dist(b.max)<=5.
+        &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
+        &&optimization_quality(original,d,speed,trim).coverage>=65.
+    });
+    choices.sort_by(|a,b|score(&a.1).total_cmp(&score(&b.1)));
+    choices.into_iter().next().ok_or("No faster eligible stitch plan found".into())
+}
 fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
     let mut candidates=Vec::new();
     let old_bounds=original.bounds();let old_audit=measure_stitches(original);
@@ -904,7 +949,7 @@ struct SimplifyDraft {
     variants:Vec<(u8,zigzag::document::Document,Design)>,
 }
 #[derive(serde::Serialize)]
-struct SimplifyVariant { strength:u8, plan:Option<Preview>, reason:Option<String> }
+struct SimplifyVariant { strength:u8, plan:Option<Preview>, reason:Option<String>, quality:Option<OptimizationQuality> }
 #[derive(serde::Serialize)]
 struct SimplifyReview { id:u64, variants:Vec<SimplifyVariant> }
 fn same_stitch_plan(a:&Design,b:&Design)->bool{
@@ -921,11 +966,11 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
         if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
         let options=options.unwrap_or_default();
         let mut variants=Vec::new();let mut stored=Vec::new();
-        for strength in 1..=4{
-            if strength==4{
-                match choose_silhouette(&source,&original,uids.as_deref(),&options){
-                    Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None});stored.push((strength,doc,design));}
-                    Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
+        for strength in 1..=5{
+            if strength>=4{
+                match if strength==4{choose_silhouette(&source,&original,uids.as_deref(),&options)}else{choose_fast_stitch(&source,&original,uids.as_deref(),&options)}{
+                    Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
+                    Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
                 }
                 continue
             }
@@ -934,8 +979,8 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
             if strength==2{mode.lighter_underlay=false;}
             if strength==3{mode.solid=true;mode.merge=true;mode.auto_types=true;}
             match choose_simplification(&source,&original,strength,uids.as_deref(),strength>1&&remove_detail.unwrap_or(false),&mode){
-                Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None});stored.push((strength,doc,design));}
-                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
+                Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
+                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
             }
         }
         w.next_draft_id=w.next_draft_id.wrapping_add(1);
@@ -2219,18 +2264,18 @@ async fn compare_digitizer_draft(id:u64,app:tauri::AppHandle)->Result<Vec<Simpli
             (d.document.clone(),d.design.clone())
         };
         let mut variants=Vec::new();let mut alternatives=Vec::new();
-        for strength in 1..=4 {
-            if strength==4{
-                match choose_silhouette(&doc,&original,None,&SimplifyOptions::default()){
-                    Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None});alternatives.push((strength,d,plan));}
-                    Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
+        for strength in 1..=5 {
+            if strength>=4{
+                match if strength==4{choose_silhouette(&doc,&original,None,&SimplifyOptions::default())}else{choose_fast_stitch(&doc,&original,None,&SimplifyOptions::default())}{
+                    Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None,quality:Some(optimization_quality(&original,&plan,800.,3.))});alternatives.push((strength,d,plan));}
+                    Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
                 }
                 continue
             }
             let options=SimplifyOptions{solid:strength==3,merge:strength>=2,auto_types:strength>=2,..Default::default()};
             match choose_simplification(&doc,&original,strength,None,strength==3,&options){
-                Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None});alternatives.push((strength,d,plan));}
-                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
+                Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None,quality:Some(optimization_quality(&original,&plan,800.,3.))});alternatives.push((strength,d,plan));}
+                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
             }
         }
         let mut w=state.lock().map_err(|e|e.to_string())?;
