@@ -333,6 +333,29 @@ impl Studio {
             d.widget_info(|| egui::WidgetInfo::labeled(egui::Role::SpinButton, true, label));
             done(&d)
         };
+        ui.label(egui::RichText::new("Lettering styles").strong());
+        ui.horizontal_wrapped(|ui| {
+            for (label, radius) in [("Straight", 0.0_f64), ("Arch up", 35.0), ("Arch down", -35.0), ("Tight arch", 15.0)] {
+                if ui.small_button(label).on_hover_text("Set the lettering baseline; text remains editable").clicked() {
+                    spec.path = None;
+                    spec.arc_mm = radius;
+                    committed = true;
+                }
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            if ui.small_button("Reset spacing").clicked() {
+                spec.spacing_mm = 0.0;
+                spec.kern.clear();
+                committed = true;
+            }
+            if ui.small_button("Reset proportions").clicked() {
+                spec.h_scale = 100.0;
+                spec.v_scale = 100.0;
+                committed = true;
+            }
+        });
+        ui.separator();
         form(ui, &format!("{id}-form"), |fm| {
             fm.row("Text", |ui, lid| {
                 let r = ui
