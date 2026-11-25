@@ -1,10 +1,12 @@
 import {Download, FileText, TriangleAlert, X} from 'lucide-react';
 import {useEffect,useMemo,useRef,useState} from 'react';
+import {thumbnailOf} from './library';
+import type {ThreadAssignments} from './thread-order';
 import {MachineCommandPreview} from './machine-command-preview';
 import './export-center.css';
 
 type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
-type Props={plan:Plan;width:number;height:number;format:string;setFormat:(s:string)=>void;machine:string;blocked:boolean;busy:boolean;onExport:()=>Promise<void>;onClose:()=>void};
+type Props={assignments:ThreadAssignments;plan:Plan;width:number;height:number;format:string;setFormat:(s:string)=>void;machine:string;blocked:boolean;busy:boolean;onExport:(companions:boolean)=>Promise<void>;onClose:()=>void};
 const formats=['dst','pes','jef','exp','vp3','pec'];
 const hex=(color:number[])=>'#'+color.map(value=>value.toString(16).padStart(2,'0')).join('').toUpperCase();
 
@@ -21,10 +23,12 @@ function escapeHtml(value:string) {
   return value.replace(/[&<>"']/g,character=>entities[character]);
 }
 
-export function ExportCenter({plan,width,height,format,setFormat,machine,blocked,busy,onExport,onClose}:Props) {
+export function ExportCenter({assignments,plan,width,height,format,setFormat,machine,blocked,busy,onExport,onClose}:Props) {
   const dialog=useRef<HTMLDialogElement>(null);
   const [speed,setSpeed]=useState('600');
   const [ack,setAck]=useState(false);
+  const [companions,setCompanions]=useState(true);
+  const image=useMemo(()=>thumbnailOf(plan),[plan]);
   useEffect(()=>{dialog.current?.showModal();},[]);
   const dimensions=useMemo(()=>designSize(plan),[plan]);
   const sequence=useMemo(()=>plan.blocks.map(block=>({
@@ -33,13 +37,13 @@ export function ExportCenter({plan,width,height,format,setFormat,machine,blocked
   const minutes=Math.ceil(plan.stitches/Math.min(1500,Math.max(100,Number(speed)||600)));
 
   function worksheet() {
-    const rows=sequence.map(({color,points},index)=>`<tr><td>${index+1}</td><td><span style="background:${color}"></span> ${color}</td><td>${points}</td></tr>`).join('');
+    const rows=sequence.map(({color,points},index)=>`<tr><td>${index+1}</td><td><span style="background:${color}"></span> ${color}</td><td>${escapeHtml(assignments[index]||'Not assigned')}</td><td>${points}</td></tr>`).join('');
     const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Embroidery worksheet</title>
       <style>body{font:16px system-ui;margin:40px;color:#302842}table{border-collapse:collapse;width:100%}td,th{padding:10px;border-bottom:1px solid #ccc;text-align:left}td span{display:inline-block;width:20px;height:20px;border:1px solid #777;vertical-align:middle}@media print{body{margin:12mm}*{print-color-adjust:exact}}</style></head>
       <body><h1>${escapeHtml(plan.name)}</h1><h2>Embroidery worksheet</h2><p>${escapeHtml(machine||'Manual setup')} · ${escapeHtml(format.toUpperCase())}</p>
       <p>Design ${dimensions} · Hoop ${width} × ${height} mm</p><p>${plan.stitches} planned stitches · ${plan.trims} trims · About ${minutes} min needle time</p>
-      <table><thead><tr><th>Sequence</th><th>Approximate color</th><th>Planned points</th></tr></thead><tbody>${rows}</tbody></table>
-      <p>Verify physical spool labels and test sew before production.</p></body></html>`;
+      <img src="${image}" alt="Design stitch preview" style="max-width:320px"/><table><thead><tr><th>Sequence</th><th>Approximate color</th><th>Needle / spool</th><th>Planned points</th></tr></thead><tbody>${rows}</tbody></table>
+      <p>${format==='dst'?'DST stores color-change positions only. Assign the listed spools on your machine. ':''}Verify physical spool labels and test sew before production.</p></body></html>`;
     const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
     const anchor=document.createElement('a');
     anchor.href=url;
@@ -80,13 +84,13 @@ export function ExportCenter({plan,width,height,format,setFormat,machine,blocked
         <MachineCommandPreview format={format} width={width} height={height} disabled={busy||blocked}/>
       </section>
       <section className="export-review-threads" aria-label="Thread sequence">
-        <div className="export-thread-heading"><h3>Thread sequence</h3><small>{sequence.length} color blocks</small></div>
+        <div className="export-design-preview"><img src={image} alt="Design stitch preview"/></div><div className="export-thread-heading"><h3>Thread sequence</h3><small>{sequence.length} color blocks</small></div>
         {format==='dst'&&<p className="muted">Match the numbered swatches on your machine. DST stores color changes without exact thread colors.</p>}
         <ol className="export-thread-cards">
           {sequence.map(({color,points},index)=><li key={index}>
             <span className="export-thread-number" aria-label={`Block ${index+1}`}>{index+1}</span>
             <span className="export-thread-swatch" style={{backgroundColor:color}} aria-hidden="true"/>
-            <div><strong>{color}</strong><small>{points.toLocaleString()} points</small></div>
+            <div><strong>{color}</strong>{assignments[index]&&<small>{assignments[index]}</small>}<small>{points.toLocaleString()} points</small></div>
           </li>)}
         </ol>
       </section>
@@ -94,8 +98,8 @@ export function ExportCenter({plan,width,height,format,setFormat,machine,blocked
     <footer className="export-review-footer">
       <label><input type="checkbox" checked={ack} disabled={busy} onChange={event=>setAck(event.target.checked)}/> Reviewed and ready for a test sew</label>
       <div>
-        <button onClick={worksheet}><FileText size={16} aria-hidden="true"/> Save printable worksheet</button>
-        <button className="primary" disabled={blocked||busy||!ack} onClick={()=>void onExport()}>
+        <label><input type="checkbox" checked={companions} disabled={busy} onChange={e=>setCompanions(e.target.checked)}/> Include color sheet and preview</label><button onClick={worksheet}><FileText size={16} aria-hidden="true"/> Save printable worksheet</button>
+        <button className="primary" disabled={blocked||busy||!ack} onClick={()=>void onExport(companions)}>
           <Download size={16} aria-hidden="true"/>{busy?'Saving…':'Save embroidery file'}
         </button>
       </div>
