@@ -2107,6 +2107,8 @@ fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
         "zoom to fit" | "zoom fit" => A::ZoomFit,
         "check design" | "show design issues" => A::ShowIssues,
         "group colors" | "group thread colors" => A::GroupColors,
+        "optimize stitches" | "optimize automatic stitch settings" => A::OptimizeStitches,
+        "repair design" | "clean up design" => A::CleanUp,
         "duplicate selection" | "duplicate selected objects" => A::Duplicate,
         "flip horizontally" | "flip horizontal" => A::FlipH,
         "flip vertically" | "flip vertical" => A::FlipV,
@@ -2154,6 +2156,7 @@ mod quick_action_tests {
     fn routes_exact_local_commands_only() {
         assert_eq!(quick_action(" Center the design! "), Some(Action::CenterInHoop));
         assert_eq!(quick_action("undo"), Some(Action::Undo));
+        assert_eq!(quick_action("optimize stitches"), Some(Action::OptimizeStitches));
         assert_eq!(quick_action("Could you please center my design?"), Some(Action::CenterInHoop));
         assert_eq!(quick_action("please   center it in the hoop"), Some(Action::CenterInHoop));
         assert_eq!(quick_action("can you not center it"), None);
