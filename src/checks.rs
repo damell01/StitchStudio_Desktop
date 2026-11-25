@@ -245,6 +245,37 @@ pub fn check(
             _ => {}
         }
     }
+    // Inspect the actual planned needle movements, not just source geometry.
+    // Run boundaries represent travel/trim decisions and are not sewn segments.
+    let mut long = 0usize;
+    let mut tiny = 0usize;
+    let mut total = 0usize;
+    let mut longest = 0.0_f64;
+    for block in &design.blocks {
+        for run in &block.runs {
+            for pair in run.pts.windows(2) {
+                let length = pair[0].dist(pair[1]) / 10.0;
+                total += 1;
+                longest = longest.max(length);
+                if length > 12.0 { long += 1; }
+                if length < 0.2 { tiny += 1; }
+            }
+        }
+    }
+    if long > 0 {
+        add(None, Level::Warning, format!(
+            "{long} sewn movements exceed 12 mm (longest {longest:.1} mm). Inspect long stitches and machine format limits before export."
+        ));
+    }
+    if tiny >= 30 && tiny.saturating_mul(10) > total {
+        add(None, Level::Warning, format!(
+            "{tiny} of {total} sewn movements are under 0.2 mm. Inspect dense areas for repeated needle penetration; some tie stitches are intentional."
+        ));
+    }
+    if !shapes.is_empty() && design.stitch_count() == 0
+        && shapes.iter().any(|s| s.params.kind != Some(Kind::Skip)) {
+        add(None, Level::Error, "No stitches were generated for the design. Review object settings before exporting.".into());
+    }
     out.sort_by_key(|i| std::cmp::Reverse(i.level));
     out
 }
