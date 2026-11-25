@@ -1182,7 +1182,20 @@ impl Studio {
                 if ui.button("Dismiss").clicked() { self.agent.local_pending = None; }
             });
         }
+        let has_selection = !self.sel_indices().is_empty();
         let a = &mut self.agent;
+        if a.prompt.trim().is_empty() && !a.running() {
+            let examples = if has_selection {
+                ["make selection satin", "set stitch spacing to 0.45 mm", "duplicate selection"]
+            } else {
+                ["center my design", "optimize stitches", "check design"]
+            };
+            ui.horizontal_wrapped(|ui| {
+                for example in examples {
+                    if ui.small_button(example).clicked() { a.prompt = example.into(); a.focus = true; }
+                }
+            });
+        }
         caption(ui, "Native commands are free and offline. External agents use your own account.");
         if ui.checkbox(&mut a.inference_enabled, "Enable AI inference").on_hover_text("Off: only instant native commands; no external AI process is started.").changed() {
             if !a.inference_enabled { a.stop(); }
@@ -1430,6 +1443,27 @@ impl Studio {
                 ctx.request_repaint();
                 return;
             }
+        }
+        if let Some(spacing) = parse_spacing(&normalized) {
+            let indices = self.sel_indices();
+            let prompt = std::mem::take(&mut self.agent.prompt);
+            self.agent.log.push(Entry::You(prompt));
+            let mut changed = 0;
+            for i in indices {
+                if let Some(shape) = self.doc.shapes.get_mut(i) {
+                    if matches!(shape.params.kind, Some(zigzag::params::Kind::Fill | zigzag::params::Kind::Satin)) {
+                        shape.params.spacing = Some(spacing);
+                        changed += 1;
+                    }
+                }
+            }
+            if changed == 0 {
+                self.agent.log.push(Entry::Error("Select explicit fill or satin objects first.".into()));
+            } else {
+                self.agent.log.push(Entry::Done(format!("Set spacing to {spacing:.2} mm on {changed} objects.")));
+            }
+            ctx.request_repaint();
+            return;
         }
         // Common exact commands bypass external inference and process startup.
         if let Some(action) = quick_action(&self.agent.prompt) {
@@ -2205,6 +2239,13 @@ fn command_suggestions(prompt: &str) -> Vec<&'static str> {
     }).take(4).collect()
 }
 
+fn parse_spacing(prompt: &str) -> Option<f64> {
+    let value = ["set stitch spacing to ", "increase stitch spacing to ", "decrease stitch spacing to ", "change stitch spacing to ", "set spacing to "]
+        .iter().find_map(|prefix| prompt.strip_prefix(*prefix))?;
+    let value = value.strip_suffix("mm")?.trim().parse::<f64>().ok()?;
+    (value.is_finite() && (0.25..=0.8).contains(&value)).then_some(value)
+}
+
 fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
     use crate::commands::Action as A;
     let normalized = prompt.trim().trim_end_matches(['.', '!', '?']).to_ascii_lowercase();
@@ -2274,6 +2315,13 @@ fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
 mod quick_action_tests {
     use super::quick_action;
     use crate::commands::Action;
+    #[test]
+    fn parses_bounded_spacing() {
+        assert_eq!(super::parse_spacing("set stitch spacing to 0.45 mm"), Some(0.45));
+        assert_eq!(super::parse_spacing("set spacing to 0.01 mm"), None);
+        assert_eq!(super::parse_spacing("set spacing to NaN mm"), None);
+        assert_eq!(super::parse_spacing("set spacing to 0.45 mm and export"), None);
+    }
     #[test]
     fn suggests_transposed_and_partial_commands() {
         assert!(super::command_suggestions("cneter my design").iter().any(|s| quick_action(s) == Some(Action::CenterInHoop)));
