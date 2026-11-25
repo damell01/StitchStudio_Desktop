@@ -1,4 +1,4 @@
-//! Reading machine files (PES, PEC, DST, EXP, JEF) into stitch blocks, and
+//! Reading machine files (PES, PEC, DST, EXP, JEF, VP3) into stitch blocks, and
 //! turning them into an editable SVG of manual-stitch paths.
 //! Decoding follows pyembroidery (MIT License, Copyright (c) 2018 Tatarize).
 
@@ -165,6 +165,9 @@ fn read_dst(d: &[u8]) -> Result<StitchFile> {
     if d.len() < 512 {
         bail!("DST file is too short");
     }
+    if !d.starts_with(b"LA:") {
+        bail!("Not a DST file");
+    }
     let header = String::from_utf8_lossy(&d[..512]);
     let mut name = String::new();
     let mut colors = Vec::new();
@@ -270,9 +273,113 @@ fn read_jef(d: &[u8]) -> Result<StitchFile> {
     })
 }
 
+// VP3 block layout and stitch commands follow pyembroidery's Vp3Reader (MIT).
+// Read within the declared block lengths so adjacent threads cannot consume each other.
+struct Vp3<'a>(&'a [u8]);
+
+impl<'a> Vp3<'a> {
+    fn take(&mut self, count: usize) -> Result<&'a [u8]> {
+        let (head, tail) = self.0.split_at_checked(count)
+            .ok_or_else(|| anyhow::anyhow!("VP3 block is truncated"))?;
+        self.0 = tail;
+        Ok(head)
+    }
+
+    fn u16(&mut self) -> Result<u16> {
+        Ok(u16::from_be_bytes(self.take(2)?.try_into()?))
+    }
+
+    fn i32(&mut self) -> Result<i32> {
+        Ok(i32::from_be_bytes(self.take(4)?.try_into()?))
+    }
+
+    fn skip_string(&mut self) -> Result<()> {
+        let size = self.u16()? as usize;
+        self.take(size)?;
+        Ok(())
+    }
+
+    fn block(&mut self, kind: u8) -> Result<Self> {
+        if self.take(3)? != [0, kind, 0] {
+            bail!("Unexpected VP3 block type");
+        }
+        let size = u32::from_be_bytes(self.take(4)?.try_into()?) as usize;
+        Ok(Self(self.take(size)?))
+    }
+
+    fn position(&mut self) -> Result<P> {
+        Ok(P::new(f64::from(self.i32()?) / 100.0, -f64::from(self.i32()?) / 100.0))
+    }
+}
+
+fn read_vp3(data: &[u8]) -> Result<StitchFile> {
+    let mut input = Vp3(data);
+    if input.take(6)? != b"%vsm%\0" {
+        bail!("Not a VP3 file");
+    }
+    input.skip_string()?;
+    let mut file = input.block(2)?;
+    file.skip_string()?;
+    file.take(23)?;
+    let design_count = file.u16()?;
+    if design_count == 0 || design_count > 256 {
+        bail!("Invalid VP3 design count");
+    }
+    let mut builder = Builder::new();
+    let mut colors = Vec::new();
+    for _ in 0..design_count {
+        let mut design = file.block(3)?;
+        let center = design.position()?;
+        design.take(27)?;
+        design.skip_string()?;
+        design.take(24)?;
+        design.skip_string()?;
+        let color_count = design.u16()?;
+        if color_count == 0 || usize::from(color_count) + colors.len() > 4096 {
+            bail!("Invalid VP3 color count");
+        }
+        for _ in 0..color_count {
+            let mut color_block = design.block(5)?;
+            let start = center + color_block.position()?;
+            let count = color_block.take(2)?[0];
+            if count == 0 { bail!("VP3 thread has no color"); }
+            let mut color = [0; 3];
+            for _ in 0..count {
+                color.copy_from_slice(&color_block.take(6)?[..3]);
+            }
+            color_block.take(2)?;
+            for _ in 0..3 { color_block.skip_string()?; }
+            color_block.take(8)?;
+            let mut stitches = color_block.block(1)?;
+            if stitches.take(3)? != [0x0a, 0xf6, 0] {
+                bail!("Invalid VP3 stitch header");
+            }
+            if !colors.is_empty() { builder.color_change(); }
+            builder.pos = start;
+            colors.push(color);
+            while !stitches.0.is_empty() {
+                let record = stitches.take(2)?;
+                match (record[0], record[1]) {
+                    (0x80, 1) => {
+                        let dx = stitches.u16()? as i16;
+                        let dy = stitches.u16()? as i16;
+                        if stitches.take(2)? != [0x80, 2] { bail!("Invalid VP3 long stitch"); }
+                        builder.stitch(f64::from(dx), f64::from(dy));
+                    }
+                    (0x80, 2) => {}
+                    (0x80, 3) => builder.jumped = true,
+                    (0x80, _) => bail!("Unsupported VP3 stitch command"),
+                    (dx, dy) => builder.stitch(f64::from(dx as i8), f64::from(dy as i8)),
+                }
+            }
+        }
+    }
+    Ok(StitchFile { name: String::new(), blocks: builder.finish(&colors) })
+}
+
 /// Read a machine file by extension.
 pub fn read_stitch_file(data: &[u8], ext: &str) -> Result<StitchFile> {
-    match ext.to_ascii_lowercase().as_str() {
+    let file = match ext.to_ascii_lowercase().as_str() {
         "pes" => {
             if !data.starts_with(b"#PES") {
                 bail!("not a PES file");
@@ -285,15 +392,21 @@ pub fn read_stitch_file(data: &[u8], ext: &str) -> Result<StitchFile> {
             };
             read_pec(data, off)
         }
-        "pec" => read_pec(data, 8),
+        "pec" => {
+            if !data.starts_with(b"#PEC0001") { bail!("Not a PEC file"); }
+            read_pec(data, 8)
+        }
         "dst" => read_dst(data),
         "exp" => Ok(StitchFile {
             name: String::new(),
             blocks: read_exp_like(data, 0x04, &[]),
         }),
         "jef" => read_jef(data),
-        other => bail!("can't read .{other} files (PES, PEC, DST, EXP and JEF are supported)"),
-    }
+        "vp3" => read_vp3(data),
+        other => bail!("Cannot open .{other}. Import formats: {}", super::READABLE_FORMATS.join(", ")),
+    }?;
+    if file.blocks.is_empty() { bail!("No embroidery stitches found"); }
+    Ok(file)
 }
 
 /// An SVG (mm units, origin at the design's center) with one manual-stitch
@@ -395,6 +508,8 @@ mod tests {
             ("dst", dst::write_dst(&d)),
             ("exp", more::write_exp(&d)),
             ("jef", more::write_jef(&d)),
+            ("pec", pes::write_pec_file(&d)),
+            ("vp3", more::write_vp3(&d)),
         ] {
             let f = read_stitch_file(&bytes, ext).unwrap_or_else(|e| panic!("{ext}: {e}"));
             assert_eq!(f.blocks.len(), 2, "{ext}: two colors");
@@ -413,6 +528,10 @@ mod tests {
                     pts.iter().any(|p| p.dist(want) < 0.6),
                     "{ext}: missing {want:?}"
                 );
+            }
+            if ext == "vp3" {
+                assert_eq!(f.blocks.iter().map(|block| block.color).collect::<Vec<_>>(),
+                    d.blocks.iter().map(|block| block.color).collect::<Vec<_>>());
             }
             if ext == "pes" || ext == "jef" {
                 assert_ne!(f.blocks[0].color, f.blocks[1].color, "{ext}: colors kept");

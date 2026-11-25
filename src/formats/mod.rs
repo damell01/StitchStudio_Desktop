@@ -26,7 +26,7 @@ pub const MACHINE_FORMATS: [(&str, &str); 7] = [
 ];
 
 /// Machine files ZigZag can open.
-pub const READABLE_FORMATS: [&str; 5] = ["pes", "pec", "dst", "exp", "jef"];
+pub const READABLE_FORMATS: [&str; 6] = ["dst", "pes", "pec", "exp", "jef", "vp3"];
 
 /// Encode a design in the machine format for `ext` (no preview formats).
 pub fn write_format(d: &Design, ext: &str) -> anyhow::Result<Vec<u8>> {

@@ -400,6 +400,18 @@ mod tests {
     }
 
     #[test]
+    fn nested_zip_import_accepts_every_machine_format() {
+        let formats = formats::READABLE_FORMATS;
+        let data: Vec<_> = formats.iter().map(|ext| machine("mixed formats", ext)).collect();
+        let names: Vec<_> = formats.iter().map(|ext| format!("nested/design.{ext}")).collect();
+        let entries: Vec<_> = names.iter().zip(&data)
+            .map(|(name, bytes)| (name.as_str(), bytes.as_slice())).collect();
+        let (imported, skipped) = validate_members(&archive(&entries), LIMITS, Target::Designs).unwrap();
+        assert_eq!(imported.len(), formats.len());
+        assert_eq!(skipped, 0);
+    }
+
+    #[test]
     fn imports_real_files_without_replacing_names_and_deduplicates_on_retry() {
         let destination = tempfile::tempdir().unwrap();
         fs::write(destination.path().join("flower.dst"), b"existing design").unwrap();

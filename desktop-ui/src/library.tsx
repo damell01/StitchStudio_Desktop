@@ -135,7 +135,7 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
     {message && <p role="status">{message}</p>}
     {tab === 'embroidery' ? <>
       {files.length === 0 && <>
-        <p>Import machine files in DST, PES, PEC, EXP or JEF format to use them here.</p>
+        <p>Import machine files in DST, PES, PEC, EXP, JEF or VP3 format to use them here.</p>
         {onArtwork&&<CharacterGallery onArt={onArtwork}/>}
       </>}
       {files.length > 0 && visibleFiles.length === 0 && <p>No files match your search.</p>}

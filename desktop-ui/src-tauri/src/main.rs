@@ -1121,7 +1121,13 @@ fn load_design_document(
 
 #[tauri::command]
 async fn open_svg(width_mm: f64, colors: u32, remove_background: bool, detail: f64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Option<Preview>, String> {
-    let Some(path) = rfd::AsyncFileDialog::new().add_filter("Artwork and embroidery", &["svg","png","jpg","jpeg","webp","gif","bmp","tiff","tif","dst","pes","pec","exp","jef"]).pick_file().await else { return Ok(None); };
+    const ARTWORK: [&str; 9] = ["svg", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff", "tif"];
+    let types: Vec<_> = formats::READABLE_FORMATS.into_iter().chain(ARTWORK).collect();
+    let Some(path) = rfd::AsyncFileDialog::new()
+        .add_filter("Artwork and embroidery designs", &types)
+        .add_filter("Embroidery designs", &formats::READABLE_FORMATS)
+        .add_filter("Artwork and images", &ARTWORK)
+        .pick_file().await else { return Ok(None); };
     let path = path.path().to_owned();
     let (source, design) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
         let options = zigzag::trace::TraceOptions { width_mm, colors, remove_background, detail, ..Default::default() };
@@ -1503,7 +1509,7 @@ async fn import_design_archive(app: tauri::AppHandle) -> Result<Option<design_ar
 }
 #[tauri::command]
 async fn import_personal_designs(folder:bool,app:tauri::AppHandle)->Result<usize,String>{
- let paths=if folder{let Some(p)=rfd::AsyncFileDialog::new().pick_folder().await else{return Ok(0)};vec![p.path().to_owned()]}else{let Some(p)=rfd::AsyncFileDialog::new().add_filter("Embroidery",&["dst","pes","pec","exp","jef"]).pick_files().await else{return Ok(0)};p.into_iter().map(|p|p.path().to_owned()).collect()};
+ let paths=if folder{let Some(p)=rfd::AsyncFileDialog::new().pick_folder().await else{return Ok(0)};vec![p.path().to_owned()]}else{let Some(p)=rfd::AsyncFileDialog::new().add_filter("Embroidery designs",&formats::READABLE_FORMATS).pick_files().await else{return Ok(0)};p.into_iter().map(|p|p.path().to_owned()).collect()};
  let dir=personal_design_dir(&app)?;
  tauri::async_runtime::spawn_blocking(move||->Result<usize,String>{
  let mut stack=paths;let mut count=0;let mut visited=0;
@@ -1511,7 +1517,7 @@ async fn import_personal_designs(folder:bool,app:tauri::AppHandle)->Result<usize
  let Ok(meta)=std::fs::symlink_metadata(&p) else{continue};if meta.file_type().is_symlink(){continue}
  if meta.is_dir(){if let Ok(entries)=std::fs::read_dir(&p){stack.extend(entries.flatten().map(|e|e.path()))}continue}
  let ext=p.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
- if !meta.is_file()||meta.len()>20_000_000||!["dst","pes","pec","exp","jef"].contains(&ext.as_str()){continue}
+ if !meta.is_file()||meta.len()>20_000_000||!formats::READABLE_FORMATS.contains(&ext.as_str()){continue}
  let Ok(bytes)=std::fs::read(&p) else{continue};if formats::read::read_stitch_file(&bytes,&ext).map(|f|f.blocks.is_empty()).unwrap_or(true){continue}
  let stem=p.file_stem().unwrap_or_default().to_string_lossy();
  for n in 0..1000{let name=if n==0{format!("{stem}.{ext}")}else{format!("{stem} ({n}).{ext}")};let dest=dir.join(name);
@@ -1523,7 +1529,7 @@ async fn import_personal_designs(folder:bool,app:tauri::AppHandle)->Result<usize
 async fn insert_embroidery(x_mm:f64,y_mm:f64,file:Option<String>,app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>)->Result<Option<Preview>,String>{
  if ![x_mm,y_mm].iter().all(|v|v.is_finite()&&v.abs()<=500.0){return Err("Invalid placement".into())}
  let from_library = file.is_some();
- let path=if let Some(name)=file{let p=std::path::Path::new(&name);if p.components().count()!=1||!matches!(p.components().next(),Some(std::path::Component::Normal(_))){return Err("Invalid design filename".into())}personal_design_dir(&app)?.join(p)}else{let Some(path)=rfd::AsyncFileDialog::new().add_filter("Embroidery designs",&["dst","pes","pec","exp","jef"]).pick_file().await else{return Ok(None)};path.path().to_owned()};
+ let path=if let Some(name)=file{let p=std::path::Path::new(&name);if p.components().count()!=1||!matches!(p.components().next(),Some(std::path::Component::Normal(_))){return Err("Invalid design filename".into())}personal_design_dir(&app)?.join(p)}else{let Some(path)=rfd::AsyncFileDialog::new().add_filter("Embroidery designs",&formats::READABLE_FORMATS).pick_file().await else{return Ok(None)};path.path().to_owned()};
  let (name, svg) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
      let bundled = if from_library && !path.try_exists().map_err(|error| error.to_string())? {
          path.file_name().and_then(|name| name.to_str()).and_then(starter_designs::open)
