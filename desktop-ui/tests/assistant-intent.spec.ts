@@ -22,3 +22,10 @@ test('recognizes supported editing commands',()=>{
 test('rejects unsupported or unsafe inputs',()=>{
   for(const input of ['','delete everything','rotate 9999 degrees','scale to 0%','scale to 999%','replace #GG0000 with #000000','center design; delete files','optimize for unknown material']) expect(assistantIntent(input),input).toBeNull();
 });
+
+test('recognizes lettering without changing capitalization',()=>{
+ expect(assistantIntent('Add text "Roll Tide" at 15 mm')).toEqual({kind:'lettering',text:'Roll Tide',size:15});
+ expect(assistantIntent('Insert lettering "Hello"')).toEqual({kind:'lettering',text:'Hello',size:12});
+ expect(assistantIntent('Review design')).toEqual({kind:'review'});
+ for(const s of ['Add text ""','Add text "   "','Add text "Hi" at 2 mm','Add text "Hi" at 81 mm','Add text "Hi" at 12 mm; delete design','x'.repeat(161)]) expect(assistantIntent(s),s).toBeNull();
+});
