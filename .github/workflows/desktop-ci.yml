@@ -1,0 +1,48 @@
+name: Desktop validation
+on:
+  push:
+    branches: [Dev, main]
+  pull_request:
+    branches: [Dev, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+      - run: cargo test --locked --lib
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop-ui/package-lock.json
+      - run: npm ci
+        working-directory: desktop-ui
+      - run: npm run build
+        working-directory: desktop-ui
+      - run: npx playwright install chromium
+        working-directory: desktop-ui
+      - run: npm test
+        working-directory: desktop-ui
+      - run: cargo check --manifest-path desktop-ui/src-tauri/Cargo.toml
+      - run: cargo test --manifest-path desktop-ui/src-tauri/Cargo.toml
+      - run: npm run tauri -- build --no-bundle
+        working-directory: desktop-ui
