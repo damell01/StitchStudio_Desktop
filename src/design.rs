@@ -1082,7 +1082,17 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
    // Geometry uses tenths of a millimetre. Fine traced centerlines
    // should not become wide default satin columns.
    if width.is_finite() && *width > 0.0 {
-    s.params.kind=Some(if *width < 8.0 {Kind::Run} else if *width <= 55.0 {Kind::Satin} else {Kind::Fill});
+    if *width > 55.0 {
+     if let Geometry::Stroke { lines, width } = &s.geometry {
+      let rings = boolean::stroke_area(lines, *width);
+      if !rings.is_empty() {
+       s.geometry = Geometry::Fill { rings, rule: FillRule::EvenOdd };
+       s.params.kind = Some(Kind::Fill);
+      } else { s.params.kind = Some(Kind::Satin); }
+     }
+    } else {
+     s.params.kind=Some(if *width < 8.0 {Kind::Run} else {Kind::Satin});
+    }
    }
    continue
   }
