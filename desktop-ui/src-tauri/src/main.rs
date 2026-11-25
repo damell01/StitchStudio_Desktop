@@ -772,6 +772,36 @@ fn rebuild_solid_artwork(source:&zigzag::document::Document,uids:Option<&[usize]
     }
     doc.sync().ok()?;Some(doc)
 }
+// Optimize costly ordinary fills using their actual needle contribution.
+// Preserve lettering and special stitch objects; test spacing, angle and
+// length jointly so a new solid silhouette need not become more expensive.
+fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uids:Option<&[usize]>,level:u8,angle_offset:f64)->Option<(zigzag::document::Document,Design)>{
+    use zigzag::{params::Kind,svg::Geometry};
+    let mut doc=source.clone();let fabric=doc.plan_options().fabric;
+    let mut changed=false;
+    for i in 0..doc.shapes.len(){
+        if doc.records_text(i){continue}
+        let shape=&mut doc.shapes[i];
+        if !uids.is_none_or(|ids|ids.contains(&shape.uid))||shape.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")
+            ||shape.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill||shape.params.stop==Some(true)||shape.params.trim==Some(true)
+            ||!matches!(shape.geometry,Geometry::Fill{..}){continue}
+        let b=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
+        if b.is_empty()||b.width().min(b.height())<25.0||base.per_shape.get(i).copied().unwrap_or(0)<80{continue}
+        let spacing=shape.params.fill_spacing(&fabric);
+        let len=shape.params.fill_len(&fabric);
+        let target=(spacing*if level==3{1.38}else{1.18}).min(if level==3{0.55}else{0.48});
+        let length=(len*1.3).min(4.5);
+        if target>spacing+0.005{shape.params.spacing=Some(target);changed=true;}
+        if length>len+0.05{shape.params.len=Some(length);changed=true;}
+        if shape.params.start.is_none()&&shape.params.end.is_none(){
+            let angle=shape.params.angle.unwrap_or(0.0);
+            if angle_offset!=0.0{shape.params.angle=Some((angle+angle_offset).rem_euclid(180.0));changed=true;}
+        }
+    }
+    if !changed{return None}
+    doc.sync().ok()?;let plan=doc.plan();
+    Some((doc,plan))
+}
 fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
@@ -790,11 +820,20 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
                 }
             }
         }
+        if strength>=2{
+            for angle in [0.0,45.0,90.0]{
+                if let Some(v)=economical_fill_candidate(source,original,uids,strength,angle){candidates.push(v);}
+            }
+        }
         if strength==3&&options.solid{
             for radius in [5.0,8.0,12.0]{
                 if let Some(mut doc)=rebuild_solid_artwork(source,uids,radius){
                     if optimize_geometry(&mut doc,options,uids,4.0).is_ok(){
-                        let plan=doc.plan();candidates.push((doc,plan));
+                        let plan=doc.plan();
+                        for angle in [0.0,90.0]{
+                            if let Some(v)=economical_fill_candidate(&doc,&plan,uids,3,angle){candidates.push(v);}
+                        }
+                        candidates.push((doc,plan));
                     }
                 }
             }
