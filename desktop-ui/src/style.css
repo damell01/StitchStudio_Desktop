@@ -1699,3 +1699,15 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .editor-workspace .studio-camera-docked button:focus-visible,.editor-workspace .sewing-estimate:focus-visible,.editor-workspace .studio-inspector-section summary:focus-visible{outline:2px solid var(--workspace-accent);outline-offset:2px}
 @media(max-width:1150px){.editor-workspace .workspace-status .status-metrics{gap:5px}.editor-workspace .workspace-status .status-metrics>span{gap:3px}.editor-workspace .workspace-status{flex-wrap:wrap}.editor-workspace .workspace-fit-status{margin-left:auto}}
 @container (max-width:340px){.editor-workspace .studio-camera.studio-camera-docked{justify-content:flex-start}}
+
+/* Phase one: preserve drawing area and expose focus-mode exit. */
+.editor-workspace .studio-canvas-layout.canvas-focus>.editor-toolrail{display:none}
+.editor-workspace .studio-canvas-layout.canvas-focus{gap:0;padding:0}
+.editor-workspace .studio-edit-bar .studio-exit-focus{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.editor-workspace .studio-edit-bar .studio-intelligence-tools{padding-inline:5px}
+.editor-workspace .studio-assistant-action{color:var(--workspace-accent);background:var(--workspace-soft)}
+.editor-workspace .studio-edit-bar .studio-command-group{flex:0 0 auto}
+.editor-workspace .studio-edit-bar .studio-document{flex:1 1 120px;min-width:90px}
+.editor-workspace .design-canvas [data-rotation-handle]{cursor:grab}
+.editor-workspace .design-canvas [data-rotation-handle]:active{cursor:grabbing}
+.editor-workspace .studio-inspector-section>summary:hover{color:var(--workspace-accent)}
