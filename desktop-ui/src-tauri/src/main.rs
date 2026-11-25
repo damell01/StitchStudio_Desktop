@@ -1196,13 +1196,18 @@ async fn digitize_artwork(
         selected.retain(|l| l.enabled);
         if selected.len()>64 { return Err("Review at most 64 lettering regions.".into()); }
         let has_lettering = !selected.is_empty() && mime != "image/svg+xml";
+        let mut lettering_warnings = Vec::new();
         let mut document = if has_lettering {
             let trace=zigzag::trace::trace_prepared_bytes(&bytes,&options,tolerance,cleanup).map_err(|e|e.to_string())?;
             let mut doc=zigzag::document::Document::from_svg(&trace.svg,&name,None).map_err(|e|e.to_string())?;
             zigzag::design::auto_stitch_types(&mut doc.shapes);
             let (w,h,_)=ocr_pixels(&bytes,remove_background,tolerance,cleanup)?;
             for line in &mut selected { line.rect=[line.rect[0]*w as f64,line.rect[1]*h as f64,line.rect[2]*w as f64,line.rect[3]*h as f64]; }
-            zigzag::ocr::replace_lettering(&mut doc,&selected,width_mm/w as f64).map_err(|e|e.to_string())?;
+            for line in &selected {
+                if let Err(err)=zigzag::ocr::replace_lettering(&mut doc,std::slice::from_ref(line),width_mm/w as f64) {
+                    lettering_warnings.push(format!("Kept traced lettering '{}': {}",line.text,err));
+                }
+            }
             doc
         } else if mime == "image/svg+xml" {
             let svg = std::str::from_utf8(&bytes).map_err(|err| err.to_string())?;
@@ -1295,6 +1300,8 @@ async fn digitize_artwork(
         warnings.extend(design.notes.iter().map(|(index, message)| format!("Object {}: {message}", index + 1)));
         let mut seen = std::collections::HashSet::new();
         warnings.retain(|message| seen.insert(message.clone()));
+        lettering_warnings.append(&mut warnings);
+        let mut warnings = lettering_warnings;
         warnings.truncate(12);
         let review = DigitizerReview {
             id,
