@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
     host.__TAURI_INTERNALS__ = {
       async invoke(command, args) {
         host.stitchTestCalls.push(command);
-        if (command === 'choose_artwork') return { name: 'Artwork', mime: 'image/png', bytes: [137] };
+        if (command === 'choose_artwork') return { name: 'Artwork', mime: 'image/jpeg', bytes: [255,216,255] };
         if (command === 'digitize_artwork') {
           const id = ++generation;
           await new Promise(resolve => setTimeout(resolve, 150));

@@ -28,7 +28,7 @@ const defaults = {
 };
 const classicSettings = {...defaults,cleanup:true,colors:4};
 const artworkMimes: Record<string, string> = {
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', svg: 'image/svg+xml',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif:'image/jpeg', jpe:'image/jpeg', svg: 'image/svg+xml',
   webp: 'image/webp', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', gif: 'image/gif',
 };
 
@@ -124,7 +124,9 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     setError('');
     try {
       const next = await invoke<Art | null>('choose_artwork');
-      if (next) acceptArtwork(next);
+      if(next?.mime==='application/pdf') {
+        setPdf(new File([new Uint8Array(next.bytes)],next.name+'.pdf',{type:'application/pdf'}));
+      } else if(next) acceptArtwork(next);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -218,7 +220,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     <article className="digitizer-controls">
       <h2>{art ? 'Digitizing settings' : 'Choose artwork'}</h2>
       <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
-        <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image' : 'Choose or drop an image'}</strong>
+        <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image or PDF' : 'Choose or drop an image'}</strong>
       </button>
       {!art && <p>PNG, JPEG, SVG, WebP, BMP, TIFF, GIF or PDF. Digitizing starts automatically.</p>}
       {(!art || pdf) && <PdfArtwork onArt={acceptArtwork} droppedFile={pdf} />}
@@ -237,10 +239,13 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         {!vector && <details className="digitizer-options">
           <summary>Advanced artwork options</summary>
           <fieldset disabled={busy}>
-            <label>Thread colors<select value={settings.colors} onChange={event => update('colors', Number(event.target.value))}>
-              <option value={0}>Automatic</option>
-              {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(count => <option key={count}>{count}</option>)}
-            </select></label>
+            <div className="digitizer-thread-picker" role="group" aria-label="Thread colors">
+              <span>Thread colors</span>
+              <div>{[0,2,3,4,5,6,7,8,9,10].map(count=>
+                <button type="button" key={count} aria-pressed={settings.colors===count}
+                  onClick={()=>update('colors',count)}>{count||'Auto'}</button>
+              )}</div>
+            </div>
             <label><input type="checkbox" checked={settings.cleanup} onChange={event => update('cleanup', event.target.checked)} /> Clean textured artwork</label>
             <label><input type="checkbox" checked={settings.removeBackground} onChange={event => update('removeBackground', event.target.checked)} /> Remove connected background</label>
             {settings.removeBackground && <label>Background sensitivity · {settings.tolerance}

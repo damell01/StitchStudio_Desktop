@@ -9,7 +9,7 @@ import {ExportCenter} from './export-center';
 import {readThreads} from './threads';
 import {StitchPicker} from './stitch-guide';
 import {useState,useEffect,useRef,useMemo,type PointerEvent as ReactPointerEvent} from 'react';
-import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2,GripHorizontal,Search,X,Waypoints} from 'lucide-react';
+import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2,GripHorizontal,Search,X,Waypoints,Group} from 'lucide-react';
 import {invoke,isTauri} from '@tauri-apps/api/core';
 type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
 type EditableObject={uid:number;label:string;color:number[];kind:string;bounds?:[number,number,number,number];path?:string;fill_rule?:'evenodd'|'nonzero';stroke_width?:number};
@@ -25,13 +25,16 @@ function panelWidth(key: string, fallback: number, min: number, max: number) {
 export function Editor({beginner=true,navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const [focusCanvas,setFocusCanvas]=useState(false);
 const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
-const [left,setLeft]=useState(false),[right,setRight]=useState(false),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",220,160,340)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,180,360));useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(100),[pan,setPan]=useState([0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
+const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
+const [left,setLeft]=useState(true),[right,setRight]=useState(true),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",220,160,340)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,180,360));useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(100),[pan,setPan]=useState([0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
 const [cameraTop,setCameraTop]=useState(()=>localStorage.getItem('studio-camera-top')==='1');
 useEffect(()=>localStorage.setItem('studio-camera-top',cameraTop?'1':'0'),[cameraTop]);
 const cameraDrag=useRef<number|null>(null);
-const [canvasMode,setCanvasMode]=useState<'pan'|'select'>('select');
+const [canvasMode,setCanvasMode]=useState<'pan'|'select'|'design'>('select');
 const [objectOffset,setObjectOffset]=useState<[number,number]>([0,0]);
 const [resizePreview,setResizePreview]=useState<ResizeOperation|null>(null);
+const [designOffset,setDesignOffset]=useState<[number,number]>([0,0]);
+const designGesture=useRef<{pointer:number;x:number;y:number}|null>(null);
 const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchorX:number;anchorY:number}|null>(null);
 const objectGesture=useRef<{uid:number;x:number;y:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
@@ -63,6 +66,12 @@ const selectionTransform=resizePreview
   ? `translate(${resizePreview.x} ${resizePreview.y}) scale(${resizePreview.sx} ${resizePreview.sy}) translate(${-resizePreview.x} ${-resizePreview.y})`
   : `translate(${objectOffset.join(' ')})`;
 const points=useMemo(()=>plan?.blocks.flatMap(block=>block.runs.flat())??[],[plan]);
+const designBounds=useMemo(()=>{
+  if(!points.length)return null;
+  let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
+  for(const [x,y] of points){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
+  return {left,top,width:right-left,height:bottom-top};
+},[points]);
 const outside=points.some(point=>Math.abs(point[0])>width/2||Math.abs(point[1])>height/2);
 const stitchIndex=Math.min(points.length,playhead??points.length);
 let remaining=stitchIndex;
@@ -109,6 +118,11 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const target=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;
   const object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))):undefined;
   const position=pointerPosition(event);
+  if(canvasMode==='design'&&event.button===0&&position&&event.target instanceof Element&&event.target.hasAttribute('data-design-group')){
+    designGesture.current={pointer:event.pointerId,x:position.x,y:position.y};
+    event.currentTarget.setPointerCapture(event.pointerId);
+    return;
+  }
   const handleIndex=event.target instanceof Element?event.target.getAttribute('data-resize-handle'):null;
   if(canvasMode==='select'&&event.button===0&&handleIndex!==null&&selected?.bounds){
     const handle=resizeHandles[Number(handleIndex)];
@@ -133,6 +147,10 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const position=pointerPosition(event);
   if(!position)return;
+  if(designGesture.current?.pointer===event.pointerId){
+    setDesignOffset([position.x-designGesture.current.x,position.y-designGesture.current.y]);
+    return;
+  }
   if(resizeGesture.current?.pointer===event.pointerId){
     setResizePreview(resizeAt(position));
     return;
@@ -149,6 +167,17 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 }
 
 function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boolean) {
+  if(designGesture.current?.pointer===event.pointerId){
+    const position=commit?pointerPosition(event):null;
+    const start=designGesture.current;
+    designGesture.current=null;
+    setDesignOffset([0,0]);
+    if(position){
+      const dx=position.x-start.x,dy=position.y-start.y;
+      if(Math.hypot(dx,dy)>=.05)void transform(1,0,dx,dy);
+    }
+    return;
+  }
   if(resizeGesture.current?.pointer===event.pointerId){
     const position=commit?pointerPosition(event):null;
     const result=position?resizeAt(position):null;
@@ -190,9 +219,14 @@ function changeFocus(next: boolean) {
   fullscreenRequested.current=next;
   setFocusCanvas(next);
   if (isTauri()) void invoke('set_canvas_fullscreen',{fullscreen:next}).catch(()=>{});
-  if (next) {
+  if(next){
+    panelsBeforeFocus.current={left,right};
     setLeft(false);
     setRight(false);
+  }else if(panelsBeforeFocus.current){
+    setLeft(panelsBeforeFocus.current.left);
+    setRight(panelsBeforeFocus.current.right);
+    panelsBeforeFocus.current=null;
   }
 }
 
@@ -216,7 +250,7 @@ if(e.key==='F11'){e.preventDefault();toggleFocus();return;}
 if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='i'){e.preventDefault();openInsertDialog();return;}
 if(selectedObject!==null&&e.key==='Delete'){e.preventDefault();editSelection({kind:'delete'});return;}
 if(selectedObject!==null&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();editSelection({kind:'duplicate'});return;}
-if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} onInsert={result=>{
+if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} onInsert={result=>{
   setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);setMessage('');
 }}/><div className={`studio-edit-bar ${focusCanvas?'studio-focus-active':''}`} role="group" aria-label="Design commands">
   <div className="studio-document">
@@ -243,6 +277,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="studio-tool-icon" title={focusCanvas?'Exit focus view (Esc)':'Full-screen canvas (F11)'} aria-label={focusCanvas?'Exit focus view':'Focus canvas'} aria-pressed={focusCanvas} onClick={toggleFocus}>{focusCanvas?<Minimize size={18}/>:<Maximize size={18}/>}</button>
   </div>
   <CommandPalette commands={[
+    {label:'Move whole design',group:'Edit',run:()=>setCanvasMode('design'),disabled:!plan},
     {label:'Fit artwork',group:'View',run:fitArtwork,disabled:!plan},
     {label:'Fit hoop',group:'View',run:()=>{setZoom(100);setPan([0,0])}},
     {label:focusCanvas?'Exit focus view':'Focus canvas',group:'View',run:toggleFocus},
@@ -277,7 +312,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button className="primary studio-export" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
 {busy&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:'minmax(0,1fr)'}}>
-<article className="workspace-sidebar studio-layers-dock" style={{width:`min(${leftWidth}px, 36vw)`}}>
+<article className="workspace-sidebar studio-layers-dock" style={{width:`min(${leftWidth}px, 28vw)`}}>
   <div className="layers-dock-header">
     <div className="layers-dock-title"><Layers3 size={17} aria-hidden="true"/><h2>Layers</h2>
       <button className="studio-tool-icon" title="Close layers" aria-label="Close layers" onClick={()=>setLeft(false)}><X size={15}/></button>
@@ -341,7 +376,12 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
  onPointerCancel={event=>finishCanvasGesture(event,false)}
  onLostPointerCapture={event=>finishCanvasGesture(event,false)} viewBox={[pan[0]-width*.6*100/zoom,pan[1]-height*.6*100/zoom,width*1.2*100/zoom,height*1.2*100/zoom].join(' ')} className="design-canvas" onWheel={e=>{const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const anchor=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());const next=Math.max(25,Math.min(400,zoom*(e.deltaY<0?1.1:1/1.1)));if(next===zoom)return;const ratio=zoom/next;setPan([anchor.x+(pan[0]-anchor.x)*ratio,anchor.y+(pan[1]-anchor.y)*ratio]);setZoom(next)}} style={{width:'100%',background:'var(--lav-bg,var(--canvas,#edf1ed))'}}><defs><pattern id="hoop-fabric" width="1.4" height="1.4" patternUnits="userSpaceOnUse"><path d="M0 .2H1.4 M.2 0V1.4" fill="none" stroke="#967a68" strokeWidth=".075" opacity=".18"/></pattern><pattern id="hoop-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#d8cce6" strokeWidth=".75" vectorEffect="non-scaling-stroke"/></pattern></defs><rect x={-width/2} y={-height/2} width={width} height={height} fill="#fffdf5" stroke="#aa90b1" strokeWidth="1.6" rx={2} vectorEffect="non-scaling-stroke" className="studio-hoop"/><rect x={-width/2} y={-height/2} width={width} height={height} fill="url(#hoop-fabric)" rx={2}/><rect x={-width/2} y={-height/2} width={width} height={height} fill={grid?"url(#hoop-grid)":"none"}/>{grid&&<g stroke="#896d98" opacity=".6" pointerEvents="none">
 <path d={`M ${-width/2} 0 H ${width/2} M 0 ${-height/2} V ${height/2}`} strokeDasharray="4 5" strokeWidth=".6" vectorEffect="non-scaling-stroke"/>
-</g>}{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=r.slice(0,Math.max(0,remaining));remaining-=visible.length;return <polyline key={j} points={visible.map(p=>p.join(',')).join(' ')} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .42 : 1} className={realistic?'studio-thread-path':undefined}/>})}</g>)}{canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
+</g>}<g transform={`translate(${designOffset.join(' ')})`}>{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=r.slice(0,Math.max(0,remaining));remaining-=visible.length;return <polyline key={j} points={visible.map(p=>p.join(',')).join(' ')} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .42 : 1} className={realistic?'studio-thread-path':undefined}/>})}</g>)}{canvasMode==='design'&&designBounds&&<rect
+  data-design-group x={designBounds.left-2} y={designBounds.top-2}
+  width={designBounds.width+4} height={designBounds.height+4} rx={1}
+  fill="transparent" pointerEvents="all" stroke="#8543aa" strokeWidth="1.5"
+  vectorEffect="non-scaling-stroke" strokeDasharray="5 4"><title>Drag to move the whole design</title></rect>}</g>
+{canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
  {objects.filter(object=>object.path).map(object=><path key={object.uid} d={object.path}
    data-artwork-uid={object.uid} fill={object.fill_rule?'transparent':'none'}
    fillRule={object.fill_rule} stroke={object.fill_rule?'none':'transparent'}
@@ -381,6 +421,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
       else setCameraTop(value=>!value);
     }}><GripHorizontal size={16}/></button>
   <button className="studio-tool-icon" title="Select editable objects" aria-label="Select objects" aria-pressed={canvasMode==='select'} onClick={()=>setCanvasMode('select')}><MousePointer2 size={17}/></button>
+  <button className="studio-tool-icon" title="Move whole design" aria-label="Move whole design" disabled={!points.length}
+    aria-pressed={canvasMode==='design'} onClick={()=>{setCanvasMode('design');setPlaying(false);setPlayhead(null);}}><Group size={17}/></button>
   <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>setCanvasMode('pan')}><Hand size={17}/></button>
   <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>
   <span>{Math.round(zoom)}%</span>
@@ -406,7 +448,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </select>
   <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>
 </div>
-</article><article className="workspace-sidebar workspace-inspector studio-inspector-dock" style={{width:`min(${rightWidth}px, 38vw)`}}>
+</article><article className="workspace-sidebar workspace-inspector studio-inspector-dock" style={{width:`min(${rightWidth}px, 30vw)`}}>
   <h2>Inspector</h2>
   <div className="workspace-segments" role="group" aria-label="Inspector">
     <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}>Hoop</button>

@@ -49,13 +49,13 @@ test('the compact template library previews stitches before opening a template',
   expect((await canvas.boundingBox())!.width).toBeGreaterThan(730);
   await page.keyboard.press('Escape');
   await expect(nav).toBeVisible();
-  await page.getByRole('button', { name: 'Inspector', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Inspector', exact: true })).toHaveAttribute('aria-pressed','true');
   const inspector = page.getByRole('group', { name: 'Inspector' });
   await inspector.getByRole('button', { name: 'Size' }).click();
   await expect(page.getByRole('button', { name: 'Resize to fit hoop' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Stitches' }).click();
   await expect(page.getByRole('button', { name: 'Check stitch quality' })).toBeVisible();
-  await page.getByRole('button', { name: 'Layers', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Layers', exact: true })).toHaveAttribute('aria-pressed','true');
   await page.getByRole('group', { name: 'Layers' }).getByRole('button', { name: 'Threads' }).click();
   await expect(page.getByLabel('Thread 1 color')).toBeVisible();
 

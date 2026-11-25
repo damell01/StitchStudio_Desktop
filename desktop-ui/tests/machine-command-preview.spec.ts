@@ -28,6 +28,11 @@ test('export command review pages through encoded movements without exporting a 
   await page.getByRole('button', { name: /Blank design/ }).last().click();
   await page.getByRole('button', { name: 'Export design' }).click();
   const review = page.getByRole('dialog', { name: 'Export review' });
+  await expect(review.getByRole('region',{name:'Thread sequence'}).getByRole('listitem')).toHaveCount(1);
+  await expect(review.getByRole('button',{name:'DST',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(review.getByRole('button',{name:'Save embroidery file'})).toBeDisabled();
+  await review.getByRole('checkbox').check();
+  await expect(review.getByRole('button',{name:'Save embroidery file'})).toBeEnabled();
   await review.getByRole('button', { name: 'Review DST commands' }).click();
   const preview = page.getByRole('dialog', { name: 'DST machine commands' });
   await expect(preview.getByRole('row')).toHaveCount(11);

@@ -802,16 +802,41 @@ fn remove_font_asset(app:tauri::AppHandle,file:String)->Result<(),String>{
 #[derive(serde::Serialize)]
 struct ArtworkInput{name:String,mime:String,bytes:Vec<u8>}
 #[tauri::command]
-async fn choose_artwork()->Result<Option<ArtworkInput>,String>{
- let Some(p)=rfd::AsyncFileDialog::new().add_filter("Artwork",&["png","jpg","jpeg","webp","gif","bmp","tiff","tif","svg"]).pick_file().await else{return Ok(None)};
- let path=p.path().to_owned();
- tauri::async_runtime::spawn_blocking(move||{
- let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
- let mime=match ext.as_str(){"png"=>"image/png","jpg"|"jpeg"=>"image/jpeg","webp"=>"image/webp","gif"=>"image/gif","bmp"=>"image/bmp","tiff"|"tif"=>"image/tiff","svg"=>"image/svg+xml",_=>return Err("Unsupported image".into())};
- if std::fs::metadata(&path).map_err(|e|e.to_string())?.len()>20_000_000{return Err("Image exceeds 20 MB limit".into())}
- Ok(Some(ArtworkInput{name:path.file_stem().unwrap_or_default().to_string_lossy().into_owned(),mime:mime.into(),bytes:std::fs::read(path).map_err(|e|e.to_string())?}))
- }).await.map_err(|e|e.to_string())?
+async fn choose_artwork() -> Result<Option<ArtworkInput>, String> {
+    use std::io::Read;
+
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .set_title("Open image or PDF")
+        .add_filter("Images and PDF", &["jpg", "jpeg", "jfif", "jpe", "png", "webp", "gif", "bmp", "tif", "tiff", "svg", "pdf"])
+        .add_filter("Photos and images", &["jpg", "jpeg", "jfif", "jpe", "png", "webp", "gif", "bmp", "tif", "tiff"])
+        .add_filter("SVG and PDF", &["svg", "pdf"])
+        .add_filter("All files", &["*"])
+        .pick_file().await else { return Ok(None); };
+    let path = file.path().to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let extension = path.extension().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase();
+        let mime = match extension.as_str() {
+            "png" => "image/png",
+            "jpg" | "jpeg" | "jfif" | "jpe" => "image/jpeg",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            "bmp" => "image/bmp",
+            "tif" | "tiff" => "image/tiff",
+            "svg" => "image/svg+xml",
+            "pdf" => "application/pdf",
+            _ => return Err("Choose a JPG, PNG, WebP, GIF, BMP, TIFF, SVG, or PDF. Convert other formats to PNG first.".into()),
+        };
+        let mut bytes = Vec::new();
+        std::fs::File::open(&path).map_err(|error| error.to_string())?
+            .take(20_000_001).read_to_end(&mut bytes).map_err(|error| error.to_string())?;
+        if bytes.is_empty() || bytes.len() > 20_000_000 {
+            return Err("An image or PDF must be between 1 byte and 20 MB".into());
+        }
+        let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+        Ok(Some(ArtworkInput { name, mime: mime.into(), bytes }))
+    }).await.map_err(|error| error.to_string())?
 }
+
 struct DigitizerDraft {
     id: u64,
     document: zigzag::document::Document,

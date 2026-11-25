@@ -3,15 +3,17 @@ import { expect, test } from '@playwright/test';
 test('canvas selection edits the chosen vector and the pan tool only changes the camera', async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('studio-tour-seen','1');
+    const moves:unknown[]=[];
     const calls: {uid:number; operation:{kind:string; dx?:number; dy?:number}}[] = [];
     const plan = {name:'Two shapes', stitches:4, trims:0, blocks:[{color:[88,52,108], runs:[[[-16,-5],[-5,4]],[[8,-3],[18,8]]]}]};
     const objects = [
       {uid:10,label:'Plum rectangle',kind:'fill',color:[88,52,108],bounds:[-16,-5,11,9],path:'M-16 -5H-5V4H-16Z',fill_rule:'nonzero',stroke_width:0},
       {uid:11,label:'Companion',kind:'fill',color:[88,52,108],bounds:[8,-3,10,11],path:'M8 -3H18V8H8Z',fill_rule:'nonzero',stroke_width:0},
     ];
-    Object.assign(window,{objectEdits:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:typeof calls[number]) {
+    Object.assign(window,{objectEdits:calls,groupMoves:moves,__TAURI_INTERNALS__:{async invoke(command:string,args:typeof calls[number]) {
       if(command==='current_preview')return plan;
       if(command==='editable_objects')return objects;
+      if(command==='transform_design'){moves.push(args);return plan;}
       if(command==='edit_artwork_object'){calls.push(args);return plan;}
       return command==='character_list'?[]:null;
     }}});
@@ -56,4 +58,17 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   }
   expect(await canvas.locator('polyline').evaluateAll(lines=>lines.map(line=>line.getAttribute('points')))).toEqual(points);
   expect(await page.evaluate(()=>(window as unknown as {objectEdits:unknown[]}).objectEdits.length)).toBe(3);
+  await page.getByRole('button',{name:'Move whole design',exact:true}).click();
+  const group=canvas.locator('[data-design-group]');
+  const groupBox=(await group.boundingBox())!;
+  const gx=groupBox.x+groupBox.width/2,gy=groupBox.y+groupBox.height/2;
+  await page.mouse.move(gx,gy);
+  await page.mouse.down();
+  await page.mouse.move(gx+28,gy+18,{steps:4});
+  await page.mouse.up();
+  const moves=await page.evaluate(()=>(window as unknown as {groupMoves:{dx:number;dy:number}[]}).groupMoves);
+  expect(moves).toHaveLength(1);
+  expect(moves[0]).toMatchObject({scale:1,rotation:0,dx:expect.any(Number),dy:expect.any(Number)});
+  expect(moves[0].dx).toBeGreaterThan(0);
+
 });
