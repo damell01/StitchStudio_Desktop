@@ -55,3 +55,26 @@
   .export-review-footer { align-items: flex-start; flex-direction: column; }
   .export-review-footer > div { flex-wrap: wrap; }
 }
+
+/* Export package modal: live document proof beside compact controls. */
+.studio-modal.export-dialog{width:min(1180px,calc(100vw - 32px));border-radius:16px}
+.export-review-body{grid-template-columns:minmax(0,1.25fr) minmax(280px,.85fr);gap:12px;padding:12px;background:var(--lav-bg,#f7f4fc);overflow:auto;align-items:start}
+.package-left{display:grid;gap:10px;min-width:0}
+.package-left>section,.package-sheet{background:var(--lav-panel,#fff);border:1px solid var(--lav-border,#ded3ed);border-radius:12px;padding:12px;min-width:0}
+.package-notice{background:var(--brand-soft,#eee6fa);padding:10px;border-radius:8px;font-size:12px;line-height:1.5}
+.package-options{display:flex;gap:12px;flex-wrap:wrap}
+.package-options label{display:flex;align-items:center;gap:6px;font-size:12px}
+.package-settings{margin-top:10px}.package-settings summary{cursor:pointer;font-size:12px}
+.package-sequence{display:grid;grid-template-columns:145px minmax(0,1fr);gap:10px;align-items:start}
+.package-sequence>img{width:100%;border-radius:8px}
+.package-sequence .export-thread-cards{display:flex;flex-direction:column;max-height:210px;gap:3px}
+.package-sequence .export-thread-cards li{grid-template-columns:24px 28px minmax(0,1fr);padding:5px;gap:6px}
+.package-sequence .export-thread-cards li div{grid-column:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.package-sequence .export-thread-swatch{height:22px}
+.package-files>div{display:flex;flex-wrap:wrap;gap:6px}
+.package-files span{display:flex;align-items:center;gap:5px;border:1px solid var(--lav-border,#ded3ed);border-radius:7px;padding:7px;font-size:12px}
+.package-sheet{position:sticky;top:0}
+.package-sheet p{font-size:12px;margin:0 0 10px}
+.package-sheet>img{display:block;width:100%;height:auto;max-height:59vh;object-fit:contain;object-position:top;border:1px solid var(--lav-border,#ded3ed);background:#fff;border-radius:5px}
+.export-review-footer{flex-wrap:wrap;padding:10px 16px}
+@media(max-width:800px){.export-review-body{grid-template-columns:1fr}.package-sheet{position:static}.package-sequence{grid-template-columns:100px minmax(0,1fr)}}
