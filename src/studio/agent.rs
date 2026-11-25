@@ -2027,14 +2027,25 @@ mod tests {
 /// instruction as a mutation. More complex prompts go to the configured agent.
 fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
     use crate::commands::Action as A;
-    let normalized = prompt.trim().trim_end_matches(['.', '!']).to_ascii_lowercase();
-    Some(match normalized.as_str() {
+    let normalized = prompt.trim().trim_end_matches(['.', '!', '?']).to_ascii_lowercase();
+    let normalized = normalized.split_whitespace().collect::<Vec<_>>().join(" ");
+    let normalized = normalized.trim_start_matches("please ");
+    let normalized = normalized.strip_prefix("can you ")
+        .or_else(|| normalized.strip_prefix("could you "))
+        .or_else(|| normalized.strip_prefix("would you "))
+        .unwrap_or(normalized);
+    let normalized = normalized.trim_start_matches("please ").trim_end_matches(" please");
+    Some(match normalized {
         "undo" | "undo last change" => A::Undo,
         "redo" | "redo last change" => A::Redo,
         "select all" | "select all objects" => A::SelectAll,
         "deselect all" | "clear selection" => A::Deselect,
-        "center in hoop" | "center design in hoop" | "center the design" => A::CenterInHoop,
-        "fit to hoop" | "fit design to hoop" => A::FitToHoop,
+        "center in hoop" | "center design in hoop" | "center the design"
+        | "center" | "center design" | "center my design" | "center it"
+        | "center this design" | "center the design in the hoop" | "center it in the hoop"
+        | "centre the design" | "centre it" | "move design to center" | "move it to the center"
+        | "center artwork" | "center the artwork" => A::CenterInHoop,
+        "fit to hoop" | "fit design to hoop" | "fit the design to the hoop" | "fit it to the hoop" | "resize to fit hoop" => A::FitToHoop,
         "zoom to fit" | "zoom fit" => A::ZoomFit,
         "check design" | "show design issues" => A::ShowIssues,
         "group colors" | "group thread colors" => A::GroupColors,
@@ -2068,6 +2079,9 @@ mod quick_action_tests {
     fn routes_exact_local_commands_only() {
         assert_eq!(quick_action(" Center the design! "), Some(Action::CenterInHoop));
         assert_eq!(quick_action("undo"), Some(Action::Undo));
+        assert_eq!(quick_action("Could you please center my design?"), Some(Action::CenterInHoop));
+        assert_eq!(quick_action("please   center it in the hoop"), Some(Action::CenterInHoop));
+        assert_eq!(quick_action("can you not center it"), None);
         assert_eq!(quick_action("do not undo"), None);
         assert_eq!(quick_action("undo and export"), None);
         assert_eq!(quick_action("convert selection to satin"), Some(Action::Kind(zigzag::params::Kind::Satin)));
