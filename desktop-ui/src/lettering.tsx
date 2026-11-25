@@ -157,6 +157,7 @@ export function InlineLettering({uid,disabled,onBusy,onDone}:{uid:number|null;di
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[saving,setSaving]=useState(false);
  const lock=useRef(false);
  const [fontQuery,setFontQuery]=useState(''),[showAdvanced,setShowAdvanced]=useState(false),[committed,setCommitted]=useState('');
+ const [autoApply,setAutoApply]=useState(true),[failedFingerprint,setFailedFingerprint]=useState('');
  const [preview,setPreview]=useState<StitchPlan|null>(null),[previewPending,setPreviewPending]=useState(false);
  const fingerprint=JSON.stringify(settings);
  const dirty=fingerprint!==committed;
@@ -171,8 +172,9 @@ export function InlineLettering({uid,disabled,onBusy,onDone}:{uid:number|null;di
  let applied=target;
  if(target!==null){await invoke('update_lettering',{uid:target,settings})}
  else {const before=await invoke<{uid:number}[]>('editable_objects');await invoke('create_lettering',{...settings,placement:[0,0]});const after=await invoke<{uid:number}[]>('editable_objects');const added=after.find(o=>!before.some(b=>b.uid===o.uid));if(added){setTarget(added.uid);applied=added.uid}else{setError('Text added, but its editable object could not be identified. Select it in Layers to continue.');onDone(null);return}}
- setCommitted(fingerprint);onDone(applied);
- }catch(e){setError(String(e))}finally{lock.current=false;setSaving(false);onBusy(false)}}
+ setCommitted(fingerprint);setFailedFingerprint('');onDone(applied);
+ }catch(e){setError(String(e));setFailedFingerprint(fingerprint)}finally{lock.current=false;setSaving(false);onBusy(false)}}
+ useEffect(()=>{if(!autoApply||target===null||loading||disabled||saving||!valid||!dirty||failedFingerprint===fingerprint)return;const timer=window.setTimeout(()=>{void apply()},700);return()=>window.clearTimeout(timer)},[autoApply,target,loading,disabled,saving,valid,dirty,fingerprint,failedFingerprint]);
  return <section className="inline-lettering workspace-inspector-group"><h3><Type size={18}/>{target===null?'Add lettering':'Edit lettering'}</h3><p className="muted">Adjust text here while keeping your design visible.</p>{loading?<p role="status">Loading fonts…</p>:<>
  <fieldset disabled={disabled||saving} className="inline-lettering-fields"><label>Text<textarea rows={2} maxLength={120} value={settings.text} onChange={e=>change('text',e.target.value)}/></label>
  <label>Find font<input type="search" placeholder="Search installed fonts…" value={fontQuery} onChange={e=>setFontQuery(e.target.value)}/></label><label>Font<select value={settings.font} onChange={e=>change('font',e.target.value)}>{filteredFonts.map(f=><option key={f}>{f}</option>)}</select></label>
@@ -182,5 +184,5 @@ export function InlineLettering({uid,disabled,onBusy,onDone}:{uid:number|null;di
  <div className="inline-color-presets" role="group" aria-label="Thread color presets">{['#754bb0','#111111','#ffffff','#ae294f','#24558c','#34754b','#d5a52e'].map(v=><button key={v} aria-label={'Thread '+v} aria-pressed={hex===v} style={{backgroundColor:v}} onClick={()=>change('color',[1,3,5].map(i=>parseInt(v.slice(i,i+2),16)))}/>)}</div><h4>Text layout</h4><div className="inline-lettering-layout" role="group" aria-label="Text direction">{[{label:'Straight',arc:0},{label:'Arc up',arc:60},{label:'Arc down',arc:-60}].map(a=><button key={a.label} aria-pressed={a.arc===0?settings.arc===0:a.arc>0?settings.arc>0:settings.arc<0} onClick={()=>change('arc',a.arc)}>{a.label}</button>)}</div>
  <button aria-expanded={showAdvanced} onClick={()=>setShowAdvanced(v=>!v)}>{showAdvanced?'Hide advanced layout':'Advanced layout'}</button>{showAdvanced&&<><label>Curve radius (mm)<input type="number" min="-300" max="300" value={settings.arc} onChange={e=>change('arc',Number(e.target.value))}/></label>
  <label>Alignment<select value={settings.align} onChange={e=>change('align',e.target.value)}>{['left','center','right'].map(a=><option key={a}>{a}</option>)}</select></label></>}
- </fieldset><button className="primary" disabled={disabled||saving||!valid||(target!==null&&!dirty)} onClick={()=>void apply()}>{saving?'Updating…':target===null?'Add text to design':dirty?'Apply text changes':'Changes applied'}</button></>}{error&&<p role="alert">{error}</p>}</section>
+ </fieldset>{target!==null&&<label className="live-text-toggle"><input type="checkbox" checked={autoApply} onChange={e=>setAutoApply(e.target.checked)}/> Update canvas automatically</label>}<button className="primary" disabled={disabled||saving||!valid||(target!==null&&!dirty)} onClick={()=>void apply()}>{saving?'Updating…':target===null?'Add text to design':dirty?'Apply text changes':'Changes applied'}</button></>}{error&&<p role="alert">{error}</p>}</section>
 }
