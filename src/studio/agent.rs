@@ -1347,6 +1347,27 @@ impl Studio {
         if self.agent.prompt.trim().is_empty() || self.agent.running() {
             return;
         }
+        // Explicit view state requests are idempotent, unlike toggle commands.
+        let normalized = self.agent.prompt.trim().trim_end_matches(['.', '!', '?']).to_ascii_lowercase();
+        let view = match normalized.as_str() {
+            "show grid" | "enable grid" => Some((crate::commands::Action::ToggleGrid, true)),
+            "hide grid" | "disable grid" => Some((crate::commands::Action::ToggleGrid, false)),
+            "show density map" => Some((crate::commands::Action::ToggleDensity, true)),
+            "hide density map" => Some((crate::commands::Action::ToggleDensity, false)),
+            "show smart guides" => Some((crate::commands::Action::ToggleSmartGuides, true)),
+            "hide smart guides" => Some((crate::commands::Action::ToggleSmartGuides, false)),
+            _ => None,
+        };
+        if let Some((action, desired)) = view {
+            if let Some(current) = self.action_checked(action) {
+                let prompt = std::mem::take(&mut self.agent.prompt);
+                self.agent.log.push(Entry::You(prompt));
+                if current != desired { self.run_action(action); }
+                self.agent.log.push(Entry::Done("View updated locally.".into()));
+                ctx.request_repaint();
+                return;
+            }
+        }
         // Common exact commands bypass external inference and process startup.
         if let Some(action) = quick_action(&self.agent.prompt) {
             let prompt = std::mem::take(&mut self.agent.prompt);
