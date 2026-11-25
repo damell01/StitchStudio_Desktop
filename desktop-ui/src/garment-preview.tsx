@@ -1,4 +1,4 @@
-import {lazy, Suspense, useEffect, useRef, useState} from 'react';
+import {lazy, Suspense, useEffect, useMemo, useRef, useState} from 'react';
 import {Shirt, X} from 'lucide-react';
 import './garment-preview.css';
 
@@ -162,9 +162,24 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
   const scale = garment.pxPerMm / garmentSize.ratio;
   const xOffset = (Number(x)||0)*25.4;
   const yOffset = (Number(y)||0)*25.4;
-  const insideZone = !open || !blocks.some(block => block.runs.some(run => run.some(point =>
-    Math.abs(point[0]+xOffset) > placement.widthMm*garmentSize.ratio/2 || Math.abs(point[1]+yOffset) > placement.heightMm*garmentSize.ratio/2
-  )));
+  const bounds=useMemo(()=>{
+    let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+    for(const block of blocks)for(const run of block.runs)for(const p of run){
+      left=Math.min(left,p[0]);right=Math.max(right,p[0]);top=Math.min(top,p[1]);bottom=Math.max(bottom,p[1]);
+    }
+    return {left,right,top,bottom};
+  },[blocks]);
+  const insideZone=!open||!Number.isFinite(bounds.left)||(
+    bounds.left+xOffset>=-placement.widthMm*garmentSize.ratio/2 &&
+    bounds.right+xOffset<=placement.widthMm*garmentSize.ratio/2 &&
+    bounds.top+yOffset>=-placement.heightMm*garmentSize.ratio/2 &&
+    bounds.bottom+yOffset<=placement.heightMm*garmentSize.ratio/2);
+  function centerDesign(){
+    if(!Number.isFinite(bounds.left))return;
+    setX((-(bounds.left+bounds.right)/2/25.4).toFixed(3));
+    setY((-(bounds.top+bounds.bottom)/2/25.4).toFixed(3));
+  }
+
 
   useEffect(()=>{
     if(!open || !canvas.current)return;
@@ -250,7 +265,8 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
             {garmentName==='hoodie'&&unavailable&&<p role="status">3D is unavailable here. Showing the flat mockup.</p>}
             <label className="garment-color">Fabric color<input type="color" value={color} onChange={event=>setColor(event.target.value)}/></label>
             <p className="muted">{is3d?'Drag to move the design or select Rotate garment. Hold Shift to rotate.':'Drag the design on the garment, or use arrow keys on the preview.'}</p>
-            <button onClick={()=>{setX('');setY('');}}>Reset placement</button>
+            <div className="garment-view-switch"><button onClick={centerDesign}>Center design</button><button onClick={()=>{setX('');setY('');}}>Reset placement</button></div>
+            {Number.isFinite(bounds.left)&&<small>Design: {(bounds.right-bounds.left).toFixed(1)} × {(bounds.bottom-bounds.top).toFixed(1)} mm</small>}
             <details><summary>Precise placement (optional)</summary><fieldset>
               <legend>Adjust placement (in)</legend>
               <label>Horizontal<input type="number" min="-8" max="8" step=".25" value={x}
