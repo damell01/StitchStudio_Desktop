@@ -2103,7 +2103,24 @@ fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
         "zoom in" => A::ZoomIn,
         "zoom out" => A::ZoomOut,
         "reset panels" => A::ResetPanels,
-        "add text" => A::AddText,
+        "add text" | "add lettering" | "insert text" => A::AddText,
+        "toggle grid" => A::ToggleGrid,
+        "toggle smart guides" => A::ToggleSmartGuides,
+        "toggle stitch lines" => A::ToggleStitchLines,
+        "toggle stitch points" => A::TogglePoints,
+        "toggle jumps" => A::ToggleJumps,
+        "toggle density view" => A::ToggleDensity,
+        "toggle sewing order" => A::ToggleOrder,
+        "toggle simulation" | "play or pause simulation" => A::PlayPause,
+        "simplify selected paths" | "simplify selection" => A::SimplifyPath,
+        "round selected corners" => A::RoundCorners,
+        "create outlines" => A::CreateOutlines,
+        "convert selection to text" => A::ConvertToText,
+        "repeat last transform" => A::TransformAgain,
+        "bring selection forward" => A::BringForward,
+        "send selection backward" => A::SendBackward,
+        "bring selection to front" => A::BringToFront,
+        "send selection to back" => A::SendToBack,
         _ => return None,
     })
 }
@@ -2124,5 +2141,9 @@ mod quick_action_tests {
         assert_eq!(quick_action("convert selection to satin"), Some(Action::Kind(zigzag::params::Kind::Satin)));
         assert_eq!(quick_action("sew selection first"), Some(Action::SendToBack));
         assert_eq!(quick_action("don't flip horizontally"), None);
+        assert_eq!(quick_action("Could you simplify selected paths?"), Some(Action::SimplifyPath));
+        assert_eq!(quick_action("toggle density view"), Some(Action::ToggleDensity));
+        assert_eq!(quick_action("show grid"), None);
+        assert_eq!(quick_action("simplify selection and export"), None);
     }
 }
