@@ -67,7 +67,7 @@ const selected=objects.find(object=>object.uid===selectedObject);
 const [multi,setMulti]=useState<number[]>([]);const [snap,setSnap]=useState(false);const [context,setContext]=useState<{uid:number;x:number;y:number}|null>(null);
 const selectionIds=multi.filter(id=>objects.some(o=>o.uid===id));
 const [nudgeStep,setNudgeStep]=useState(1);
-const [lockedObjects,setLockedObjects]=useState<number[]>([]);
+const [lockedObjects,setLockedObjects]=useState<number[]>([]);const [dragLayer,setDragLayer]=useState<number|null>(null);const [dropLayer,setDropLayer]=useState<number|null>(null);
 const [layerNames,setLayerNames]=useState<Record<number,string>>({});
 const [renameDraft,setRenameDraft]=useState('');
 useEffect(()=>{setRenameDraft(selected?layerNames[selected.uid]||selected.label:'')},[selected?.uid,selected?.label,layerNames]);
@@ -512,11 +512,11 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="studio-tool-icon" title={historyLabels[0].length?"Undo: "+historyLabels[0].at(-1):"Undo"} aria-label="Undo" disabled={!historyLabels[0].length||busy} onClick={()=>edit('history_step',{redo:false})}><Undo2 size={17}/></button>
     <button className="studio-tool-icon" title={historyLabels[1].length?"Redo: "+historyLabels[1].at(-1):"Redo"} aria-label="Redo" disabled={!historyLabels[1].length||busy} onClick={()=>edit('history_step',{redo:true})}><Redo2 size={17}/></button>
   </div>
-  <div className="studio-command-group studio-design-tools" role="group" aria-label="Create and edit"><button className="studio-add-text" disabled={busy} onClick={()=>openText()}><Type size={17}/> Add Text</button>
+  <div className="studio-command-group studio-design-tools" role="group" aria-label="Create and edit"><button className="studio-add-text" disabled={busy||!plan} onClick={openSimplify}><Scissors size={17}/> Simplify</button>
     <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/></button>
     <button className="studio-tool-icon" title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('transform')}}><Move size={17}/></button>
     
-    <button className="studio-tool-icon" title="Stitch tools" aria-label="Stitch tools" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('stitches')}}><Scissors size={17}/></button>
+    <button className="studio-tool-icon" title="Edit selected lettering" aria-label="Edit lettering" disabled={!selected||busy} onClick={()=>openText(selectedObject)}><Type size={17}/></button>
   </div>
   <div className="studio-command-group studio-view-tools" role="group" aria-label="Workspace view">
     <button className="studio-tool-icon" title="Layers" aria-label="Layers" aria-pressed={left} onClick={()=>setLeft(value=>!value)}><PanelLeft size={18}/></button>
@@ -589,7 +589,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <div className="layers-object-rows">
       {objectPage.items.map(object=>{
         const name=layerNames[object.uid]||object.label||`Object ${object.uid+1}`;
-        return <div key={object.uid} style={{display:"flex",alignItems:"center",gap:4}}><button disabled={lockedObjects.includes(object.uid)} style={{flex:1,minWidth:0}} aria-pressed={selectionIds.length?selectionIds.includes(object.uid):selectedObject===object.uid} onClick={e=>e.shiftKey?toggleMulti(object.uid):selectObject(object)} className="object-layer-row" title={name}>
+        return <div key={object.uid} className={dropLayer===object.uid?'studio-layer-drop':''} onDragOver={e=>{if(dragLayer!==null&&dragLayer!==object.uid&&!lockedObjects.includes(object.uid)){e.preventDefault();setDropLayer(object.uid)}}} onDragLeave={()=>setDropLayer(null)} onDrop={e=>{e.preventDefault();if(dragLayer!==null&&dragLayer!==object.uid&&!busy&&!lockedObjects.includes(object.uid))void edit('reorder_artwork_object',{uid:dragLayer,direction:'before',targetUid:object.uid});setDragLayer(null);setDropLayer(null)}} style={{display:"flex",alignItems:"center",gap:4}}><span draggable={!busy&&!lockedObjects.includes(object.uid)} title="Drag to change sewing order" onDragStart={e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(object.uid));setDragLayer(object.uid)}} onDragEnd={()=>{setDragLayer(null);setDropLayer(null)}} style={{cursor:'grab'}}><GripHorizontal size={14}/></span><button disabled={lockedObjects.includes(object.uid)} style={{flex:1,minWidth:0}} aria-pressed={selectionIds.length?selectionIds.includes(object.uid):selectedObject===object.uid} onClick={e=>e.shiftKey?toggleMulti(object.uid):selectObject(object)} className="object-layer-row" title={name}>
           <span className="layers-swatch" style={{backgroundColor:`rgb(${object.color.join(',')})`}}/>
           <span className="layers-row-text"><strong>{name}</strong><small>{object.kind==='manual'?'Fixed stitch path':object.kind==='auto'?'Automatic stitch type':object.kind}</small></span>
         </button><button type="button" aria-label={lockedObjects.includes(object.uid)?'Unlock '+name:'Lock '+name} title={lockedObjects.includes(object.uid)?'Unlock object':'Lock object'} aria-pressed={lockedObjects.includes(object.uid)} onClick={()=>{setLockedObjects(old=>old.includes(object.uid)?old.filter(id=>id!==object.uid):[...old,object.uid]);if(selectedObject===object.uid)setSelectedObject(null);setMulti(old=>old.filter(id=>id!==object.uid));}}>{lockedObjects.includes(object.uid)?'🔒':'🔓'}</button></div>;
