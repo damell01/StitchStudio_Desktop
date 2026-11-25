@@ -286,10 +286,13 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         </label>}
         <FabricPicker value={settings.fabric} disabled={busy} onChange={fabric => update('fabric', fabric)}/>
         {!vector && <label><input type="checkbox" checked={settings.useOwnedThreads} disabled={!readThreads().some(t=>t.stock>0)} onChange={e=>{localStorage.setItem('studio-use-owned-threads',String(e.target.checked));update('useOwnedThreads',e.target.checked)}}/> Match my in-stock threads ({readThreads().filter(t=>t.stock>0).length})</label>}
-        {!vector && <button type="button" aria-pressed={settings.cleanup&&settings.colors===4}
-          onClick={()=>setSettings(previous=>({...previous,cleanup:true,colors:4}))}>
-          Simplify embroidered mockup
-        </button>}
+        {!vector&&<section className="digitizer-options" aria-label="Artwork simplification">
+          <h3>Simplify before digitizing</h3><small>Reduce tiny texture and traced detail before generating stitches. Preview the result to check lettering and outlines.</small>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
+          {[{label:'Detailed',detail:80},{label:'Balanced',detail:50},{label:'Simplified',detail:20}].map(p=><button type="button" key={p.label} disabled={busy} aria-pressed={settings.detail===p.detail&&settings.cleanup} onClick={()=>setSettings(old=>({...old,detail:p.detail,cleanup:true}))}>{p.label}</button>)}
+          </div>
+          <button type="button" aria-pressed={settings.cleanup&&settings.colors===4} onClick={()=>setSettings(old=>({...old,cleanup:true,colors:4,detail:35}))}>Simplify textured mockup & colors</button>
+        </section>}
         {!vector && <details className="digitizer-options">
           <summary>Advanced artwork options</summary>
           <fieldset disabled={busy}>
