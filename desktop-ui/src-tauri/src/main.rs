@@ -207,9 +207,34 @@ fn validate_export(design: &Design, format: &str, width: f64, height: f64) -> Re
     Ok(())
 }
 
+fn export_escape(s: &str) -> String { s.replace('&',"&amp;").replace('<',"&lt;").replace('>',"&gt;").replace('"',"&quot;").replace('\'',"&#39;") }
+fn export_companions(design:&Design,format:&str,width:f64,height:f64,assignments:&std::collections::HashMap<String,String>) -> (String,String) {
+    use std::fmt::Write;
+    let mut left=f64::INFINITY;let mut top=f64::INFINITY;let mut right=f64::NEG_INFINITY;let mut bottom=f64::NEG_INFINITY;
+    for p in design.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.pts) {left=left.min(p.x);top=top.min(p.y);right=right.max(p.x);bottom=bottom.max(p.y);}
+    let pad=10.0;let w=(right-left).max(1.0)+2.0*pad;let h=(bottom-top).max(1.0)+2.0*pad;
+    let mut svg=format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{} {} {} {}" width="800" height="600" role="img"><rect x="{}" y="{}" width="{}" height="{}" fill="#f8f5ef"/>"##,left-pad,top-pad,w,h,left-pad,top-pad,w,h);
+    let mut rows=String::new();
+    for (i,b) in design.blocks.iter().enumerate() {
+        let color=format!("#{:02X}{:02X}{:02X}",b.color[0],b.color[1],b.color[2]);
+        let count:usize=b.runs.iter().map(|r|r.pts.len()).sum();
+        let label=assignments.get(&i.to_string()).map(String::as_str).unwrap_or("Not assigned");
+        let _=write!(rows,"<tr><td>{}</td><td><span style='background:{}'></span> {}</td><td>{}</td><td>{}</td></tr>",i+1,color,color,export_escape(label),count);
+        for run in &b.runs {
+            if run.pts.len()<2 {continue;}
+            let _=write!(svg,"<polyline fill='none' stroke='{}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' points='",color);
+            for p in &run.pts {let _=write!(svg,"{:.1},{:.1} ",p.x,p.y);}
+            svg.push_str("'/>");
+        }
+    }
+    svg.push_str("</svg>");
+    let html=format!("<!doctype html><html lang='en'><meta charset='utf-8'><title>Stitch Studio color sequence</title><style>body{{font:15px system-ui;color:#28213a;margin:28px}}svg{{width:260px;height:195px}}table{{border-collapse:collapse;width:100%}}td,th{{text-align:left;padding:8px;border-bottom:1px solid #ddd}}td span{{display:inline-block;width:20px;height:20px;border:1px solid #555;vertical-align:middle}}@media print{{body{{margin:12mm}}*{{print-color-adjust:exact;-webkit-print-color-adjust:exact}}}}</style><h1>{}</h1><h2>Color sequence &amp; machine setup</h2><p>{} · Hoop {} × {} mm</p>{}<p>{}</p><table><thead><tr><th>Block</th><th>Design color</th><th>Needle / spool</th><th>Planned points</th></tr></thead><tbody>{}</tbody></table><p>Verify actual spool labels, machine stops and placement. Test sew before production.</p></html>",export_escape(&design.name),export_escape(&format.to_uppercase()),width,height,svg,if format.eq_ignore_ascii_case("dst"){"DST stores color-change positions, not exact colors. Assign the listed threads manually on the machine."}else{"Verify machine color assignments against this sequence."},rows);
+    (html,svg)
+}
 #[tauri::command]
-async fn export_design(format: String, width: f64, height: f64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool, String> {
+async fn export_design(format: String, width: f64, height: f64, companions: Option<bool>, assignments: Option<std::collections::HashMap<String,String>>, state: tauri::State<'_, Mutex<Workspace>>) -> Result<bool, String> {
     let design = state.lock().map_err(|err| err.to_string())?.current.clone().ok_or("Open artwork first")?;
+    let companion_data=if companions.unwrap_or(false){Some(export_companions(&design,&format,width,height,&assignments.unwrap_or_default()))}else{None};
     let encode_format = format.clone();
     let bytes = tauri::async_runtime::spawn_blocking(move || {
         validate_export(&design, &encode_format, width, height)?;
@@ -223,8 +248,20 @@ async fn export_design(format: String, width: f64, height: f64, state: tauri::St
         Some(ext) if ext.eq_ignore_ascii_case(&format) => {}
         Some(_) => return Err(format!("Use a .{format} filename for this export")),
     };
-    tauri::async_runtime::spawn_blocking(move || std::fs::write(path, bytes))
-        .await.map_err(|err| err.to_string())?.map_err(|err| err.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<(),String> {
+        let sheet=path.with_extension(format!("{}.colors.html",format));
+        let image=path.with_extension(format!("{}.preview.svg",format));
+        if companion_data.is_some() && (sheet.exists()||image.exists()) {return Err("Companion files already exist. Choose a new export name to avoid overwriting them.".into());}
+        std::fs::write(&path,bytes).map_err(|e|e.to_string())?;
+        if let Some((html,svg))=companion_data {
+            use std::io::Write;
+            let mut f=std::fs::OpenOptions::new().write(true).create_new(true).open(sheet).map_err(|e|format!("Embroidery saved; color sheet failed: {e}"))?;
+            f.write_all(html.as_bytes()).map_err(|e|format!("Embroidery saved; color sheet failed: {e}"))?;
+            let mut f=std::fs::OpenOptions::new().write(true).create_new(true).open(image).map_err(|e|format!("Embroidery saved; preview failed: {e}"))?;
+            f.write_all(svg.as_bytes()).map_err(|e|format!("Embroidery saved; preview failed: {e}"))?;
+        }
+        Ok(())
+    }).await.map_err(|e|e.to_string())??;
     Ok(true)
 }
 
