@@ -940,3 +940,21 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .digitizer-stitch-image.digitizer-processing{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;background:var(--lav-panel,#fff);box-sizing:border-box;color:inherit}
 .digitizer-processing p,.digitizer-processing small{margin:0;opacity:.75}.digitizer-processing-orbit{position:relative;width:76px;height:76px;display:grid;place-items:center;border-radius:50%;background:#eee7fa;color:#7852b3;font-size:30px}.digitizer-processing-orbit:after{content:"";position:absolute;inset:-5px;border:3px solid #dcd0ef;border-top-color:#7852b3;border-radius:50%;animation:digitizer-spin 1.2s linear infinite}.digitizer-processing-dots{display:flex;gap:6px}.digitizer-processing-dots i{width:7px;height:7px;border-radius:50%;background:#9875ca;animation:digitizer-pulse 1.2s ease-in-out infinite}.digitizer-processing-dots i:nth-child(2){animation-delay:.15s}.digitizer-processing-dots i:nth-child(3){animation-delay:.3s}@keyframes digitizer-spin{to{transform:rotate(360deg)}}@keyframes digitizer-pulse{50%{opacity:.3;transform:translateY(-4px)}}@media(prefers-reduced-motion:reduce){.digitizer-processing-orbit:after,.digitizer-processing-dots i{animation:none}}
 .digitizer-stage-3 .review-original .digitizer-processing{display:none}
+
+/* Desktop review workspace: keep artwork visible while inspecting settings. */
+@media (min-width: 1050px) {
+  .digitizer-layout:not(.digitizer-stage-0) { grid-template-columns:minmax(0,1fr) minmax(300px,340px)!important; align-items:start; }
+  .digitizer-layout:not(.digitizer-stage-0) .artwork-preview { position:sticky; top:12px; align-self:start; }
+  .digitizer-stage-3 .review-compare :is(.digitizer-source-image,.digitizer-stitch-image) { height:clamp(300px,58vh,760px); max-height:none!important; }
+}
+.digitizer-layout .digitizer-controls { display:flex; flex-direction:column; gap:8px; }
+.digitizer-controls > h2,.digitizer-controls > h3,.digitizer-controls > p { margin:0; }
+.digitizer-controls > label { margin-top:4px; }
+.digitizer-controls > label:has(input[type=checkbox]) { display:flex; align-items:center; gap:8px; }
+.digitizer-controls .digitizer-options { border:1px solid var(--lav-border,#d8d5df); border-radius:8px; padding:10px; }
+.digitizer-controls .digitizer-options summary { cursor:pointer; font-weight:600; }
+.digitizer-controls .digitizer-options[open] summary { margin-bottom:8px; }
+.digitizer-controls .digitize-metrics { gap:6px; }
+.app>header>button:last-child { margin-left:auto; }
+.thread-catalog > div { min-width:0; }
+.thread-catalog > div small { overflow-wrap:anywhere; }
