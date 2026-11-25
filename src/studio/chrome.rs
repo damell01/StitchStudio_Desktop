@@ -13,6 +13,62 @@ const TRAFFIC_LIGHTS: f32 = 70.0;
 
 impl Studio {
     /// Quick start panel for a blank document; all actions use the native editor.
+    fn project_thumbnail(ui: &mut egui::Ui, path: &std::path::Path, width: f32) {
+        use std::sync::Arc;
+        type Preview = Arc<Result<zigzag::formats::read::StitchFile, String>>;
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 100.0), Sense::hover());
+        ui.painter().rect_filled(rect, 6.0, Color32::from_rgb(248, 245, 239));
+        let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        if !zigzag::formats::READABLE_FORMATS.contains(&ext.as_str()) {
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, ext.to_uppercase(),
+                egui::FontId::proportional(16.0), Color32::DARK_GRAY);
+            return;
+        }
+        let id = egui::Id::new(("project-preview", path));
+        let cached = ui.ctx().data(|d| d.get_temp::<Preview>(id));
+        let pending = id.with("pending");
+        if cached.is_none() && !ui.ctx().data(|d| d.get_temp::<bool>(pending).unwrap_or(false)) {
+            ui.ctx().data_mut(|d| d.insert_temp(pending, true));
+            let ctx = ui.ctx().clone();
+            let path = path.to_path_buf();
+            std::thread::spawn(move || {
+                let result = std::fs::metadata(&path).map_err(|e| e.to_string()).and_then(|m| {
+                    if m.len() > 8_000_000 { return Err("Preview file too large".into()); }
+                    std::fs::read(&path).map_err(|e| e.to_string())
+                }).and_then(|bytes| zigzag::formats::read::read_stitch_file(&bytes, &ext).map_err(|e| e.to_string()));
+                ctx.data_mut(|d| { d.insert_temp(id, Arc::new(result)); d.remove::<bool>(pending); });
+                ctx.request_repaint();
+            });
+        }
+        let Some(preview) = cached else {
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "Loading preview…",
+                egui::FontId::proportional(11.0), Color32::DARK_GRAY);
+            return;
+        };
+        let Ok(file) = preview.as_ref() else {
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "Preview unavailable",
+                egui::FontId::proportional(11.0), Color32::DARK_GRAY);
+            return;
+        };
+        let mut bounds = zigzag::geom::Bounds::empty();
+        for p in file.blocks.iter().flat_map(|b| &b.runs).flatten() { bounds.add(*p); }
+        if bounds.is_empty() { return; }
+        let scale = ((rect.width()-16.0) as f64 / (bounds.max.x-bounds.min.x).max(1.0))
+            .min((rect.height()-16.0) as f64 / (bounds.max.y-bounds.min.y).max(1.0));
+        let cx = (bounds.min.x+bounds.max.x)*0.5;
+        let cy = (bounds.min.y+bounds.max.y)*0.5;
+        let pos = |p: &zigzag::geom::P| rect.center()+Vec2::new(((p.x-cx)*scale) as f32, ((p.y-cy)*scale) as f32);
+        let painter = ui.painter().with_clip_rect(rect);
+        for block in &file.blocks {
+            let color = Color32::from_rgb(block.color[0],block.color[1],block.color[2]);
+            for run in &block.runs {
+                if run.len() >= 2 {
+                    painter.add(egui::Shape::line(run.iter().map(pos).collect(), Stroke::new(0.8,color)));
+                }
+            }
+        }
+    }
+
     pub fn welcome_panel(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
         egui::Frame::new().fill(p.desk).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
@@ -54,7 +110,8 @@ impl Studio {
                     egui::Frame::new().fill(ui.visuals().widgets.inactive.bg_fill)
                         .corner_radius(8.0).inner_margin(egui::Margin::same(8))
                         .show(ui, |ui| {
-                            ui.allocate_ui_with_layout(Vec2::new(width, 60.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                            ui.allocate_ui_with_layout(Vec2::new(width, 170.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                                Self::project_thumbnail(ui, path, width);
                                 ui.add(egui::Label::new(egui::RichText::new(name.as_ref()).strong()).truncate())
                                     .on_hover_text(path.display().to_string());
                                 caption(ui, format!("{ext} design"));
