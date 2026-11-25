@@ -216,6 +216,16 @@ fn validate_export(design: &Design, format: &str, width: f64, height: f64) -> Re
     let outside = design.blocks.iter().flat_map(|block| &block.runs).flat_map(|run| &run.pts)
         .any(|point| !fits(point.x, point.y) || !fits(point.x.round(), point.y.round()));
     if outside { return Err("Design exceeds the selected hoop after coordinate rounding".into()); }
+    // Validate generated tie stitches and split moves, not just source points.
+    let encoded_stream = match format {
+        "dst" => Some(formats::dst::stream(design)),
+        "pes" | "pec" => Some(formats::pes::stream(design)),
+        "exp" | "jef" | "vp3" => Some(formats::commands(design, &formats::StreamOptions { ties: true, max_step: 120.0 })),
+        _ => None,
+    };
+    if encoded_stream.as_ref().is_some_and(|stream|stream.iter().any(|command|!fits(command.x,command.y))) {
+        return Err("Generated machine movements exceed the selected hoop. Move the design away from the edge.".into());
+    }
     if format == "dst" {
         let trim_outside = formats::dst::stream(design).into_iter()
             .filter(|command| command.op == formats::Op::Trim)
