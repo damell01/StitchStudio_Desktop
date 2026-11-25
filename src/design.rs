@@ -51,7 +51,7 @@ pub struct PlanOptions {
     /// Gaps up to this length (units) are sewn straight across instead of trimmed,
     /// when the straight line stays inside the shape being filled.
     pub travel_inside: f64,
-    /// Gaps up to this length (units) between runs are always sewn across.
+    /// Maximum short join length (units); joins must remain covered or within needle tolerance.
     pub max_jump_no_trim: f64,
     /// Shortest stitch kept, units. Must stay below fill row spacing, or row
     /// starts get dropped and the edges turn ragged.
@@ -1764,9 +1764,13 @@ pub fn plan_cached(
                     // For automatic artwork, never use the short-gap shortcut
                     // across an uncovered region. A tiny join on a running
                     // outline is still allowed within the needle tolerance.
-                    let short_join = if opt.hat_order {
-                        gap <= across && (inside || gap <= 2.0)
-                    } else { gap <= across };
+                    // A default short gap is not permission to sew through
+                    // negative space. Preserve explicit inter-object connect
+                    // settings, but never use them for gaps within an object.
+                    let explicit_connect = !same_shape && !opt.hat_order
+                        && opt.connect > 0.0 && gap <= opt.connect;
+                    let short_join = gap <= across
+                        && (inside || gap <= 2.0 || explicit_connect);
                     if !force_trim && (short_join || inside) {
                         // Sew straight across: append to the previous run.
                         let n = (gap / 30.0).ceil() as usize;
@@ -2405,6 +2409,22 @@ mod tests {
         assert_eq!(d.blocks.len(), 2);
         assert_eq!(d.blocks[0].color, d.blocks[1].color);
         assert_eq!(d.block_shapes, vec![vec![0], vec![1]]);
+    }
+
+    #[test]
+    fn separated_running_paths_do_not_get_a_visible_bridge() {
+        let a = shape(
+            Geometry::Stroke {
+                lines: vec![(vec![P::new(0.0, 0.0), P::new(40.0, 0.0)], false),
+                            (vec![P::new(46.0, 0.0), P::new(86.0, 0.0)], false)],
+                width: 1.0,
+            },
+            Kind::Run,
+            [0; 3],
+        );
+        let d = plan("gap", &[a], &PlanOptions::default());
+        assert_eq!(d.blocks[0].runs.len(), 2);
+        assert_eq!(d.trim_count(), 1);
     }
 
     #[test]
