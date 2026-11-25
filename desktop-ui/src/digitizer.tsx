@@ -318,7 +318,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
           <h3>Automatic lettering recognition</h3>
           <small>Offline · converts traced text into editable lettering.</small>
           <label><input type="checkbox" checked={autoOcr} onChange={e=>{setAutoOcr(e.target.checked);setOcrAttempt(null);setApproved(null);setOcrMessage('');}}/> Automatically recognize and reconstruct lettering</label>
-          {ocrBusy&&<small role="status">Detecting text and matching fonts…</small>
+          {ocrBusy&&<small role="status">Detecting text and matching fonts…</small>}
           {ocrMessage&&<p role="status">{ocrMessage}</p>}
           {autoOcr&&activeOcr&&<div style={{maxHeight:240,overflow:'auto'}}>
             {activeOcr.lines.map((line,i)=><div key={i} style={{padding:'8px 0'}}>
