@@ -42,9 +42,6 @@ function panelResizeHandle(side:'left'|'right'){
  const change=(next:number)=>(side==='left'?setLeftWidth:setRightWidth)(Math.max(min,Math.min(max,next)));
  return <div className={'studio-panel-resizer resize-'+side} role="separator" aria-label={side==='left'?'Resize layers panel':'Resize inspector panel'} aria-orientation="vertical" aria-valuemin={min} aria-valuemax={max} aria-valuenow={value} tabIndex={0} onPointerDown={e=>{if(e.button!==0)return;resizePanel.current={side,start:e.clientX,width:value,pointer:e.pointerId};e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault()}} onPointerMove={e=>{const drag=resizePanel.current;if(drag?.pointer===e.pointerId&&drag.side===side)change(drag.width+(e.clientX-drag.start)*(side==='left'?1:-1))}} onLostPointerCapture={()=>{resizePanel.current=null}} onPointerCancel={()=>{resizePanel.current=null}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();change(value+(e.key==='ArrowRight'?1:-1)*(side==='left'?1:-1)*10)}else if(e.key==='Home'||e.key==='End'){e.preventDefault();change(e.key==='Home'?min:max)}}}/>;
 }
-const [cameraTop,setCameraTop]=useState(()=>localStorage.getItem('studio-camera-top')!=='0');
-useEffect(()=>localStorage.setItem('studio-camera-top',cameraTop?'1':'0'),[cameraTop]);
-const cameraDrag=useRef<number|null>(null);
 const [canvasMode,setCanvasMode]=useState<'pan'|'select'|'design'>('design');
 const [objectOffset,setObjectOffset]=useState<[number,number]>([0,0]);
 const [resizePreview,setResizePreview]=useState<ResizeOperation|null>(null);
@@ -532,7 +529,20 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </details>
 </article>
 {left&&panelResizeHandle("left")}{right&&panelResizeHandle("right")}<article className="canvas-panel">
-<div className={`workspace-canvas ${cameraTop?"camera-at-top":"camera-at-bottom"}`}>
+<div className="studio-camera studio-camera-docked" role="group" aria-label="Canvas view">
+  
+  <button className="studio-selection-mode" title="Select and move the entire design" aria-pressed={canvasMode==='design'} onClick={()=>{selectObject(null);setCanvasMode('design');setPlaying(false);setPlayhead(null)}}><Group size={17}/><span className="camera-label">Design</span></button>
+  <button className="studio-selection-mode" title="Select individual objects; Shift-click to select several" aria-pressed={canvasMode==='select'} onClick={()=>{setCanvasMode('select');setPlaying(false);setPlayhead(null)}}><MousePointer2 size={17}/><span className="camera-label">Objects</span></button>
+  <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>setCanvasMode('pan')}><Hand size={17}/></button>
+  <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>
+  <button className="camera-zoom-value" title="Reset zoom to 100%" aria-label="Reset zoom to 100%" onClick={()=>{setZoom(100);setPan([0,0])}}>{Math.round(zoom)}%</button>
+  <button className="studio-tool-icon" title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(value=>Math.min(400,value+25))}><ZoomIn size={17}/></button>
+  <button title="Fit artwork" aria-label="Fit artwork" disabled={!points.length} onClick={fitArtwork}><Maximize size={16}/><span className="camera-label">Fit</span></button>
+  <button title="Fit hoop view" aria-label="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}><SquareDashed size={16}/><span className="camera-label">Hoop</span></button>
+  <button className="studio-tool-icon" title="Hoop grid" aria-label="Hoop grid" aria-pressed={grid} onClick={()=>setGrid(value=>!value)}><Grid size={16}/></button>
+  <button title="Thread view" aria-label="Thread view" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}><Eye size={16}/><span className="camera-label">Thread</span></button>
+</div>
+<div className="workspace-canvas">
 <svg aria-label="Stitch preview; drag the background to pan" data-mode={canvasMode}
  onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture}
  onPointerUp={event=>finishCanvasGesture(event,true)}
@@ -569,34 +579,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button className="studio-tool-icon" title="Duplicate selection" aria-label="Duplicate selection" disabled={busy} onClick={()=>editSelection({kind:'duplicate'})}><Copy size={16}/></button>
   <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={16}/></button>
 </div>}
-<div className={`studio-camera ${cameraTop?'studio-camera-top':''}`} role="group" aria-label="Canvas view">
-  <button className="studio-tool-icon studio-camera-grip" title="Move camera controls to the top or bottom"
-    aria-label={cameraTop?'Move camera controls to bottom':'Move camera controls to top'}
-    onClick={event=>{if(event.detail===0)setCameraTop(value=>!value)}}
-    onPointerDown={event=>{
-      cameraDrag.current=event.clientY;
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }}
-    onPointerCancel={()=>{cameraDrag.current=null}}
-    onPointerUp={event=>{
-      if(cameraDrag.current===null)return;
-      const moved=event.clientY-cameraDrag.current;
-      cameraDrag.current=null;
-      const box=event.currentTarget.closest('.workspace-canvas')?.getBoundingClientRect();
-      if(Math.abs(moved)>7&&box)setCameraTop(event.clientY<box.top+box.height/2);
-      else setCameraTop(value=>!value);
-    }}><GripHorizontal size={16}/></button>
-  <button className="studio-selection-mode" title="Select and move the entire design" aria-pressed={canvasMode==='design'} onClick={()=>{selectObject(null);setCanvasMode('design');setPlaying(false);setPlayhead(null)}}><Group size={17}/> Design</button>
-  <button className="studio-selection-mode" title="Select individual objects; Shift-click to select several" aria-pressed={canvasMode==='select'} onClick={()=>{setCanvasMode('select');setPlaying(false);setPlayhead(null)}}><MousePointer2 size={17}/> Objects</button>
-  <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>setCanvasMode('pan')}><Hand size={17}/></button>
-  <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>
-  <span>{Math.round(zoom)}%</span>
-  <button className="studio-tool-icon" title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(value=>Math.min(400,value+25))}><ZoomIn size={17}/></button>
-  <button title="Fit artwork" disabled={!points.length} onClick={fitArtwork}>Fit artwork</button>
-  <button title="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}>Hoop</button>
-  <button className="studio-tool-icon" title="Hoop grid" aria-label="Hoop grid" aria-pressed={grid} onClick={()=>setGrid(value=>!value)}><Grid size={16}/></button>
-  <button title="Thread view" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}>Thread</button>
-</div>{!plan&&<div className="workspace-empty">
+{!plan&&<div className="workspace-empty">
   <SquareDashed size={31}/>
   <strong>Start with a design</strong>
   <p>Open artwork or insert a library template.</p>
