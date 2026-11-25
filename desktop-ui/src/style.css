@@ -1348,3 +1348,40 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .editor-workspace>.playback-tools{min-height:54px;padding-inline:30px}
 .editor-workspace>.workspace-status{min-height:44px;padding-inline:30px}
 @media(max-height:800px){.editor-workspace .editor-toolrail button{min-height:43px;gap:3px}.editor-workspace .editor-toolrail button svg{width:19px;height:19px}.editor-workspace .layers-thread-row{min-height:46px}.editor-workspace .studio-canvas-layout>.studio-layers-dock{padding:10px}.editor-workspace .workspace-inspector-group{padding:5px}.editor-workspace .workspace-inspector .workspace-segments button{min-height:44px}}
+
+/* Collection manager reference layouts */
+.font-workspace,.thread-workspace{display:grid;gap:10px;min-width:0}
+.font-overview,.thread-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.font-overview>div,.thread-overview>div{display:flex;align-items:center;gap:10px;border:1px solid var(--lav-border,var(--studio-line));background:var(--lav-panel,var(--studio-panel));border-radius:12px;padding:12px 16px}
+.font-overview strong,.thread-overview strong{font-size:24px;color:var(--brand);font-variant-numeric:tabular-nums}
+.font-overview small,.thread-overview span{font-size:12px;letter-spacing:normal}
+.thread-overview svg{color:var(--brand)}
+.font-preview-toolbar{display:flex;justify-content:space-between;align-items:end;gap:12px}
+.font-preview-toolbar label{display:flex;align-items:center;gap:10px;flex:1}
+.font-preview-toolbar input{width:min(420px,65%);min-width:0}
+.font-preview-toolbar>div{display:flex;gap:5px}
+.font-preview-toolbar button[aria-pressed=true]{background:var(--brand-soft);color:var(--brand)}
+.page-workspace .font-workspace .font-filters{margin:0}
+.page-workspace .font-view-grid .font-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;max-height:none;overflow:visible}
+.font-view-grid .font-list>article{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;margin:0;padding:10px!important}
+.font-card-preview{display:grid;place-items:center;min-width:0;overflow:hidden;background:var(--brand-soft);color:var(--lav-text,var(--studio-ink));border-radius:8px;height:78px;padding:8px;font-size:27px;text-align:center}
+.font-card-preview span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.font-view-grid .font-card-preview{grid-column:1/-1}
+.font-view-grid .font-list>article>div:not(.font-card-preview){grid-column:1/-1;min-width:0}
+.font-view-grid .font-list>article>small{font-size:10px;letter-spacing:normal}
+.font-view-list .font-card-preview{width:160px;height:42px;flex:none;font-size:20px}
+.thread-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.thread-panel-heading h2{margin:0}
+.thread-import{position:relative}
+.thread-import>summary{display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;border:1px solid var(--lav-border,var(--studio-line));border-radius:8px}
+.thread-import>div{position:absolute;right:0;top:calc(100% + 5px);z-index:10;width:min(340px,80vw);padding:12px;border:1px solid var(--lav-border,var(--studio-line));border-radius:10px;background:var(--lav-panel,var(--studio-panel));box-shadow:0 8px 24px #301a4530}
+.thread-import label{display:grid;gap:4px;margin:8px 0}
+.thread-import input{width:100%;min-width:0}
+.thread-catalog-panel .thread-filterbar{grid-template-columns:minmax(150px,240px) minmax(0,1fr)}
+.thread-search>div{display:flex;align-items:center;gap:8px}
+.thread-search svg{flex:none}
+.page-workspace .thread-catalog{grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:8px}
+.thread-catalog>div{display:grid;gap:5px}
+.thread-catalog>div>.thread-spool-preview{height:58px;display:block;border-radius:6px;background-image:repeating-linear-gradient(0deg,#0002 0px,#fff2 1px,transparent 2px,transparent 3px),linear-gradient(90deg,#0002,#fff3 30%,#0002);border:1px solid #0002}
+.thread-catalog>div>button{justify-content:center;padding:6px;font-size:12px}
+@media(max-width:700px){.font-overview>div,.thread-overview>div{flex-direction:column;gap:4px;padding:8px}.thread-catalog-panel .thread-filterbar{grid-template-columns:1fr}.font-view-list .font-card-preview{width:85px}.font-preview-toolbar label{flex-wrap:wrap}}
