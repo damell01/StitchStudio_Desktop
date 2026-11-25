@@ -109,6 +109,12 @@ impl Studio {
                             ui.selectable_value(&mut self.doc.settings.hoop, k, h.1);
                         }
                     }).response.on_hover_text("Select the hoop matching your machine. This does not resize your design.");
+                let focus_id = egui::Id::new("studio-focus-mode");
+                let focus = ui.ctx().data_mut(|d| d.get_temp::<bool>(focus_id).unwrap_or(false));
+                if ui.selectable_label(focus, if focus { "Exit focus" } else { "Focus" })
+                    .on_hover_text("Toggle distraction-free canvas; your panel layout is preserved").clicked() {
+                    ui.ctx().data_mut(|d| d.insert_temp(focus_id, !focus));
+                }
                 if ui.button("Help").on_hover_text("Start guided tour").clicked() {
                     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("studio-tour"), 0usize));
                 }
