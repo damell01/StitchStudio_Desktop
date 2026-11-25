@@ -1078,6 +1078,14 @@ fn geometry_bounds(g: &Geometry) -> Bounds {
 pub fn auto_stitch_types(shapes:&mut [Shape]){
  for s in shapes {
   if s.params.kind.is_some(){continue}
+  if let Geometry::Stroke{width,..}=&s.geometry {
+   // Geometry uses tenths of a millimetre. Fine traced centerlines
+   // should not become wide default satin columns.
+   if width.is_finite() && *width > 0.0 {
+    s.params.kind=Some(if *width < 8.0 {Kind::Run} else if *width <= 55.0 {Kind::Satin} else {Kind::Fill});
+   }
+   continue
+  }
   if let Geometry::Fill{rings,rule}=&s.geometry{
    // Closed narrow bands (e.g. cartoon outlines and letter counters) can
    // use satin only when the rail solver confirms a usable column.
