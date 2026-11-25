@@ -62,7 +62,7 @@ For installation, open the DMG and copy the app into Applications. Local packagi
 - **Template Library** includes built-in bow, sports, botanical, animal, monogram and patch artwork. Filter by category, favorites or recent designs. **Preview design** generates a stitch preview before you open the template.
 - **Design Library** imports compatible embroidery files or scans a folder for editable Stitch Studio projects. Search for a machine file and choose **Insert design** to add its stitch paths to the workspace.
 - Choose disk files or a folder that you have permission to use. Keep original machine files for reference. Current machine-file insertion creates a stitch-based combined design.
-- The editor's panel-width sliders remember the space you allocate to artwork and properties. Close either panel to give the canvas more room.
+- Open **View** to adjust the Layers and Inspector widths. The workspace remembers both widths. Use the canvas toolbar to hide either panel. In the Inspector, choose **Hoop**, **Stitches**, or **Size** for the task at hand.
 
 ## Developer checks
 
