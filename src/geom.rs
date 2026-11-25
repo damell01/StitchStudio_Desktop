@@ -237,6 +237,42 @@ pub fn dedupe(pts: &mut Polyline, min: f64) {
     *pts = out;
 }
 
+/// Remove short redundant movements without erasing sharp turns or endpoints.
+pub fn dedupe_stitches(pts: &mut Polyline, min: f64) {
+    if pts.len() < 3 || min <= 0.0 { return; }
+    let mut out = Vec::with_capacity(pts.len());
+    out.push(pts[0]);
+    for i in 1..pts.len()-1 {
+        let a = *out.last().unwrap();
+        let b = pts[i];
+        let c = pts[i+1];
+        let ab = a.dist(b);
+        let bc = b.dist(c);
+        if ab < 1e-9 { continue; }
+        // Triangle inequality: a reversal or sharp corner has appreciable
+        // excess path length. Keep it even when the incoming stitch is short.
+        let excess = ab + bc - a.dist(c);
+        if ab >= min || excess > ab.min(bc) * 0.12 {
+            out.push(b);
+        }
+    }
+    let last = *pts.last().unwrap();
+    if out.last().unwrap().dist(last) > 1e-9 { out.push(last); }
+    *pts = out;
+}
+
+#[cfg(test)]
+mod stitch_dedupe_tests {
+    use super::*;
+    #[test]
+    fn preserves_short_corner_and_removes_collinear_point() {
+        let mut p = vec![P::new(0.,0.), P::new(0.5,0.), P::new(0.5,5.), P::new(0.5,5.5), P::new(0.5,10.)];
+        dedupe_stitches(&mut p, 1.0);
+        assert_eq!(p.len(), 4);
+        assert!(p[1].dist(P::new(0.5,0.)) < 1e-9);
+    }
+}
+
 /// Resample a polyline into stitches no longer than `len`, keeping every vertex
 /// (corners stay sharp). Segments are split evenly.
 pub fn resample_keep_corners(pts: &[P], len: f64) -> Polyline {
