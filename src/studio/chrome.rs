@@ -79,7 +79,20 @@ impl Studio {
                 ui.add(egui::TextEdit::singleline(&mut query).hint_text("Find any command…"));
                 ui.ctx().data_mut(|d| d.insert_temp(search_id, query.clone()));
                 let favorites_id = egui::Id::new("quick-action-favorites");
-                let mut favorites = ui.ctx().data(|d| d.get_temp::<Vec<crate::commands::Action>>(favorites_id).unwrap_or_default());
+                let registry = crate::commands::all_actions();
+                let file = crate::dock::config_file("quick-actions.json");
+                let mut favorites = ui.ctx().data(|d| d.get_temp::<Vec<Action>>(favorites_id)).unwrap_or_else(|| {
+                    let names: Vec<String> = file.as_ref().and_then(|f| std::fs::read_to_string(f).ok())
+                        .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+                    registry.iter().filter(|(_, label, _)| names.iter().any(|n| n == label)).map(|(a, _, _)| *a).collect()
+                });
+                let save_favorites = |favorites: &[Action]| {
+                    if let Some(f) = &file {
+                        let names: Vec<_> = registry.iter().filter(|(a, _, _)| favorites.contains(a)).map(|(_, label, _)| *label).collect();
+                        if let Some(dir) = f.parent() { let _ = std::fs::create_dir_all(dir); }
+                        if let Ok(json) = serde_json::to_string(&names) { let _ = std::fs::write(f, json); }
+                    }
+                };
                 if query.trim().is_empty() && !favorites.is_empty() {
                     caption(ui, "Favorites");
                     for (action, label, _) in crate::commands::all_actions() {
@@ -87,6 +100,7 @@ impl Studio {
                             ui.horizontal(|ui| {
                                 if ui.small_button("★").on_hover_text("Unpin action").clicked() {
                                     favorites.retain(|a| *a != action);
+                                    save_favorites(&favorites);
                                 }
                                 if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
                                     self.run_action(action);
@@ -109,6 +123,7 @@ impl Studio {
                                     if ui.small_button(if pinned { "★" } else { "☆" }).on_hover_text("Pin or unpin favorite").clicked() {
                                         if pinned { favorites.retain(|a| *a != action); }
                                         else { favorites.push(action); }
+                                        save_favorites(&favorites);
                                         ui.ctx().data_mut(|d| d.insert_temp(favorites_id, favorites.clone()));
                                     }
                                     if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
