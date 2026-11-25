@@ -1848,6 +1848,7 @@ async fn choose_artwork() -> Result<Option<ArtworkInput>, String> {
 
 struct DigitizerDraft {
     id: u64,
+    alternatives: Vec<(u8,zigzag::document::Document,Design)>,
     document: zigzag::document::Document,
     design: Design,
 }
@@ -2060,20 +2061,47 @@ async fn digitize_artwork(
     }).await.map_err(|err| err.to_string())??;
     let mut workspace = state.lock().map_err(|err| err.to_string())?;
     if workspace.next_draft_id != id { return Err("A newer digitizing request replaced this draft".into()); }
-    workspace.digitizer_draft = Some(DigitizerDraft { id, document, design });
+    workspace.digitizer_draft = Some(DigitizerDraft { id, document, design, alternatives: Vec::new() });
     Ok(review)
 }
 
+// Compare against the same digitized source without changing the editor.
 #[tauri::command]
-fn apply_digitizer_draft(id: u64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
+async fn compare_digitizer_draft(id:u64,app:tauri::AppHandle)->Result<Vec<SimplifyVariant>,String>{
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move||{
+        let state=app.state::<Mutex<Workspace>>();
+        let (doc,original)={
+            let w=state.lock().map_err(|e|e.to_string())?;
+            let d=w.digitizer_draft.as_ref().filter(|d|d.id==id).ok_or("Digitizing draft expired")?;
+            (d.document.clone(),d.design.clone())
+        };
+        let mut variants=Vec::new();let mut alternatives=Vec::new();
+        for strength in 1..=3 {
+            let options=SimplifyOptions{solid:strength==3,merge:strength>=2,auto_types:strength>=2,..Default::default()};
+            match choose_simplification(&doc,&original,strength,None,strength==3,&options){
+                Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None});alternatives.push((strength,d,plan));}
+                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
+            }
+        }
+        let mut w=state.lock().map_err(|e|e.to_string())?;
+        let d=w.digitizer_draft.as_mut().filter(|d|d.id==id).ok_or("A newer artwork replaced this draft")?;
+        d.alternatives=alternatives;Ok(variants)
+    }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+fn apply_digitizer_draft(id: u64, strength: Option<u8>, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
     let mut workspace = state.lock().map_err(|err| err.to_string())?;
     if workspace.digitizer_draft.as_ref().is_none_or(|draft| draft.id != id) {
         return Err("This draft expired. Regenerate stitches before opening it.".into());
     }
+    let strength=strength.unwrap_or(0);
+    if strength!=0&&!workspace.digitizer_draft.as_ref().is_some_and(|d|d.alternatives.iter().any(|(n,_,_)|*n==strength)){return Err("Selected preview is unavailable".into())}
     let draft = workspace.digitizer_draft.take().ok_or("No digitizing draft")?;
+    let (document,design)=if strength==0{(draft.document,draft.design)}else{let (_,doc,plan)=draft.alternatives.into_iter().find(|(n,_,_)|*n==strength).ok_or("Selected preview expired")?;(doc,plan)};
     workspace.checkpoint_named("Apply digitized artwork");
-    workspace.current = Some(draft.design);
-    workspace.source = Some(draft.document);
+    workspace.current = Some(design);
+    workspace.source = Some(document);
     Ok(())
 }
 #[derive(serde::Serialize)]
@@ -2341,7 +2369,7 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
 async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,preview_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,preview_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
