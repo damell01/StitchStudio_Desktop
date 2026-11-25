@@ -10,8 +10,13 @@ mod specialty;
 mod thread_recolor;
 use std::sync::Mutex;
 #[derive(Default)]
-struct Workspace { plan_cache: zigzag::design::PlanCache, digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)> }
-impl Workspace { fn checkpoint(&mut self) { if let Some(d)=self.current.clone(){self.undo.push((d,self.source.clone()));if self.undo.len()>20{self.undo.remove(0);}self.redo.clear();} } }
+struct Workspace { plan_cache: zigzag::design::PlanCache, digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)>, undo_labels: Vec<String>, redo_labels: Vec<String> }
+impl Workspace {
+ fn checkpoint(&mut self){self.checkpoint_named("Edit design");}
+ fn checkpoint_named(&mut self,label:&str){
+  if let Some(d)=self.current.clone(){self.undo.push((d,self.source.clone()));self.undo_labels.push(label.to_owned());if self.undo.len()>20{self.undo.remove(0);self.undo_labels.remove(0);}self.redo.clear();self.redo_labels.clear();}
+ }
+}
 use zigzag::{design::Design, formats};
 #[derive(serde::Serialize)]
 struct Preview { name: String, blocks: Vec<PreviewBlock>, stitches: usize, trims: usize }
@@ -32,10 +37,10 @@ async fn transform_design(scale: f64, rotation: f64, dx: f64, dy: f64, app: taur
         let indices:Vec<usize>=(0..doc.shapes.len()).collect();
         doc.transform(&indices,[scale*c,scale*s,-scale*s,scale*c,dx*10.0,dy*10.0]).map_err(|e|e.to_string())?;
         let design=doc.plan();if design.blocks.is_empty(){return Err("Transformation produced no stitches".into())}
-        let p=preview(&design);guard.checkpoint();guard.current=Some(design);guard.source=Some(doc);return Ok(p)
+        let p=preview(&design);guard.checkpoint_named("Transform design");guard.current=Some(design);guard.source=Some(doc);return Ok(p)
     }
     if guard.current.is_none(){return Err("Open artwork first".into())}
-    guard.checkpoint();
+    guard.checkpoint_named("Transform design");
     let d=guard.current.as_mut().ok_or("Open artwork first")?;
     for p in d.blocks.iter_mut().flat_map(|b| &mut b.runs).flat_map(|r| &mut r.pts) {
         let (x,y)=(p.x,p.y);
@@ -114,7 +119,7 @@ async fn optimize_editable_design(app:tauri::AppHandle)->Result<Preview,String>{
   let source=w.source.as_ref().ok_or("Open editable artwork to optimize density")?;
   let original=w.current.as_ref().ok_or("Open artwork first")?;
   let (source,design)=optimized_density(source,original).ok_or("No conservative density improvement passed the checks. Original design retained.")?;
-  let result=preview(&design);w.checkpoint();w.source=Some(source);w.current=Some(design);Ok(result)
+  let result=preview(&design);w.checkpoint_named("Optimize density");w.source=Some(source);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
@@ -141,7 +146,7 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
    total+=out.len();if total>2000000{return Err("Repair exceeds stitch limit".into())}
    run.pts=out;
  }
- let result=preview(&d);if d.stitch_count()!=w.current.as_ref().unwrap().stitch_count(){w.checkpoint();w.current=Some(d);}Ok(result)
+ let result=preview(&d);if d.stitch_count()!=w.current.as_ref().unwrap().stitch_count(){w.checkpoint_named("Repair fixed stitches");w.current=Some(d);}Ok(result)
 }
 fn place_design(workspace: &mut Workspace, matrix: [f64; 6]) -> Result<Preview, String> {
     let [a, b, c, d, tx, ty] = matrix;
@@ -159,7 +164,7 @@ fn place_design(workspace: &mut Workspace, matrix: [f64; 6]) -> Result<Preview, 
         apply(point);
     }
     let result = preview(&design);
-    workspace.checkpoint();
+    workspace.checkpoint_named("Change placement");
     workspace.current = Some(design);
     workspace.source = source;
     Ok(result)
@@ -357,10 +362,16 @@ fn current_preview(state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<Pre
 fn history_step(redo:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String> {
  let mut w=state.lock().map_err(|e|e.to_string())?;
  let next=if redo {w.redo.pop()} else {w.undo.pop()}.ok_or("No more history")?;
+ let label=if redo {w.redo_labels.pop()}else{w.undo_labels.pop()}.unwrap_or_else(||"Edit design".into());
  let (design,source)=next;
  let previous_source=std::mem::replace(&mut w.source,source);
- if let Some(old)=w.current.replace(design){if redo {w.undo.push((old,previous_source))}else{w.redo.push((old,previous_source))}}
+ if let Some(old)=w.current.replace(design){if redo {w.undo.push((old,previous_source));w.undo_labels.push(label)}else{w.redo.push((old,previous_source));w.redo_labels.push(label)}}
  Ok(preview(w.current.as_ref().ok_or("No design")?))
+}
+#[tauri::command]
+fn history_labels(state:tauri::State<'_,Mutex<Workspace>>)->Result<(Vec<String>,Vec<String>),String>{
+ let w=state.lock().map_err(|e|e.to_string())?;
+ Ok((w.undo_labels.clone(),w.redo_labels.clone()))
 }
 const MAX_PROJECT_BYTES: u64 = 100_000_000;
 
@@ -544,7 +555,7 @@ fn load_template(id: String, art: String, state: tauri::State<'_, Mutex<Workspac
     if design.stitch_count() == 0 { return Err("Template contains no stitches".into()); }
     let result = preview(&design);
     let mut workspace = state.lock().map_err(|err| err.to_string())?;
-    workspace.checkpoint();
+    workspace.checkpoint_named("Load template");
     workspace.current = Some(design);
     workspace.source = Some(source);
     Ok(result)
@@ -692,7 +703,7 @@ fn insert_editable_artwork(
     let design = document.plan();
     if design.stitch_count() == 0 { return Err("Artwork contains no stitches".into()); }
     let result = preview(&design);
-    workspace.checkpoint();
+    workspace.checkpoint_named("Insert artwork");
     workspace.current = Some(design);
     workspace.source = Some(document);
     Ok(result)
@@ -716,7 +727,7 @@ fn apply_stitch_properties(uid:Option<usize>,fabric:String,spacing:f64,length:f6
  if let Some(id)=uid{if !doc.shapes.iter().any(|s|s.uid==id){return Err("Object not found".into())}}
  for shape in &mut doc.shapes {if uid.is_some_and(|id|id!=shape.uid){continue}if shape.params.kind==Some(zigzag::params::Kind::Manual){continue}shape.params.spacing=Some(spacing);shape.params.len=Some(length);shape.params.angle=Some(angle);shape.params.pull=Some(pull);shape.params.underlay=Some(underlay);}
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
- let p=preview(&d);w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+ let p=preview(&d);w.checkpoint_named("Change stitch properties");w.current=Some(d);w.source=Some(doc);Ok(p)
 }
 #[derive(serde::Serialize)]
 struct EditableObject {
@@ -838,7 +849,7 @@ fn apply_object_edit(workspace: &mut Workspace, uid: usize, operation: ObjectEdi
     let design = document.plan_cached(&mut workspace.plan_cache);
     if design.stitch_count() == 0 { return Err("The edit would leave no stitchable objects".into()); }
     let result = preview(&design);
-    workspace.checkpoint();
+    workspace.checkpoint_named("Edit object");
     workspace.current = Some(design);
     workspace.source = Some(document);
     Ok(result)
@@ -866,7 +877,7 @@ fn align_objects(workspace:&mut Workspace,uids:&[usize],mode:&str)->Result<Previ
  doc.transform(&[i],[1.0,0.0,0.0,1.0,if horizontal{delta}else{0.0},if vertical{delta}else{0.0}]).map_err(|e|e.to_string())?;
  }
  let design=doc.plan_cached(&mut workspace.plan_cache);if design.stitch_count()==0{return Err("Alignment produced no stitches".into())}
- let result=preview(&design);workspace.checkpoint();workspace.source=Some(doc);workspace.current=Some(design);Ok(result)
+ let result=preview(&design);workspace.checkpoint_named("Align objects");workspace.source=Some(doc);workspace.current=Some(design);Ok(result)
 }
 #[tauri::command]
 async fn delete_artwork_objects(uids:Vec<usize>,all:bool,app:tauri::AppHandle)->Result<Preview,String>{
@@ -882,7 +893,7 @@ async fn delete_artwork_objects(uids:Vec<usize>,all:bool,app:tauri::AppHandle)->
  if indices.len()==doc.shapes.len(){doc=zigzag::document::Document::empty()}else{doc.delete_many(&indices).map_err(|e|e.to_string())?;}
  }
  let design=doc.plan_cached(&mut w.plan_cache);
- let result=preview(&design);w.checkpoint();w.source=Some(doc);w.current=Some(design);Ok(result)
+ let result=preview(&design);w.checkpoint_named("Delete artwork");w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
@@ -897,7 +908,7 @@ async fn move_artwork_objects(uids:Vec<usize>,dx:f64,dy:f64,app:tauri::AppHandle
  if indices.len()==doc.shapes.len(){return place_design(&mut w,[1.0,0.0,0.0,1.0,dx*10.0,dy*10.0])}
  doc.transform(&indices,[1.0,0.0,0.0,1.0,dx*10.0,dy*10.0]).map_err(|e|e.to_string())?;
  let design=doc.plan_cached(&mut w.plan_cache);if design.stitch_count()==0{return Err("Movement produced no stitches".into())}
- let result=preview(&design);w.checkpoint();w.source=Some(doc);w.current=Some(design);Ok(result)
+ let result=preview(&design);w.checkpoint_named("Move objects");w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
@@ -914,7 +925,7 @@ async fn transform_artwork_group(uids:Vec<usize>,scale:f64,rotation:f64,app:taur
  let (s,c)=rotation.to_radians().sin_cos();let a=scale*c;let b=scale*s;
  doc.transform(&indices,[a,b,-b,a,center.x-a*center.x+b*center.y,center.y-b*center.x-a*center.y]).map_err(|e|e.to_string())?;
  let design=doc.plan_cached(&mut w.plan_cache);if design.stitch_count()==0{return Err("Transformation produced no stitches".into())}
- let result=preview(&design);w.checkpoint();w.source=Some(doc);w.current=Some(design);Ok(result)
+ let result=preview(&design);w.checkpoint_named("Transform selection");w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
@@ -932,7 +943,7 @@ async fn recolor_artwork_group(uids:Vec<usize>,previous:[u8;3],color:[u8;3],app:
  }
  if !found{return Err("No matching objects in this group".into())}
  let design=doc.plan_cached(&mut w.plan_cache);if design.stitch_count()==0{return Err("No stitches generated".into())}
- let result=preview(&design);w.checkpoint();w.source=Some(doc);w.current=Some(design);Ok(result)
+ let result=preview(&design);w.checkpoint_named("Change group colors");w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
@@ -945,7 +956,7 @@ fn set_artwork_group(uids:Vec<usize>,group:bool,state:tauri::State<'_,Mutex<Work
  let key=loop{let key=format!("tl-custom-group-{n}");if !doc.shapes.iter().any(|s|s.groups.contains(&key)){break key}n+=1;};
  for shape in &mut doc.shapes{if selected.contains(&shape.uid){shape.groups.retain(|g|!g.starts_with("tl-custom-group-")&&!g.starts_with("tl-independent-"));shape.groups.push(if group{key.clone()}else{format!("tl-independent-{}",shape.uid)});}}
  let result=preview(w.current.as_ref().ok_or("Open a design first")?);
- w.checkpoint();w.source=Some(doc);Ok(result)
+ w.checkpoint_named("Change grouping");w.source=Some(doc);Ok(result)
 }
 #[tauri::command]
 async fn align_artwork_objects(uids:Vec<usize>,mode:String,app:tauri::AppHandle)->Result<Preview,String>{
@@ -970,7 +981,7 @@ fn set_object_kind(uid:usize,kind:String,state:tauri::State<'_,Mutex<Workspace>>
  if shape.params.kind==Some(zigzag::params::Kind::Manual){return Err("Manual stitches cannot be converted directly".into())}
  shape.params.kind=kind;
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
- let p=preview(&d);w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+ let p=preview(&d);w.checkpoint_named("Change stitch type");w.current=Some(d);w.source=Some(doc);Ok(p)
 }
 // Read-only preview uses the same planner as the final specialty design.
 #[tauri::command]
@@ -986,7 +997,7 @@ async fn preview_specialty(shape:String,style:String,width:f64) -> Result<Previe
 fn create_specialty(shape:String,style:String,width:f64,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
  let doc = specialty::build_document(&shape, &style, width)?;
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
- let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint();w.current=Some(d);w.source=Some(doc);Ok(p)
+ let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint_named("Create specialty design");w.current=Some(d);w.source=Some(doc);Ok(p)
 }
 #[tauri::command]
 fn recovery_save(app: tauri::AppHandle, width: f64, height: f64, format: String, thread_assignments: Option<std::collections::HashMap<String,String>>, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
@@ -1274,7 +1285,7 @@ fn apply_digitizer_draft(id: u64, state: tauri::State<'_, Mutex<Workspace>>) -> 
         return Err("This draft expired. Regenerate stitches before opening it.".into());
     }
     let draft = workspace.digitizer_draft.take().ok_or("No digitizing draft")?;
-    workspace.checkpoint();
+    workspace.checkpoint_named("Apply digitized artwork");
     workspace.current = Some(draft.design);
     workspace.source = Some(draft.document);
     Ok(())
@@ -1544,4 +1555,4 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
 async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
