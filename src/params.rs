@@ -397,14 +397,18 @@ impl Params {
         if let Some(s) = self.spacing_set() {
             return s;
         }
-        let k = if width_mm < 1.5 {
+        // Interpolate between width targets to avoid sudden density changes
+        // when a user slightly resizes a column.
+        let k = if !width_mm.is_finite() {
+            1.0
+        } else if width_mm <= 1.0 {
             1.25
         } else if width_mm < 2.5 {
-            1.1
-        } else if width_mm > 5.0 {
-            0.92
-        } else {
+            1.25 - (width_mm - 1.0) / 1.5 * 0.25
+        } else if width_mm < 5.0 {
             1.0
+        } else {
+            1.0 - ((width_mm - 5.0) / 2.0).clamp(0.0, 1.0) * 0.08
         };
         f.satin_spacing * k
     }
@@ -824,6 +828,14 @@ mod tests {
 #[cfg(test)]
 mod adaptive_pull_tests {
     use super::*;
+    #[test]
+    fn satin_spacing_changes_smoothly_with_width() {
+        let mut p = Params::default();
+        assert!((p.satin_spacing_for(&KNIT, 1.49) - p.satin_spacing_for(&KNIT, 1.51)).abs() < 0.01);
+        assert!((p.satin_spacing_for(&KNIT, 2.49) - p.satin_spacing_for(&KNIT, 2.51)).abs() < 0.01);
+        p.spacing = Some(0.5);
+        assert_eq!(p.satin_spacing_for(&KNIT, 1.0), 0.5);
+    }
     #[test]
     fn narrow_satin_preserves_details_and_explicit_override() {
         let mut p = Params::default();
