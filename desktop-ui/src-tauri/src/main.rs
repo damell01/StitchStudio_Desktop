@@ -1495,7 +1495,7 @@ fn editable_object(shape: &zigzag::svg::Shape) -> Option<EditableObject> {
 }
 
 #[tauri::command]
-async fn reorder_artwork_object(uid:usize,direction:String,app:tauri::AppHandle)->Result<Preview,String>{
+async fn reorder_artwork_object(uid:usize,direction:String,target_uid:Option<usize>,app:tauri::AppHandle)->Result<Preview,String>{
  use tauri::Manager;
  tauri::async_runtime::spawn_blocking(move||{
     let state=app.state::<Mutex<Workspace>>();
@@ -1503,7 +1503,7 @@ async fn reorder_artwork_object(uid:usize,direction:String,app:tauri::AppHandle)
     let mut doc=w.source.clone().ok_or("No editable artwork")?;
     let i=doc.shapes.iter().position(|s|s.uid==uid).ok_or("Object not found")?;
     let last=doc.shapes.len()-1;
-    let to=match direction.as_str(){"earlier"=>i.saturating_sub(1),"later"=>(i+1).min(last),"first"=>0,"last"=>last,_=>return Err("Unknown sewing order action".into())};
+    let to=match direction.as_str(){"earlier"=>i.saturating_sub(1),"later"=>(i+1).min(last),"first"=>0,"last"=>last,"before"=>{let target=target_uid.ok_or("Missing destination")?;let j=doc.shapes.iter().position(|s|s.uid==target).ok_or("Destination not found")?;if j>i{j-1}else{j}},_=>return Err("Unknown sewing order action".into())};
     if i==to{return Ok(preview(w.current.as_ref().ok_or("No design")?))}
     let shape=doc.shapes.remove(i);doc.shapes.insert(to,shape);
     // Manual order must not be silently overridden by the automatic planner.
