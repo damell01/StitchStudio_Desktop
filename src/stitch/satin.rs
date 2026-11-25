@@ -228,7 +228,12 @@ pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
     let mut top: Polyline = Vec::with_capacity(ps.len() * 2);
     for (k, &(a, b)) in ps.iter().enumerate() {
         let dir = (a - b).norm();
-        let (mut a2, mut b2) = (a + dir * p.pull, b - dir * p.pull);
+        // Tapered tips need less compensation than the full-width column.
+        // Limit expansion and contraction relative to the local rung so
+        // tiny letter tips cannot flare or turn their rails inside out.
+        let local_width = a.dist(b);
+        let pull = p.pull.clamp(-local_width * 0.24, local_width * 0.25);
+        let (mut a2, mut b2) = (a + dir * pull, b - dir * pull);
         if p.short_stitches && k > 0 && k + 1 < ps.len() && k % 2 == 1 {
             let (pa, pb) = ps[k - 1];
             let (na, nb) = ps[k + 1];
@@ -771,6 +776,24 @@ mod tests {
         for (pa, pb) in pairs(&r, 4.0) {
             assert!((pa.x - pb.x).abs() < 1e-6, "stitches stay perpendicular");
         }
+    }
+
+    #[test]
+    fn taper_limits_pull_compensation_at_narrow_tips() {
+        let r = Rails {
+            a: vec![P::new(0.0, -1.0), P::new(100.0, -15.0)],
+            b: vec![P::new(0.0, 1.0), P::new(100.0, 15.0)],
+            closed: false,
+            sync: Vec::new(),
+        };
+        let mut p = params(0);
+        p.pull = 4.0;
+        let s = column(&r, &p);
+        assert!((s[0].dist(s[1]) - 3.0).abs() < 1e-8);
+        assert!((s[s.len()-2].dist(s[s.len()-1]) - 38.0).abs() < 1e-8);
+        p.pull = -4.0;
+        let s = column(&r, &p);
+        assert!(s[0].y < s[1].y);
     }
 
     #[test]
