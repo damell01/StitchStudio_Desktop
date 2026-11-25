@@ -73,6 +73,23 @@ impl Studio {
                 }
             }
             ui.separator();
+            ui.menu_button("Quick actions", |ui| {
+                ui.set_min_width(190.0);
+                for (heading, actions) in [
+                    ("Position", &[("Center in hoop", Action::CenterInHoop), ("Fit to hoop", Action::FitToHoop), ("Fit canvas view", Action::ZoomFit)][..]),
+                    ("Edit selection", &[("Duplicate", Action::Duplicate), ("Flip horizontal", Action::FlipH), ("Flip vertical", Action::FlipV), ("Rotate 90°", Action::RotateRight)][..]),
+                    ("Embroidery", &[("Group thread colors", Action::GroupColors), ("Inspect design", Action::ShowIssues), ("Simulate stitching", Action::PlayPause)][..]),
+                ] {
+                    caption(ui, heading);
+                    for &(label, action) in actions {
+                        if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
+                            self.run_action(action);
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
+                }
+            });
             let tools = [("Fit hoop", Action::FitToHoop), ("Fit view", Action::ZoomFit),
                 ("Simulate", Action::PlayPause), ("Density", Action::ToggleDensity), ("Inspect", Action::ShowIssues)];
             if compact {
