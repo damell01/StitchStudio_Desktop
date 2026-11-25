@@ -1309,3 +1309,42 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .status-metrics>span+span{border-left:1px solid var(--workspace-border);padding-left:12px}
 .status-metrics{gap:12px}
 @media(max-width:1100px){.document-recovery,.simulation-fit{display:none}.editor-workspace .studio-edit-bar{gap:5px;padding-inline:8px}.editor-workspace .studio-command-group{gap:2px;padding-inline:3px}.editor-workspace .workspace-sidebar{padding:8px}.editor-workspace .workspace-inspector .workspace-segments button{font-size:10px}.editor-workspace .studio-camera{gap:2px;padding:4px}.editor-workspace .studio-camera button{font-size:11px;padding:4px}.editor-workspace .workspace-status{padding-inline:8px}}
+
+/* Pixel-reference proportions for the lavender rocket editor. */
+[data-palette=lavender][data-theme=light] .app:has(.editor-workspace):not(:has(.studio-focus-active)){grid-template-rows:48px 46px minmax(0,1fr)!important}
+[data-palette=lavender][data-theme=light] .app:has(.editor-workspace)>.desktop-nav{padding-inline:24px;gap:12px}
+[data-palette=lavender][data-theme=light] .app:has(.editor-workspace)>header{padding-inline:28px;gap:16px}
+[data-palette=lavender][data-theme=light] main.editor-workspace{padding:0;gap:0;background:#f1ebfa}
+[data-palette=lavender][data-theme=light] .editor-workspace .studio-edit-bar{min-height:64px;border-radius:0;border-width:0 0 1px;margin:0;padding-inline:28px}
+[data-palette=lavender][data-theme=light] .editor-workspace .studio-document{flex:1}
+[data-palette=lavender][data-theme=light] .editor-workspace .studio-command-group{border-color:#d9cde9}
+[data-palette=lavender][data-theme=light] .editor-workspace .studio-canvas-layout{padding:10px 10px 10px 4px;gap:8px;background:radial-gradient(ellipse at center,#f5f0fc 0%,#eee5fa 85%)}
+[data-palette=lavender][data-theme=light] .editor-workspace .studio-canvas-layout>.workspace-sidebar,
+[data-palette=lavender][data-theme=light] .editor-workspace .studio-canvas-layout>.editor-toolrail{background:linear-gradient(155deg,#fff 0%,#faf7ff 100%);border:1px solid #dfd3f1;border-radius:18px;box-shadow:0 2px 8px #633b9b0b}
+.editor-workspace .studio-canvas-layout>.editor-toolrail{justify-content:flex-start;gap:5px;padding:9px}
+.editor-workspace .editor-toolrail button{min-height:65px;flex:1;max-height:78px;border-radius:12px;gap:5px}
+.editor-workspace .editor-toolrail button small{font-size:12px}
+.editor-workspace .studio-canvas-layout>.studio-layers-dock{padding:17px}
+.editor-workspace .studio-canvas-layout>.studio-inspector-dock{padding:12px}
+.editor-workspace .layers-dock-title{padding-bottom:10px}
+.editor-workspace .layers-dock-title>svg{color:var(--brand)}
+.editor-workspace .layers-dock-header .workspace-segments{background:var(--brand-soft);border:1px solid var(--lav-border);border-radius:10px;padding:5px;gap:5px}
+.editor-workspace .layers-dock-header .workspace-segments button{min-height:32px;font-size:13px}
+.editor-workspace .layers-dock-header .workspace-segments button[aria-pressed=true]{background:var(--lav-panel);border:1px solid var(--lav-border);font-weight:700}
+.editor-workspace .layers-thread-row{min-height:57px}
+.editor-workspace .workspace-disclosure{border:1px solid var(--lav-border);border-radius:10px;padding:10px;margin-top:12px}
+[data-palette=lavender][data-theme=light] .editor-workspace .studio-canvas-layout>.canvas-panel{background:transparent;border:0;box-shadow:none}
+[data-palette=lavender][data-theme=light] .editor-workspace .design-canvas{background:transparent!important}
+.editor-workspace .studio-camera{top:12px;min-height:52px}
+.editor-workspace .studio-camera:not(.studio-camera-top){top:auto;bottom:12px}
+.editor-workspace .studio-camera button{min-height:32px}
+.editor-workspace .workspace-inspector .workspace-segments button{min-height:58px}
+.editor-workspace .workspace-inspector-group{padding:8px 10px}
+.editor-workspace .workspace-inspector-group>label{margin:8px 0}
+.editor-workspace .workspace-inspector-group>h3{padding-bottom:7px}
+.editor-workspace .workspace-fit-card{padding:14px;margin-top:12px}
+[data-palette=lavender][data-theme=light] .editor-workspace>.playback-tools,
+[data-palette=lavender][data-theme=light] .editor-workspace>.workspace-status{background:#fbf8ff;border-color:#e0d6ee}
+.editor-workspace>.playback-tools{min-height:54px;padding-inline:30px}
+.editor-workspace>.workspace-status{min-height:44px;padding-inline:30px}
+@media(max-height:800px){.editor-workspace .editor-toolrail button{min-height:43px;gap:3px}.editor-workspace .editor-toolrail button svg{width:19px;height:19px}.editor-workspace .layers-thread-row{min-height:46px}.editor-workspace .studio-canvas-layout>.studio-layers-dock{padding:10px}.editor-workspace .workspace-inspector-group{padding:5px}.editor-workspace .workspace-inspector .workspace-segments button{min-height:44px}}
