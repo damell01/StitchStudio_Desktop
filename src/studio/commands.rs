@@ -445,12 +445,14 @@ impl Studio {
             Action::SelectAll | Action::GroupColors | Action::FitToHoop | Action::CleanUp => {
                 !self.doc.shapes.is_empty()
             }
-            Action::Export(_) | Action::SendToSkitch | Action::PlayPause => has_design,
+            Action::Export(_) => has_design && !self.planner.pending
+                && !self.issues.iter().any(|i| i.level == zigzag::checks::Level::Error),
+            Action::SendToSkitch | Action::PlayPause => has_design,
+            Action::CenterInHoop => !self.doc.shapes.is_empty(),
             Action::FlipH
             | Action::FlipV
             | Action::RotateLeft
             | Action::RotateRight
-            | Action::CenterInHoop
             | Action::TransformAgain
             | Action::OffsetPath
             | Action::OutlineStroke
@@ -611,7 +613,14 @@ impl Studio {
                 self.fit_to_hoop(false);
             }
             Action::CenterInHoop => {
-                self.transform_selected(translation(zigzag::geom::P::default() - c), "Centered");
+                let whole_design = self.sel_indices().is_empty();
+                if whole_design {
+                    let indices: Vec<usize> = (0..self.doc.shapes.len()).collect();
+                    self.set_selection(&indices);
+                }
+                let center = self.selection_bounds().center();
+                self.transform_selected(translation(zigzag::geom::P::default() - center), "Centered");
+                if whole_design { self.set_selection(&[]); }
             }
             Action::BringToFront => self.move_selected_to(false),
             Action::SendToBack => self.move_selected_to(true),
