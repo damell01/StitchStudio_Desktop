@@ -55,11 +55,13 @@ export function ExportCenter({assignments,plan,width,height,format,setFormat,mac
   const [companions,setCompanions]=useState(true);
   const [includeSheet,setIncludeSheet]=useState(true),[includePreview,setIncludePreview]=useState(true);
   const [exportError,setExportError]=useState('');
+  const [encoding,setEncoding]=useState(false);
+  const exportLock=useRef(false);
   const preview=useMemo(()=>renderPreview(plan),[plan]);
   const image=useMemo(()=>preview.toDataURL('image/png'),[preview]);
   const sheet=useMemo(()=>renderSheet(plan,assignments,format,machine,width,height,preview),[plan,assignments,format,machine,width,height,preview]);
   const sheetImage=useMemo(()=>sheet.toDataURL('image/png'),[sheet]);
-  async function exportPackage(){try{setExportError('');await onExport(companions,{sheet:includeSheet?await pngBytes(sheet):undefined,preview:includePreview?await pngBytes(preview):undefined})}catch(e){setExportError(String(e))}}
+  async function exportPackage(){if(exportLock.current)return;exportLock.current=true;setEncoding(true);try{setExportError('');await onExport(companions,{sheet:includeSheet?await pngBytes(sheet):undefined,preview:includePreview?await pngBytes(preview):undefined})}catch(e){setExportError(String(e))}finally{exportLock.current=false;setEncoding(false)}}
   useEffect(()=>{dialog.current?.showModal();},[]);
   const dimensions=useMemo(()=>designSize(plan),[plan]);
   const sequence=useMemo(()=>plan.blocks.map(block=>({
@@ -85,17 +87,17 @@ export function ExportCenter({assignments,plan,width,height,format,setFormat,mac
 
   return <dialog ref={dialog} className="studio-modal export-dialog" aria-label="Export review"
     onClose={event=>{if(event.target===event.currentTarget)onClose();}}
-    onCancel={event=>{if(busy)event.preventDefault();}}>
+    onCancel={event=>{if(busy||encoding)event.preventDefault();}}>
     <header className="export-review-header">
       <div><h2>Export Design Package</h2><p title={plan.name}>{plan.name} <span>· {machine||'Manual machine setup'}</span></p></div>
-      <button title="Close export review" aria-label="Close export review" onClick={onClose} disabled={busy}><X size={18} aria-hidden="true"/></button>
+      <button title="Close export review" aria-label="Close export review" onClick={onClose} disabled={busy||encoding}><X size={18} aria-hidden="true"/></button>
     </header>
     <div className="export-review-body">
       <div className="package-left"><section className="export-review-settings" aria-label="Machine settings">
         <h3>Machine file</h3>
         <fieldset className="export-format">
           <legend>Machine format</legend>
-          {formats.map(option=><button key={option} aria-pressed={option===format} disabled={busy}
+          {formats.map(option=><button key={option} aria-pressed={option===format} disabled={busy||encoding}
             onClick={()=>{setFormat(option);setAck(false);}}>{option.toUpperCase()}</button>)}
         </fieldset>
         {format==='dst'&&<p className="package-notice">DST stores color-change positions, not exact thread colors. Include a color sequence sheet for machine setup.</p>}<div className="package-options"><label><input type="checkbox" checked={includeSheet} onChange={e=>setIncludeSheet(e.target.checked)}/> Color sequence PNG</label><label><input type="checkbox" checked={includePreview} onChange={e=>setIncludePreview(e.target.checked)}/> Design preview PNG</label></div><details className="package-settings"><summary><Settings size={15}/> Export settings</summary><dl className="export-review-metrics">
@@ -105,7 +107,7 @@ export function ExportCenter({assignments,plan,width,height,format,setFormat,mac
           <div><dt>Planned trims</dt><dd>{plan.trims.toLocaleString()}</dd></div>
         </dl>
         <label className="export-speed">Machine speed (stitches/min)
-          <input type="number" min="100" max="1500" value={speed} disabled={busy}
+          <input type="number" min="100" max="1500" value={speed} disabled={busy||encoding}
             onChange={event=>setSpeed(event.target.value)}
             onBlur={()=>setSpeed(String(Math.min(1500,Math.max(100,Number(speed)||600))))}/>
         </label>
@@ -124,14 +126,14 @@ export function ExportCenter({assignments,plan,width,height,format,setFormat,mac
             <div><strong>{color}</strong>{assignments[index]&&<small>{assignments[index]}</small>}<small>{points.toLocaleString()} points</small></div>
           </li>)}
         </ol></div>
-      </section><section className="package-files"><h3><FolderOpen size={17}/> Companion files</h3><div><span><FileText size={16}/> .{format}</span>{includeSheet&&<span><Image size={16}/> .colors.png</span>}{includePreview&&<span><Image size={16}/> .preview.png</span>}{companions&&<span><FileText size={16}/> .colors.html + .preview.svg</span>}</div></section></div><section className="package-sheet"><h3>Color sequence sheet (preview)</h3><p>Printable reference for the design and thread order.</p><img src={sheetImage} alt="Color sequence sheet with design preview and all thread assignments"/></section>
+      </section><section className="package-files"><h3><FolderOpen size={17}/> Companion files</h3><div><span><FileText size={16}/> .{format}</span>{includeSheet&&<span><Image size={16}/> .colors.png</span>}{includePreview&&<span><Image size={16}/> .preview.png</span>}{companions&&<span><FileText size={16}/> .colors.html + .preview.svg</span>}</div></section></div><section className="package-sheet"><h3>Color sequence sheet (preview)</h3><p>Printable reference for the design and thread order.</p><div className="package-proof-scroll" tabIndex={0} aria-label="Scrollable color sequence proof"><img src={sheetImage} alt="Color sequence sheet with design preview and all thread assignments"/></div></section>
     </div>
     <footer className="export-review-footer">
-      <label><input type="checkbox" checked={ack} disabled={busy} onChange={event=>setAck(event.target.checked)}/> Reviewed and ready for a test sew</label>
+      <label><input type="checkbox" checked={ack} disabled={busy||encoding} onChange={event=>setAck(event.target.checked)}/> Reviewed and ready for a test sew</label>
       <div>
-        {exportError&&<p role="alert">{exportError}</p>}<label><input type="checkbox" checked={companions} disabled={busy} onChange={e=>setCompanions(e.target.checked)}/> Also include HTML and SVG</label><button onClick={worksheet}><FileText size={16} aria-hidden="true"/> Save printable worksheet</button>
-        <button className="primary" disabled={blocked||busy||!ack} onClick={()=>void exportPackage()}>
-          <Download size={16} aria-hidden="true"/>{busy?'Saving…':'Export package'}
+        {exportError&&<p role="alert">{exportError}</p>}<label><input type="checkbox" checked={companions} disabled={busy||encoding} onChange={e=>setCompanions(e.target.checked)}/> Also include HTML and SVG</label><button onClick={worksheet}><FileText size={16} aria-hidden="true"/> Save printable worksheet</button>
+        <button className="primary" disabled={blocked||busy||encoding||!ack} onClick={()=>void exportPackage()}>
+          <Download size={16} aria-hidden="true"/>{encoding?'Preparing package…':busy?'Saving…':'Export package'}
         </button>
       </div>
     </footer>
