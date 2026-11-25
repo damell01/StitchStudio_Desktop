@@ -306,8 +306,10 @@ impl Studio {
             });
         });
         section(ui);
+        let mut explicitly_chosen = false;
         if let Some(t) = self.palette_section(ui, Some(c), "picker") {
             c = t;
+            explicitly_chosen = true;
         }
         section(ui);
         // Custom color: a disclosure row, flush with everything else.
@@ -342,9 +344,16 @@ impl Studio {
         if open {
             crate::widgets::compact_color_picker(ui, &mut c);
         }
-        if c != before {
+        if explicitly_chosen || c != before {
             for &i in &sel {
                 self.doc.shapes[i].color = c;
+            }
+        }
+        if sel.iter().any(|&i| self.doc.shapes[i].color != c) {
+            if ui.button("Apply this color to all selected").clicked() {
+                for &i in &sel {
+                    self.doc.shapes[i].color = c;
+                }
             }
         }
         // Each object back to its own color in the SVG.
