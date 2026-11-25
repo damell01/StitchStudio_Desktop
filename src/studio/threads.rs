@@ -570,9 +570,12 @@ impl Studio {
         let colors = self.design_threads().len();
         ui.horizontal(|ui| {
             caption(ui, format!("{colors} unique colors"));
-            if ui.add_enabled(colors > 0, egui::Button::new("Review matching")).clicked() {
-                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("thread-mapping-open"), true));
-            }
+            ui.menu_button("Tools", |ui| {
+                if ui.add_enabled(colors > 0, egui::Button::new("Review palette matching")).clicked() {
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("thread-mapping-open"), true));
+                    ui.close();
+                }
+            });
         });
         self.thread_mapping_window(ui.ctx());
 
@@ -648,55 +651,57 @@ impl Studio {
             d.insert_temp(baseline_id, saved);
             d.insert_temp(name_id, name);
         });
-        let merge_id = ui.make_persistent_id("similar-thread-merge");
-        let mut merge_open = ui.ctx().data(|d| d.get_temp::<bool>(merge_id).unwrap_or(false));
-        if ui.add_enabled(colors > 1, egui::Button::new("Reduce similar colors")).clicked() {
-            merge_open = !merge_open;
-        }
-        if merge_open {
-            let threshold_id = ui.make_persistent_id("similar-thread-threshold");
-            let mut threshold = ui.ctx().data(|d| d.get_temp::<f32>(threshold_id).unwrap_or(12.0));
-            ui.add(egui::Slider::new(&mut threshold, 2.0..=40.0).text("RGB tolerance"));
-            ui.ctx().data_mut(|d| d.insert_temp(threshold_id, threshold));
-            let mut threads = self.design_threads();
-            threads.sort_by(|a,b| b.2.cmp(&a.2));
-            let mut keep: Vec<[u8; 3]> = Vec::new();
-            let mut mapping = Vec::new();
-            for (color, _, _) in threads {
-                let distance = |other: [u8; 3]| -> f32 {
-                    (0..3).map(|i| (color[i] as f32 - other[i] as f32).powi(2)).sum::<f32>().sqrt()
-                };
-                if let Some(&target) = keep.iter().filter(|&&k| distance(k) <= threshold)
-                    .min_by(|&&a, &&b| distance(a).total_cmp(&distance(b))) {
-                    mapping.push((color, target));
-                } else {
-                    keep.push(color);
-                }
+        ui.collapsing("Advanced color tools", |ui| {
+            let merge_id = ui.make_persistent_id("similar-thread-merge");
+            let mut merge_open = ui.ctx().data(|d| d.get_temp::<bool>(merge_id).unwrap_or(false));
+            if ui.add_enabled(colors > 1, egui::Button::new("Reduce similar colors")).clicked() {
+                merge_open = !merge_open;
             }
-            caption(ui, format!("{colors} colors → {} colors", keep.len()));
-            for &(from, to) in mapping.iter().take(4) {
-                ui.horizontal(|ui| {
-                    swatch(ui, from, 18.0, false);
-                    ui.label("→");
-                    swatch(ui, to, 18.0, false);
-                });
-            }
-            if mapping.len() > 4 { caption(ui, format!("+ {} more matches", mapping.len() - 4)); }
-            if ui.add_enabled(!mapping.is_empty(), egui::Button::new("Apply color reduction")).clicked() {
-                for s in &mut self.doc.shapes {
-                    if s.params.kind == Some(Kind::Skip) { continue; }
-                    if let Some((_, target)) = mapping.iter().find(|(from, _)| *from == s.color) {
-                        s.color = *target;
+            if merge_open {
+                let threshold_id = ui.make_persistent_id("similar-thread-threshold");
+                let mut threshold = ui.ctx().data(|d| d.get_temp::<f32>(threshold_id).unwrap_or(12.0));
+                ui.add(egui::Slider::new(&mut threshold, 2.0..=40.0).text("RGB tolerance"));
+                ui.ctx().data_mut(|d| d.insert_temp(threshold_id, threshold));
+                let mut threads = self.design_threads();
+                threads.sort_by(|a,b| b.2.cmp(&a.2));
+                let mut keep: Vec<[u8; 3]> = Vec::new();
+                let mut mapping = Vec::new();
+                for (color, _, _) in threads {
+                    let distance = |other: [u8; 3]| -> f32 {
+                        (0..3).map(|i| (color[i] as f32 - other[i] as f32).powi(2)).sum::<f32>().sqrt()
+                    };
+                    if let Some(&target) = keep.iter().filter(|&&k| distance(k) <= threshold)
+                        .min_by(|&&a, &&b| distance(a).total_cmp(&distance(b))) {
+                        mapping.push((color, target));
+                    } else {
+                        keep.push(color);
                     }
                 }
-                self.status = format!("Merged {} similar thread colors.", mapping.len());
-                merge_open = false;
+                caption(ui, format!("{colors} colors → {} colors", keep.len()));
+                for &(from, to) in mapping.iter().take(4) {
+                    ui.horizontal(|ui| {
+                        swatch(ui, from, 18.0, false);
+                        ui.label("→");
+                        swatch(ui, to, 18.0, false);
+                    });
+                }
+                if mapping.len() > 4 { caption(ui, format!("+ {} more matches", mapping.len() - 4)); }
+                if ui.add_enabled(!mapping.is_empty(), egui::Button::new("Apply color reduction")).clicked() {
+                    for s in &mut self.doc.shapes {
+                        if s.params.kind == Some(Kind::Skip) { continue; }
+                        if let Some((_, target)) = mapping.iter().find(|(from, _)| *from == s.color) {
+                            s.color = *target;
+                        }
+                    }
+                    self.status = format!("Merged {} similar thread colors.", mapping.len());
+                    merge_open = false;
+                }
             }
-        }
-        ui.ctx().data_mut(|d| d.insert_temp(merge_id, merge_open));
-        ui.horizontal(|ui| {
-            ui.label("Fabric preview");
-            ui.color_edit_button_srgb(&mut self.doc.settings.cloth);
+            ui.ctx().data_mut(|d| d.insert_temp(merge_id, merge_open));
+            ui.horizontal(|ui| {
+                ui.label("Fabric preview");
+                ui.color_edit_button_srgb(&mut self.doc.settings.cloth);
+            });
         });
         ui.add_space(crate::theme::space::S);
         ui.horizontal(|ui| {
