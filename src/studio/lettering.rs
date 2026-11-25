@@ -376,6 +376,22 @@ impl Studio {
                 committed |= done(&r);
             });
             fm.row("Font", |ui, lid| {
+                let favorites_path = crate::dock::config_file("favorite-fonts.json");
+                let favorites_id = egui::Id::new("lettering-favorite-fonts");
+                let mut favorites: Vec<String> = ui.data(|d| d.get_temp(favorites_id)).unwrap_or_else(|| {
+                    favorites_path.as_ref().and_then(|p| std::fs::read(p).ok())
+                        .and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+                });
+                let favorite = favorites.contains(&spec.font);
+                if ui.small_button(if favorite { "★" } else { "☆" }).on_hover_text("Toggle favorite font").clicked() {
+                    if favorite { favorites.retain(|f| f != &spec.font); }
+                    else { favorites.push(spec.font.clone()); }
+                    if let Some(p) = &favorites_path {
+                        if let Ok(bytes) = serde_json::to_vec(&favorites) { let _ = std::fs::write(p, bytes); }
+                    }
+                }
+                ui.data_mut(|d| d.insert_temp(favorites_id, favorites.clone()));
+                let previous_font = spec.font.clone();
                 let r = egui::ComboBox::from_id_salt(format!("{id}-font"))
                     .selected_text(&spec.font)
                     .width(170.0)
@@ -383,6 +399,10 @@ impl Studio {
                     .show_ui(ui, |ui| {
                         ui.add(egui::TextEdit::singleline(filter).hint_text("Search fonts"));
                         let f = filter.to_lowercase();
+                        for name in favorites.iter().filter(|n| fonts.contains(n) && (f.is_empty() || n.to_lowercase().contains(&f))) {
+                            ui.selectable_value(&mut spec.font, name.clone(), format!("★ {name}"));
+                        }
+                        if !favorites.is_empty() { ui.separator(); }
                         for name in fonts
                             .iter()
                             .filter(|n| f.is_empty() || n.to_lowercase().contains(&f))
@@ -392,7 +412,7 @@ impl Studio {
                     })
                     .response
                     .labelled_by(lid);
-                committed |= r.changed();
+                committed |= r.changed() || spec.font != previous_font;
             });
             fm.row("Style", |ui, _| {
                 committed |= ui.toggle_value(&mut spec.bold, "Bold").changed();
