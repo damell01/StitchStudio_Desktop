@@ -1777,7 +1777,9 @@ pub fn plan_cached(
                         for i in 1..n {
                             run.pts.push(prev.lerp(start, i as f64 / n as f64));
                         }
-                        run.pts.extend(pts.iter().copied());
+                        // A shared endpoint is already sewn; do not penetrate it twice.
+                        let skip = usize::from(run.pts.last().is_some_and(|p| p.dist(pts[0]) < 1e-9));
+                        run.pts.extend(pts.iter().skip(skip).copied());
                         cursor = run.pts.last().copied();
                         force_trim = false;
                         same_shape = true;
@@ -1803,7 +1805,9 @@ pub fn plan_cached(
                     {
                         run.pts
                             .extend(route.into_iter().filter(|q| q.dist(start) > 1e-6));
-                        run.pts.extend(pts.iter().copied());
+                        // A shared endpoint is already sewn; do not penetrate it twice.
+                        let skip = usize::from(run.pts.last().is_some_and(|p| p.dist(pts[0]) < 1e-9));
+                        run.pts.extend(pts.iter().skip(skip).copied());
                         cursor = run.pts.last().copied();
                         continue;
                     }
