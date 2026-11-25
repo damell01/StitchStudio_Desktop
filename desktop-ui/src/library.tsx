@@ -6,20 +6,26 @@ import { CharacterGallery, type Art } from './character-gallery';
 import { confirmAction } from './dialogs';
 import { importToLibrary, type LibraryImportSource } from './library-import';
 
-type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number };
+export type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number; thumbnail?: string };
+type ThumbnailPlan={stitches:number;blocks:{color:number[];runs:number[][][]}[]};
+export function rememberProject(project:Project){try{const previous:Project[]=JSON.parse(localStorage.getItem('studio-recent-projects')||'[]');localStorage.setItem('studio-recent-projects',JSON.stringify([project,...previous.filter(p=>p.file!==project.file)].slice(0,20)))}catch{/* Saving the actual project remains successful. */}}
+export function thumbnailOf(plan:ThumbnailPlan):string {const canvas=document.createElement('canvas');canvas.width=220;canvas.height=150;const ctx=canvas.getContext('2d');if(!ctx)return '';let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const b of plan.blocks)for(const run of b.runs)for(const [x,y] of run){minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y)}if(!Number.isFinite(minX))return '';const scale=Math.min(196/Math.max(1,maxX-minX),126/Math.max(1,maxY-minY));ctx.translate(110-(minX+maxX)/2*scale,75-(minY+maxY)/2*scale);ctx.scale(scale,scale);ctx.lineWidth=Math.max(.15,1.2/scale);ctx.lineCap='round';ctx.lineJoin='round';for(const b of plan.blocks){ctx.strokeStyle=`rgb(${b.color.join(',')})`;ctx.beginPath();for(const run of b.runs){run.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y))}ctx.stroke()}return canvas.toDataURL('image/png')}
+const thumbnailCache=new Map<string,{image:string;stitches:number;colors:number}>();
+function DesignThumbnail({file}:{file:string}){const [preview,setPreview]=useState(()=>thumbnailCache.get(file));useEffect(()=>{let active=true;const cached=thumbnailCache.get(file);setPreview(cached);if(!cached)void invoke<ThumbnailPlan>('library_thumbnail',{file}).then(plan=>{if(!active)return;const result={image:thumbnailOf(plan),stitches:plan.stitches,colors:plan.blocks.length};if(thumbnailCache.size>=100)thumbnailCache.delete(thumbnailCache.keys().next().value!);thumbnailCache.set(file,result);setPreview(result)}).catch(()=>{});return()=>{active=false}},[file]);return <><div className="library-thumb">{preview?.image?<img src={preview.image} alt="Stitch path preview"/>:<File size={30}/>}</div>{preview&&<small>{preview.stitches.toLocaleString()} points · {preview.colors} color blocks</small>}</>}
+
 
 export function RecentProjects({onOpen}:{onOpen:()=>void}) {
   const [projects,setProjects]=useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
   const [error,setError]=useState('');
-  async function scan(){try{const result=await invoke<Project[]|null>('scan_projects');if(result){const recent=result.sort((a,b)=>b.modified-a.modified).slice(0,5);setProjects(recent);localStorage.setItem('studio-recent-projects',JSON.stringify(recent))}}catch(e){setError(String(e))}}
+  async function scan(){try{const result=await invoke<Project[]|null>('scan_projects');if(result){const recent=result.sort((a,b)=>b.modified-a.modified).slice(0,5);recent.slice().reverse().forEach(rememberProject);setProjects(JSON.parse(localStorage.getItem('studio-recent-projects')||'[]'))}}catch(e){setError(String(e))}}
   async function open(project:Project){try{if(!await confirmAction('Open this project? Save existing work first.'))return;const settings=await invoke<{width:number;height:number;format:string}>('library_open',{file:project.file});sessionStorage.setItem('studio-open-project-settings',JSON.stringify(settings));onOpen()}catch(e){setError(String(e))}}
-  return <section className="recent-project-grid">{projects.map(p=><article key={p.file}><File size={25}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
+  return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><div className="library-thumb">{p.thumbnail?<img src={p.thumbnail} alt="Project stitch preview"/>:<File size={25}/>}</div><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
 }
 
 export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: (art:Art)=>void }) {
   const [tab, setTab] = useState<'embroidery' | 'projects' | 'artwork'>('embroidery');
   const [files, setFiles] = useState<string[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('recent');
   const [busy, setBusy] = useState(false);
@@ -48,7 +54,7 @@ export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: 
     void run(async () => {
       const result = await importToLibrary(source);
       if (result === null) return;
-      setFiles(await invoke<string[]>('personal_designs'));
+      thumbnailCache.clear();setFiles(await invoke<string[]>('personal_designs'));
       setMessage(result);
     });
   }
@@ -63,7 +69,7 @@ export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: 
   function scan() {
     void run(async () => {
       const result = await invoke<Project[] | null>('scan_projects');
-      if (result) { setProjects(result); localStorage.setItem("studio-recent-projects",JSON.stringify([...result].sort((a,b)=>b.modified-a.modified).slice(0,5))); }
+      if (result) { setProjects(result); [...result].sort((a,b)=>a.modified-b.modified).slice(-5).forEach(rememberProject); }
     });
   }
 
@@ -112,7 +118,7 @@ export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: 
       {files.length > 0 && visibleFiles.length === 0 && <p>No files match your search.</p>}
       <div className="font-list">
         {filePage.items.map(file => <article key={file}>
-          <File size={20} /><div><strong>{file}</strong></div>
+          <DesignThumbnail file={file}/><div><strong>{file}</strong><small>{file.split('.').pop()?.toUpperCase()}</small></div>
           <button disabled={busy} onClick={() => insert(file)} aria-label={`Insert ${file}`}>Insert design</button>
         </article>)}
       </div><ListNavigation {...filePage}/>
@@ -120,7 +126,7 @@ export function Library({ onDone,onArtwork }: { onDone: () => void; onArtwork?: 
       <p>{visibleProjects.length} projects found</p>
       <div className="font-list">
         {projectPage.items.map(project => <article key={project.file}>
-          <File size={20} /><div><strong>{project.name}</strong>
+          <div className="library-thumb">{project.thumbnail?<img src={project.thumbnail} alt="Project stitch preview"/>:<File size={25}/>}</div><div><strong>{project.name}</strong>
             <small>{project.stitches.toLocaleString()} points · {project.colors} color blocks · {project.width} × {project.height} mm hoop</small>
           </div>
           <button disabled={busy} onClick={() => open(project)}>Open project</button>
