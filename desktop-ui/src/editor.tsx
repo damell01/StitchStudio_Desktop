@@ -67,12 +67,16 @@ const selected=objects.find(object=>object.uid===selectedObject);
 const [multi,setMulti]=useState<number[]>([]);const [snap,setSnap]=useState(false);const [context,setContext]=useState<{uid:number;x:number;y:number}|null>(null);
 const selectionIds=multi.filter(id=>objects.some(o=>o.uid===id));
 const [nudgeStep,setNudgeStep]=useState(1);
+const [lockedObjects,setLockedObjects]=useState<number[]>([]);
+const [layerNames,setLayerNames]=useState<Record<number,string>>({});
+const [renameDraft,setRenameDraft]=useState('');
+useEffect(()=>{setRenameDraft(selected?layerNames[selected.uid]||selected.label:'')},[selected?.uid,selected?.label,layerNames]);
 const [marquee,setMarquee]=useState<{x:number;y:number;w:number;h:number}|null>(null);
 const marqueeGesture=useRef<{pointer:number;x:number;y:number;clientX:number;clientY:number;add:boolean;initial:number[]}|null>(null);
 const [hoverUid,setHoverUid]=useState<number|null>(null);
 const [positionX,setPositionX]=useState(''),[positionY,setPositionY]=useState('');
 const movementIds=canvasMode==='design'?(designGroups.find(g=>g.key===activeGroup)?.members.map(o=>o.uid)??[]):selectionIds.length?selectionIds:selected?[selected.uid]:[];
-function nudge(dx:number,dy:number){if(busy||!movementIds.length)return;void edit('move_artwork_objects',{uids:movementIds,dx,dy});}
+function nudge(dx:number,dy:number){if(busy||!movementIds.length||movementIds.some(id=>lockedObjects.includes(id)))return;void edit('move_artwork_objects',{uids:movementIds,dx,dy});}
 const multiBounds=useMemo(()=>{const b=objects.filter(o=>multi.includes(o.uid)&&o.bounds).map(o=>o.bounds!);if(!b.length)return null;const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return [x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]},[objects,multi]);
 
 const movementBounds=useMemo(()=>{const b=objects.filter(o=>movementIds.includes(o.uid)&&o.bounds).map(o=>o.bounds!);if(!b.length)return null;const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return [x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]},[objects,movementIds.join(',')]);
@@ -95,7 +99,7 @@ function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
  const [y,gy]=axis(dy,[source[1],(source[1]+source[3])/2,source[3]],ys);
  if(show)setGuides({x:gx,y:gy});return [x,y]
 }
-const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
+const objectPage=usePagedList(objects.filter(object=>matchesName(layerNames[object.uid]||object.label,objectQuery)),objectQuery,6);
 const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'|'assistant'>('hoop');const [assistantText,setAssistantText]=useState('');const [assistantReply,setAssistantReply]=useState('Describe a supported edit, or choose a suggestion. No model or internet required.');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);setRight(true);setInspectorTab('text')};
 const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>localStorage.getItem('studio-default-machine')||''),[hoop,setHoop]=useState(()=>localStorage.getItem('studio-default-hoop')||'');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
@@ -254,6 +258,7 @@ useEffect(()=>{if(stitchIndex>=points.length)setPlaying(false);},[stitchIndex,po
 
 const selectionRequest=useRef(0);
 function selectObject(object:EditableObject|null) {
+  if(object&&lockedObjects.includes(object.uid))return;
   if(object)setCanvasMode('select');
   setMulti([]);setContext(null);
   const request=++selectionRequest.current;
@@ -262,7 +267,7 @@ function selectObject(object:EditableObject|null) {
 }
 
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
-  if(uid!==null&&!busy)void edit('edit_artwork_object',{uid,operation});
+  if(uid!==null&&!busy&&!lockedObjects.includes(uid))void edit('edit_artwork_object',{uid,operation});
 }
 
 function pointerPosition(event:ReactPointerEvent<SVGSVGElement>) {
@@ -288,13 +293,13 @@ function resizeAt(position:DOMPoint) {
 function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   if(busy||event.button!==0&&event.button!==1)return;
   const target=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;
-  let object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))):undefined;
+  let object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))&&!lockedObjects.includes(item.uid)):undefined;
   const position=pointerPosition(event);
   // A small screen-space tolerance lets users grab hairlines and tiny marks.
   if(!object&&position&&canvasMode==='select'&&event.button===0){
     const matrix=event.currentTarget.getScreenCTM();
     const tol=matrix?8/Math.max(.001,Math.hypot(matrix.a,matrix.b)):1;
-    const hits=objects.filter(o=>{if(!o.bounds)return false;const [x,y,w,h]=o.bounds;return (Math.min(w,h)<tol*2)&&position.x>=x-tol&&position.x<=x+w+tol&&position.y>=y-tol&&position.y<=y+h+tol;});
+    const hits=objects.filter(o=>{if(!o.bounds||lockedObjects.includes(o.uid))return false;const [x,y,w,h]=o.bounds;return (Math.min(w,h)<tol*2)&&position.x>=x-tol&&position.x<=x+w+tol&&position.y>=y-tol&&position.y<=y+h+tol;});
     hits.sort((a,b)=>{const distance=(o:EditableObject)=>{const [x,y,w,h]=o.bounds!;return Math.hypot(Math.max(x-position.x,0,position.x-x-w),Math.max(y-position.y,0,position.y-y-h));};return distance(a)-distance(b)||(a.bounds![2]*a.bounds![3])-(b.bounds![2]*b.bounds![3]);});
     object=hits[0];
   }
@@ -379,7 +384,7 @@ function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boole
     if(!p)return;
     if(Math.hypot(event.clientX-box.clientX,event.clientY-box.clientY)<4){if(!box.add)selectObject(null);return;}
     const x=Math.min(box.x,p.x),y=Math.min(box.y,p.y),right=Math.max(box.x,p.x),bottom=Math.max(box.y,p.y);
-    const ids=objects.filter(o=>{if(!o.bounds)return false;const [a,b,w,h]=o.bounds;return a>=x&&b>=y&&a+w<=right&&b+h<=bottom}).map(o=>o.uid);
+    const ids=objects.filter(o=>{if(!o.bounds||lockedObjects.includes(o.uid))return false;const [a,b,w,h]=o.bounds;return a>=x&&b>=y&&a+w<=right&&b+h<=bottom}).map(o=>o.uid);
     const next=Array.from(new Set([...(box.add?box.initial:[]),...ids]));
     if(next.length===1){selectObject(objects.find(o=>o.uid===next[0])??null);return;}
     ++selectionRequest.current;setSelectedObject(null);setMulti(next);setLayerTab('objects');setInspectorTab('transform');setRight(true);return;
@@ -480,7 +485,7 @@ if(e.key==='F11'){e.preventDefault();toggleFocus();return;}
 if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='i'){e.preventDefault();openInsertDialog();return;}
 if(e.key==='Delete'||e.key==='Backspace'){if(deletionTarget()){e.preventDefault();void deleteDesign()}return;}
 if(!selectionIds.length&&selectedObject!==null&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();editSelection({kind:'duplicate'});return;}
-if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setContext(null);setMulti([]);setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right,multi,activeGroup,canvasMode,objects,nudgeStep]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} onInsert={result=>{
+if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setContext(null);setMulti([]);setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right,multi,activeGroup,canvasMode,objects,nudgeStep,lockedObjects]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} onInsert={result=>{
   setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);setMessage('');
 }}/><div className={`studio-edit-bar ${focusCanvas?'studio-focus-active':''}`} role="group" aria-label="Design commands">
   {focusCanvas&&<button className="studio-exit-focus" onClick={()=>changeFocus(false)}><Minimize size={16}/> Exit focus</button>}
@@ -573,14 +578,15 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {!objectPage.total&&<p className="workspace-helper">No objects match your search.</p>}
     <div className="layers-object-rows">
       {objectPage.items.map(object=>{
-        const name=object.label||`Object ${object.uid+1}`;
-        return <button key={object.uid} aria-pressed={selectionIds.length?selectionIds.includes(object.uid):selectedObject===object.uid} onClick={e=>e.shiftKey?toggleMulti(object.uid):selectObject(object)} className="object-layer-row" title={name}>
+        const name=layerNames[object.uid]||object.label||`Object ${object.uid+1}`;
+        return <div key={object.uid} style={{display:"flex",alignItems:"center",gap:4}}><button disabled={lockedObjects.includes(object.uid)} style={{flex:1,minWidth:0}} aria-pressed={selectionIds.length?selectionIds.includes(object.uid):selectedObject===object.uid} onClick={e=>e.shiftKey?toggleMulti(object.uid):selectObject(object)} className="object-layer-row" title={name}>
           <span className="layers-swatch" style={{backgroundColor:`rgb(${object.color.join(',')})`}}/>
           <span className="layers-row-text"><strong>{name}</strong><small>{object.kind==='manual'?'Fixed stitch path':object.kind==='auto'?'Automatic stitch type':object.kind}</small></span>
-        </button>;
+        </button><button type="button" aria-label={lockedObjects.includes(object.uid)?'Unlock '+name:'Lock '+name} title={lockedObjects.includes(object.uid)?'Unlock object':'Lock object'} aria-pressed={lockedObjects.includes(object.uid)} onClick={()=>{setLockedObjects(old=>old.includes(object.uid)?old.filter(id=>id!==object.uid):[...old,object.uid]);if(selectedObject===object.uid)setSelectedObject(null);setMulti(old=>old.filter(id=>id!==object.uid));}}>{lockedObjects.includes(object.uid)?'🔒':'🔓'}</button></div>;
       })}
     </div>
     <ListNavigation {...objectPage}/>
+    {selected&&<div className="layers-object-properties"><h3>Layer properties</h3><label>Layer name<input value={renameDraft} maxLength={80} onChange={e=>setRenameDraft(e.target.value)}/></label><button disabled={busy||!renameDraft.trim()} onClick={()=>setLayerNames(old=>({...old,[selected.uid]:renameDraft.trim()}))}>Rename layer</button><small>Layer names and locks are for this editing session.</small><h3>Sewing order</h3><div className="alignment-pair">{[['first','First'],['earlier','Earlier'],['later','Later'],['last','Last']].map(([direction,label])=><button key={direction} disabled={busy} onClick={()=>void edit('reorder_artwork_object',{uid:selected.uid,direction})}>{label}</button>)}</div><small>Manual order overrides automatic sequencing.</small></div>}
     {selected?.kind==='manual'&&<p className="workspace-helper"><Waypoints size={14} aria-hidden="true"/> This stitched path can be moved. Use the Size inspector for resizing.</p>}
     {selected&&selected.kind!=='manual'&&<div className="layers-object-properties">
       <h3>Selected object stitch type</h3><StitchPicker value={objectKind} onChange={setObjectKind}/>
@@ -645,11 +651,11 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 {canvasMode==='design'&&designGroups.filter(g=>g.key===activeGroup&&g.bounds&&g.bounds[2]>.01&&g.bounds[3]>.01).map(g=>{const [x,y,w,h]=g.bounds!;const cx=x+w/2,cy=y+h/2;const s=groupScalePreview;const tx=cx-w*s/2+objectOffset[0],ty=cy-h*s/2+objectOffset[1];return <g key={'resize-'+g.key} transform={`rotate(${rotationPreview} ${cx} ${cy})`}>{(s!==1||rotationPreview!==0||objectOffset.some(v=>v!==0))&&<g pointerEvents="none" transform={`translate(${objectOffset.join(' ')}) translate(${cx} ${cy}) scale(${s}) translate(${-cx} ${-cy})`}>{g.members.filter(o=>o.path).map(o=><path key={o.uid} d={o.path} fill={o.fill_rule?'rgb('+o.color.join(',')+')':'none'} fillRule={o.fill_rule} stroke={'rgb('+o.color.join(',')+')'} strokeWidth={o.stroke_width||.3} opacity=".55"/>)}</g>}<rect x={tx} y={ty} width={w*s} height={h*s} fill="none" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" pointerEvents="none"/>{[0,1,2,3].map(i=><circle key={i} cx={tx+(i%2)*w*s} cy={ty+Math.floor(i/2)*h*s} r={Math.max(.65,1.2*100/zoom)} fill="white" stroke="#754bb0" vectorEffect="non-scaling-stroke" data-group-resize={i} style={{cursor:i===0||i===3?'nwse-resize':'nesw-resize'}}><title>Drag to resize proportionally</title></circle>)}<line x1={tx+w*s/2} x2={tx+w*s/2} y1={ty} y2={ty-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke" pointerEvents="none"/><circle cx={tx+w*s/2} cy={ty-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" style={{cursor:'grab'}}><title>Rotate design · Shift snaps to 15°</title></circle></g>})}
 {snap&&<g pointerEvents="none" stroke="#a84bc5" strokeDasharray="4 3" strokeWidth="1" vectorEffect="non-scaling-stroke">{guides.x!==null&&<line x1={guides.x} x2={guides.x} y1={-height/2} y2={height/2} vectorEffect="non-scaling-stroke"/>}{guides.y!==null&&<line x1={-width/2} x2={width/2} y1={guides.y} y2={guides.y} vectorEffect="non-scaling-stroke"/>}</g>}
 {canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
- {objects.filter(object=>object.path).map(object=><path key={object.uid} d={object.path}
+ {objects.filter(object=>object.path&&!lockedObjects.includes(object.uid)).map(object=><path key={object.uid} d={object.path}
    data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();void invoke<unknown>('lettering_settings',{uid:object.uid}).then(s=>{if(s){setSelectedObject(object.uid);openText(object.uid)}}).catch(()=>{})}} fill={object.fill_rule?'transparent':'none'}
    fillRule={object.fill_rule} stroke={object.fill_rule?'none':'transparent'}
    strokeWidth={object.stroke_width} pointerEvents={object.fill_rule?'fill':'stroke'}/>)}
- {objects.filter(o=>o.path&&o.bounds&&Math.min(o.bounds[2],o.bounds[3])<2).map(o=><path key={'wide-hit-'+o.uid} d={o.path} data-artwork-uid={o.uid} fill="none" stroke="transparent" strokeWidth="12" vectorEffect="non-scaling-stroke" pointerEvents="stroke" style={{cursor:'move'}}/>)}
+ {objects.filter(o=>o.path&&o.bounds&&!lockedObjects.includes(o.uid)&&Math.min(o.bounds[2],o.bounds[3])<2).map(o=><path key={'wide-hit-'+o.uid} d={o.path} data-artwork-uid={o.uid} fill="none" stroke="transparent" strokeWidth="12" vectorEffect="non-scaling-stroke" pointerEvents="stroke" style={{cursor:'move'}}/>)}
 </g>}
 {canvasMode==='select'&&hoverUid!==null&&hoverUid!==selectedObject&&!selectionIds.includes(hoverUid)&&!marquee&&objects.filter(o=>o.uid===hoverUid&&o.path).map(o=><path key={'hover-'+o.uid} d={o.path} fill="none" stroke="#a76bce" strokeWidth="2" vectorEffect="non-scaling-stroke" pointerEvents="none"/>)}
 {marquee&&<rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} fill="#9165bf" fillOpacity=".12" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" pointerEvents="none"/>}
