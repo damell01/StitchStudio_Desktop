@@ -1597,6 +1597,8 @@ pub fn plan_cached(
             geo_keys[si].hash(&mut h);
             geometry_key(&geometry[si]).hash(&mut h);
             format!("{:?}{:?}", shape.params, shape.part).hash(&mut h);
+            // Generated lettering uses extra satin geometry validation.
+            shape.groups.iter().any(|g| g.starts_with("tl-lettering-")).hash(&mut h);
             // A tartan's default sett comes from the thread color, and a
             // meander's seed from the uid.
             shape.color.hash(&mut h);
