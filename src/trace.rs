@@ -328,6 +328,27 @@ pub fn digitize_raster(
 ) -> Result<crate::document::Document> {
     let trace = trace_prepared_bytes(bytes, options, tolerance, cleanup)?;
     let mut document = crate::document::Document::from_svg(&trace.svg, name, None)?;
+    // Merge adjacent same-color filled objects only when their union
+    // reduces contour count. Preserve intervening layer order.
+    if options.colors == 0 {
+        use crate::svg::{Geometry, Shape};
+        let mut merged: Vec<Shape> = Vec::new();
+        for shape in std::mem::take(&mut document.shapes) {
+            if let Some(prev) = merged.last_mut() {
+                if prev.color == shape.color && prev.params.kind.is_none() && shape.params.kind.is_none() {
+                    if let (Geometry::Fill { rings: a, rule: ar }, Geometry::Fill { rings: b, rule: br }) = (&prev.geometry, &shape.geometry) {
+                        let union = crate::boolean::pathfinder(&[(a.clone(), *ar), (b.clone(), *br)], crate::boolean::PathOp::Unite);
+                        if !union.is_empty() && union.len() < a.len() + b.len() {
+                            prev.geometry = Geometry::Fill { rings: union, rule: crate::geom::FillRule::EvenOdd };
+                            continue;
+                        }
+                    }
+                }
+            }
+            merged.push(shape);
+        }
+        document.shapes = merged;
+    }
     crate::design::auto_stitch_types(&mut document.shapes);
     document.settings.hat_order = document.shapes.len() <= 1000;
     Ok(document)
