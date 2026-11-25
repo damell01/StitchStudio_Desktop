@@ -1465,6 +1465,23 @@ impl Studio {
             ctx.request_repaint();
             return;
         }
+        if let Some(actions) = native_sequence(&normalized) {
+            let prompt = std::mem::take(&mut self.agent.prompt);
+            self.agent.log.push(Entry::You(prompt));
+            if actions.iter().all(|&action| self.action_enabled(action)) {
+                let mut completed = 0;
+                for action in actions {
+                    if !self.action_enabled(action) { break; }
+                    self.run_action(action);
+                    completed += 1;
+                }
+                self.agent.log.push(Entry::Done(format!("Completed {completed} native editing steps.")));
+            } else {
+                self.agent.log.push(Entry::Error("One or more steps are unavailable. No edits applied.".into()));
+            }
+            ctx.request_repaint();
+            return;
+        }
         // Common exact commands bypass external inference and process startup.
         if let Some(action) = quick_action(&self.agent.prompt) {
             let prompt = std::mem::take(&mut self.agent.prompt);
@@ -2239,6 +2256,19 @@ fn command_suggestions(prompt: &str) -> Vec<&'static str> {
     }).take(4).collect()
 }
 
+fn native_sequence(prompt: &str) -> Option<Vec<crate::commands::Action>> {
+    use crate::commands::Action as A;
+    let normalized = prompt.replace(" and then ", " and ").replace(", then ", " and ").replace(" then ", " and ");
+    let parts: Vec<_> = normalized.split(" and ").collect();
+    if !(2..=5).contains(&parts.len()) { return None; }
+    parts.into_iter().map(|part| {
+        let action = quick_action(part)?;
+        matches!(action, A::CenterInHoop | A::FitToHoop | A::OptimizeStitches |
+            A::GroupColors | A::FlipH | A::FlipV | A::RotateLeft | A::RotateRight |
+            A::ZoomFit).then_some(action)
+    }).collect()
+}
+
 fn parse_spacing(prompt: &str) -> Option<f64> {
     let value = ["set stitch spacing to ", "increase stitch spacing to ", "decrease stitch spacing to ", "change stitch spacing to ", "set spacing to "]
         .iter().find_map(|prefix| prompt.strip_prefix(*prefix))?;
@@ -2315,6 +2345,12 @@ fn quick_action(prompt: &str) -> Option<crate::commands::Action> {
 mod quick_action_tests {
     use super::quick_action;
     use crate::commands::Action;
+    #[test]
+    fn parses_safe_sequences() {
+        assert_eq!(super::native_sequence("center it and optimize stitches"), Some(vec![Action::CenterInHoop, Action::OptimizeStitches]));
+        assert!(super::native_sequence("center it and export").is_none());
+        assert!(super::native_sequence("center it and do not rotate left").is_none());
+    }
     #[test]
     fn parses_bounded_spacing() {
         assert_eq!(super::parse_spacing("set stitch spacing to 0.45 mm"), Some(0.45));
