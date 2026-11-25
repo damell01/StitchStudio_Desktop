@@ -106,7 +106,7 @@ fn recommend_font(line: &RecognizedLine, fonts: &[String]) -> String {
          "Poppins", "Inter", "Verdana", "Courier New"].contains(&f.as_str()))) {
         let mut doc = Document::empty();
         let spec = TextSpec { text: line.text.clone(), font: font.clone(),
-            spacing_mm: 0.0, ..TextSpec::default() };
+            spacing_mm: 0.0, bold: false, ..TextSpec::default() };
         if let Ok(i) = doc.add_lettering(&spec, (0.0,0.0)) {
             let b = shapes_bounds(std::slice::from_ref(&doc.shapes[i]));
             if b.width() > 0.0 && b.height() > 0.0 {
@@ -129,7 +129,7 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
         anyhow::ensure!([x0,y0,x1,y1].iter().all(|v| v.is_finite() && v.abs() <= 10000.0) && x1>x0 && y1>y0, "Invalid text region");
         let (x0,y0,x1,y1) = (x0-candidate.offset.x,y0-candidate.offset.y,x1-candidate.offset.x,y1-candidate.offset.y);
         let pad = ((y1-y0)*0.08).max(0.5);
-        anyhow::ensure!(y1-y0 >= 30.0, "Lettering below 3 mm is too small for safe automatic reconstruction");
+        anyhow::ensure!(y1-y0 >= 18.0, "Lettering below 1.8 mm needs manual digitizing or a larger design");
         let indices: Vec<_> = candidate.shapes.iter().enumerate().filter_map(|(i,s)| {
             let b = shapes_bounds(std::slice::from_ref(s));
             (!candidate.records_text(i) && !b.is_empty() &&
@@ -153,17 +153,32 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
             anyhow::ensure!(overlap_x*overlap_y < (x1-x0)*(y1-y0)*0.06, "Text overlaps other artwork; original retained");
         }
         let color = candidate.shapes[indices[0]].color;
-        let center = ((x0+x1)/20.0,(y0+y1)/20.0);
+        let center = (ink.center().x/10.0,ink.center().y/10.0);
+        let small = ink.height() < 40.0;
         let mut spec = TextSpec { text: line.text.clone(), font: line.font.clone(), color,
-            size_mm: ((y1-y0)/10.0).max(0.5), spacing_mm: 0.0, bold: false, ..Default::default() };
+            size_mm: (ink.height()/10.0).max(0.5), spacing_mm: 0.0, bold: false, ..Default::default() };
         candidate.delete_many(&indices)?;
         let i = candidate.add_lettering(&spec, center)?;
         let b = shapes_bounds(std::slice::from_ref(&candidate.shapes[i]));
         if b.width()>0.0 && b.height()>0.0 {
-            spec.h_scale=(100.0*(x1-x0)/b.width()).clamp(25.0,250.0);
-            spec.v_scale=(100.0*(y1-y0)/b.height()).clamp(25.0,250.0);
+            let target_width=ink.width();
+            let count=line.text.chars().count().saturating_sub(1);
+            if count>0 && target_width>b.width() { spec.spacing_mm=((target_width-b.width())/10.0/count as f64).clamp(0.0,5.0); }
+            spec.v_scale=(100.0*ink.height()/b.height()).clamp(25.0,250.0);
+            candidate.set_lettering(i,&spec)?;
+            let fitted=shapes_bounds(std::slice::from_ref(&candidate.shapes[i]));
+            if fitted.width()>0.0 { spec.h_scale=(100.0*target_width/fitted.width()).clamp(25.0,250.0); }
             candidate.set_lettering(i,&spec)?;
         }
+        if small {
+            // Avoid heavy foundations and excessive pull on small satin letters.
+            let p=&mut candidate.shapes[i].params;
+            p.spacing=Some(0.45);
+            p.pull=Some(0.0);
+            p.satin_underlay=Some(0);
+            p.short_stitches=Some(true);
+        }
+        candidate.sync()?;
     }
     *doc = candidate;
     Ok(())
