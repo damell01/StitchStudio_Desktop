@@ -69,6 +69,77 @@ impl Studio {
         }
     }
 
+    pub(crate) fn design_library_page(&mut self, ui: &mut egui::Ui) {
+        let p = pal_ui(ui);
+        let id = egui::Id::new("design-library-paths");
+        let mut paths = ui.ctx().data(|d| d.get_temp::<Vec<std::path::PathBuf>>(id)).unwrap_or_else(|| {
+            crate::dock::config_file("design-library.json").and_then(|f| std::fs::read(f).ok())
+                .and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+        });
+        ui.label(egui::RichText::new("Design Library").size(26.0).strong().color(p.text));
+        caption(ui, "Browse your embroidery files and templates with stitch previews.");
+        let mut changed = false;
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Import files").clicked() {
+                if let Some(files) = rfd::FileDialog::new().add_filter("Embroidery", &["dst","pes","pec","exp","jef","svg"]).pick_files() {
+                    paths.extend(files); changed = true;
+                }
+            }
+            if ui.button("Import folder").clicked() {
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    if let Ok(entries) = std::fs::read_dir(folder) {
+                        paths.extend(entries.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_file() && p.extension().is_some_and(|e| {
+                            let ext = e.to_string_lossy().to_lowercase();
+                            ext == "svg" || zigzag::formats::READABLE_FORMATS.contains(&ext.as_str())
+                        })));
+                        changed = true;
+                    }
+                }
+            }
+        });
+        if changed {
+            paths.sort(); paths.dedup();
+            if let Some(f) = crate::dock::config_file("design-library.json") {
+                if let Some(parent) = f.parent() { let _ = std::fs::create_dir_all(parent); }
+                if let Ok(bytes) = serde_json::to_vec(&paths) { let _ = std::fs::write(f, bytes); }
+            }
+        }
+        ui.ctx().data_mut(|d| d.insert_temp(id, paths.clone()));
+        let search_id = id.with("search");
+        let mut search = ui.ctx().data(|d| d.get_temp::<String>(search_id).unwrap_or_default());
+        let page_id = id.with("page");
+        let mut page = ui.ctx().data(|d| d.get_temp::<usize>(page_id).unwrap_or(0));
+        if ui.add(egui::TextEdit::singleline(&mut search).hint_text("Search designs and templates…")).changed() { page = 0; }
+        ui.ctx().data_mut(|d| d.insert_temp(search_id, search.clone()));
+        let query = search.to_lowercase();
+        let filtered: Vec<_> = paths.iter().filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase().contains(&query))).collect();
+        let pages = filtered.len().div_ceil(12).max(1);
+        page = page.min(pages-1);
+        ui.horizontal(|ui| {
+            caption(ui, format!("{} designs", filtered.len()));
+            if ui.add_enabled(page>0, egui::Button::new("Previous")).clicked() { page -= 1; }
+            caption(ui, format!("Page {} of {}", page+1,pages));
+            if ui.add_enabled(page+1<pages, egui::Button::new("Next")).clicked() { page += 1; }
+        });
+        ui.ctx().data_mut(|d| d.insert_temp(page_id,page));
+        if filtered.is_empty() { caption(ui, "Import embroidery files or a folder to start your collection."); }
+        ui.horizontal_wrapped(|ui| {
+            let width = ((ui.available_width()-100.0)/5.0).clamp(130.0,210.0);
+            for path in filtered.iter().skip(page*12).take(12) {
+                egui::Frame::new().fill(p.dock).corner_radius(8.0).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+                    ui.allocate_ui_with_layout(Vec2::new(width,160.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                        Self::project_thumbnail(ui,path,width);
+                        ui.add(egui::Label::new(path.file_name().unwrap_or(path.as_os_str()).to_string_lossy().as_ref()).truncate());
+                        if ui.button("Open design").clicked() {
+                            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("studio-home-page"),false));
+                            self.load(path);
+                        }
+                    });
+                });
+            }
+        });
+    }
+
     pub fn welcome_panel(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
         egui::Frame::new().fill(p.desk).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
