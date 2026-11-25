@@ -52,7 +52,8 @@ const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,ob
 const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'>('hoop');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);setRight(true);setInspectorTab('text')};
 const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(''),[hoop,setHoop]=useState('');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
-async function edit(command:string,args:Record<string,unknown>){setBusy(true);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null)}catch(e){setMessage(String(e))}finally{setBusy(false)}}
+const editLock=useRef(false);const [inlineWork,setInlineWork]=useState('');
+async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return;editLock.current=true;setInlineWork(command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null)}catch(e){setMessage(String(e))}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setBusy(false)}}
 useEffect(()=>{if(!plan||busy)return;const save=()=>{invoke('recovery_save',{width,height,format,threadAssignments}).then(()=>setRecoveryStatus('Recovery copy saved')).catch(e=>setRecoveryStatus('Recovery save failed: '+String(e)))};const timer=setTimeout(save,1500);return()=>clearTimeout(timer)},[plan,width,height,format,busy,threadAssignments]);
 async function recover(){if(plan&&!await confirmAction('Replace the current design with the recovery copy?'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string;thread_assignments?:ThreadAssignments}|null>('recovery_open');if(p){setThreadAssignments(p.thread_assignments??{});setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null);setMessage('Recovery copy opened. Save as a project to keep it.')}else setMessage('No recovery copy found.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
@@ -189,32 +190,31 @@ function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boole
     const position=commit?pointerPosition(event):null;
     const start=designGesture.current;
     designGesture.current=null;
-    setDesignOffset([0,0]);
     if(position){
       const dx=position.x-start.x,dy=position.y-start.y;
-      if(Math.hypot(dx,dy)>=.05)void transform(1,0,dx,dy);
+      if(Math.hypot(dx,dy)>=.05){setDesignOffset([dx,dy]);void transform(1,0,dx,dy);return;}
     }
-    return;
+    setDesignOffset([0,0]);return;
   }
   if(resizeGesture.current?.pointer===event.pointerId){
     const position=commit?pointerPosition(event):null;
     const result=position?resizeAt(position):null;
     const uid=resizeGesture.current.uid;
     resizeGesture.current=null;
-    setResizePreview(null);
-    if(result&&(Math.abs(result.sx-1)>.007||Math.abs(result.sy-1)>.007))editSelection(result,uid);
+    if(result&&(Math.abs(result.sx-1)>.007||Math.abs(result.sy-1)>.007)){setResizePreview(result);editSelection(result,uid);}else setResizePreview(null);
     return;
   }
   const gesture=objectGesture.current;
   if(gesture&&gesture.pointerId!==event.pointerId)return;
   const position=commit&&gesture?pointerPosition(event):null;
   objectGesture.current=null;
-  setObjectOffset([0,0]);
+  if(!gesture){setDrag(null);return;}
   setDrag(null);
   if(gesture&&position){
     const dx=position.x-gesture.x,dy=position.y-gesture.y;
-    if(Math.hypot(dx,dy)>=0.05)editSelection({kind:'move',dx,dy},gesture.uid);
+    if(Math.hypot(dx,dy)>=0.05){setObjectOffset([dx,dy]);editSelection({kind:'move',dx,dy},gesture.uid);return;}
   }
+  setObjectOffset([0,0]);
 }
 
 function stepStitch(delta:number) {
@@ -330,7 +330,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {plan&&<ThreadOrder assignments={threadAssignments} onAssign={(index,value)=>setThreadAssignments(old=>({...old,[index]:value}))} blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
   <button className="studio-save-design" title="Save editable Stitch Studio project (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={17}/> Save design</button><button className="primary studio-export" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
-{busy&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:`clamp(48px,5vw,80px) ${left?`min(${leftWidth}px, 24vw)`:'0px'} minmax(0,1fr) ${right?`min(${rightWidth}px, 27vw)`:'0px'}`}}>
+{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:`clamp(48px,5vw,80px) ${left?`min(${leftWidth}px, 24vw)`:'0px'} minmax(0,1fr) ${right?`min(${rightWidth}px, 27vw)`:'0px'}`}}>
 <div className="editor-toolrail" role="group" aria-label="Editor tools">
 <button aria-pressed={left} onClick={()=>setLeft(v=>!v)}><Layers3 size={24}/><small>Layers</small></button>
 <button disabled={busy} onClick={openInsertDialog}><FilePlus size={23}/><small>Insert</small></button>
@@ -418,7 +418,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
    strokeWidth={object.stroke_width} pointerEvents={object.fill_rule?'fill':'stroke'}/>)}
 </g>}
 {selected?.bounds&&canvasMode==='select'&&<g className="studio-selection" pointerEvents="none" transform={selectionTransform}>
- {(objectGesture.current||resizePreview)&&<path d={selected.path} fill={selected.fill_rule?'#8d53a333':'none'} fillRule={selected.fill_rule}
+ {(objectGesture.current||resizePreview||objectOffset.some(v=>v!==0))&&<path d={selected.path} fill={selected.fill_rule?'#8d53a333':'none'} fillRule={selected.fill_rule}
    stroke="#8d53a3" strokeWidth={selected.stroke_width||.3}/>}
  <rect x={selected.bounds[0]-.6} y={selected.bounds[1]-.6} width={selected.bounds[2]+1.2} height={selected.bounds[3]+1.2}
    fill="none" stroke="#8543aa" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeDasharray="4 3"/>
@@ -511,7 +511,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <option value={1}>1×</option><option value={4}>4×</option><option value={16}>16×</option><option value={64}>64×</option>
   </select>
   <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>{plan&&<span className="simulation-fit" data-outside={outside}>{outside?"Outside hoop":"Fits hoop"}</span>}
-</div><footer className="workspace-status">
+</div><footer className="workspace-status">{inlineWork&&<span className="inline-work-status" role="status"><span className="inline-work-spinner"/>{inlineWork}</span>}
   <span><SquareDashed size={16}/>{width>0&&height>0?`Hoop ${(width/25.4).toFixed(2)} × ${(height/25.4).toFixed(2)} in`:'Set a hoop size'}</span>
   {plan&&<div className="status-metrics"><span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span><Scissors size={16}/>{plan.trims} trims</span></div>}
   <span className="workspace-fit-status" data-outside={outside}>{outside?'Outside hoop':plan?'Fits hoop · '+recoveryStatus:recoveryStatus}</span>
