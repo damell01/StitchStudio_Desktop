@@ -373,13 +373,18 @@ async fn open_project(state: tauri::State<'_, Mutex<Workspace>>) -> Result<Optio
 fn open_project_path(path: &std::path::Path, state: &Mutex<Workspace>) -> Result<OpenedProject, String> {
     Project::load(path)?.restore(state)
 }
+mod template_assets;
+
 fn template_svg(id: &str, art: &str, width: f64) -> Result<String, String> {
-    if !["heart","star","leaf","football","bow","mountain","wildflower","sunrise","baseball","anchor","butterfly","laurel","bear","bunny","fox","penguin","dino","whale","ghost","rocket","puppy","mouse","turtle","gingerbread","duck","sailboat","mickey","minnie","bluey","bingo","stitch","coquette","bluebow","cherrybow","hello-kitty","pikachu","pooh","spongebob","snoopy","rainbow","cherries","strawberry","unicorn","bandit","chilli","muffin","socks","patrick","mario","my-melody","pumpkin","shell","frame","prairie-flower","spool-mark","pine-patch","sunday-ball"].contains(&id) || art.len() > 4096 || art.contains("href")
+    if !(5.0..=250.0).contains(&width) { return Err("Invalid template width".into()); }
+    if let Some(licensed) = template_assets::twemoji_document(id, width) {
+        return Ok(licensed);
+    }
+    if !["heart","star","leaf","football","bow","mountain","wildflower","sunrise","baseball","anchor","butterfly","laurel","bear","bunny","fox","penguin","dino","whale","ghost","rocket","puppy","mouse","turtle","gingerbread","duck","sailboat","coquette","bluebow","cherrybow","rainbow","cherries","strawberry","unicorn","pumpkin","shell","frame","prairie-flower","spool-mark","pine-patch","sunday-ball"].contains(&id) || art.len() > 4096 || art.contains("href")
         || art.contains("<image") || art.contains("<script")
     {
         return Err("Invalid starter template".into());
     }
-    if !(5.0..=250.0).contains(&width) { return Err("Invalid template width".into()); }
     Ok(format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}mm" height="{width}mm" viewBox="0 0 100 100">{art}</svg>"#))
 }
 

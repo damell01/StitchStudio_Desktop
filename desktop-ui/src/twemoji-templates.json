@@ -1,0 +1,232 @@
+[
+  {
+    "id": "twemoji-dragon",
+    "name": "Dragon",
+    "category": "Licensed characters",
+    "asset": "1f409",
+    "tags": [
+      "fantasy",
+      "reptile",
+      "mythical"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f409.svg"
+  },
+  {
+    "id": "twemoji-robot",
+    "name": "Robot",
+    "category": "Licensed characters",
+    "asset": "1f916",
+    "tags": [
+      "space",
+      "technology",
+      "friendly robot"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f916.svg"
+  },
+  {
+    "id": "twemoji-ghost",
+    "name": "Ghost",
+    "category": "Licensed characters",
+    "asset": "1f47b",
+    "tags": [
+      "halloween",
+      "autumn",
+      "spooky"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f47b.svg"
+  },
+  {
+    "id": "twemoji-cat",
+    "name": "Cat face",
+    "category": "Licensed characters",
+    "asset": "1f431",
+    "tags": [
+      "cat",
+      "kitten",
+      "pet"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f431.svg"
+  },
+  {
+    "id": "twemoji-fox",
+    "name": "Fox face",
+    "category": "Licensed characters",
+    "asset": "1f98a",
+    "tags": [
+      "woodland",
+      "animal",
+      "fox"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f98a.svg"
+  },
+  {
+    "id": "twemoji-rabbit",
+    "name": "Rabbit face",
+    "category": "Licensed characters",
+    "asset": "1f430",
+    "tags": [
+      "bunny",
+      "rabbit",
+      "spring",
+      "easter"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f430.svg"
+  },
+  {
+    "id": "twemoji-otter",
+    "name": "Otter",
+    "category": "Licensed characters",
+    "asset": "1f9a6",
+    "tags": [
+      "animal",
+      "water",
+      "coastal"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f9a6.svg"
+  },
+  {
+    "id": "twemoji-unicorn",
+    "name": "Unicorn",
+    "category": "Licensed characters",
+    "asset": "1f984",
+    "tags": [
+      "fantasy",
+      "horse",
+      "magical"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f984.svg"
+  },
+  {
+    "id": "twemoji-birthday-cake",
+    "name": "Birthday cake",
+    "category": "Celebrations",
+    "asset": "1f382",
+    "tags": [
+      "party",
+      "birthday",
+      "cake",
+      "cupcake"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f382.svg"
+  },
+  {
+    "id": "twemoji-jack-o-lantern",
+    "name": "Jack-o’-lantern",
+    "category": "Seasonal",
+    "asset": "1f383",
+    "tags": [
+      "pumpkin",
+      "halloween",
+      "autumn"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f383.svg"
+  },
+  {
+    "id": "twemoji-christmas-tree",
+    "name": "Christmas tree",
+    "category": "Seasonal",
+    "asset": "1f384",
+    "tags": [
+      "winter",
+      "holiday",
+      "christmas"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f384.svg"
+  },
+  {
+    "id": "twemoji-bouquet",
+    "name": "Flower bouquet",
+    "category": "Botanical",
+    "asset": "1f490",
+    "tags": [
+      "wedding",
+      "flower",
+      "floral",
+      "nature"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f490.svg"
+  },
+  {
+    "id": "twemoji-wrapped-gift",
+    "name": "Wrapped gift",
+    "category": "Celebrations",
+    "asset": "1f381",
+    "tags": [
+      "holiday",
+      "birthday",
+      "present"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f381.svg"
+  },
+  {
+    "id": "twemoji-ribbon",
+    "name": "Ribbon bow",
+    "category": "Bows",
+    "asset": "1f380",
+    "tags": [
+      "ribbon",
+      "bow",
+      "gift",
+      "boutique"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f380.svg"
+  },
+  {
+    "id": "twemoji-butterfly",
+    "name": "Butterfly",
+    "category": "Botanical",
+    "asset": "1f98b",
+    "tags": [
+      "butterfly",
+      "insect",
+      "garden",
+      "spring"
+    ],
+    "credit": "Twemoji by Twitter, Inc. and other contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "sourceUrl": "https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f98b.svg"
+  }
+]

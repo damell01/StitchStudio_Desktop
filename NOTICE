@@ -38,3 +38,10 @@ VectorCraft (https://github.com/storytold/vectorcraft)
   bending (src/studio/path_edit.rs), typed lengths with units and arithmetic
   and the inch ruler steps (src/studio/units.rs), and the Measure tool
   (src/studio/view_tools.rs).
+
+Published emoji artwork included in the Stitch Studio template library:
+Twemoji, Copyright 2019 Twitter, Inc. and other contributors.
+Graphics licensed under Creative Commons Attribution 4.0 International
+(https://creativecommons.org/licenses/by/4.0/).
+Source: https://github.com/twitter/twemoji/tree/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg
+The bundled SVG files are unmodified. Generated stitch paths are adaptations.
