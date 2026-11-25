@@ -24,9 +24,9 @@ type Review = {
 
 const defaults = {
   widthMm: 80, colors: 0, detail: 60, fabric: 'standard',
-  removeBackground: true, cleanup: false, tolerance: 32, thinLines: false,
+  removeBackground: true, cleanup: true, tolerance: 32, thinLines: false,
 };
-const classicSettings = {...defaults,cleanup:true,colors:4};
+// All imports use the same automatic pipeline; gallery metadata must not force a palette.
 const artworkMimes: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif:'image/jpeg', jpe:'image/jpeg', svg: 'image/svg+xml',
   webp: 'image/webp', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff', gif: 'image/gif',
@@ -51,7 +51,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const [art, setArt] = useState<Art | null>(initialArtwork??null);
   const [original, setOriginal] = useState<Art | null>(initialArtwork??null);
   const [pdf, setPdf] = useState<File | null>(null);
-  const [settings, setSettings] = useState(initialArtwork?.classic ? classicSettings : defaults);
+  const [settings, setSettings] = useState(defaults);
   const [generated, setGenerated] = useState<{ art: Art; settings: typeof defaults; review: Review } | null>(null);
   const [failed, setFailed] = useState<{ art: Art; settings: typeof defaults; message: string } | null>(null);
   const [error, setError] = useState('');
@@ -109,7 +109,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const acceptArtwork = useCallback((next: Art) => {
     setArt(next);
     setOriginal(next);
-    setSettings(next.classic ? classicSettings : defaults);
+    setSettings(defaults);
     setShowProcessed(next.mime === 'image/tiff');
     setError('');
     setGenerated(null);
@@ -218,7 +218,9 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       setEditing(false);
     }} />}
     <article className="digitizer-controls">
-      <h2>{art ? 'Digitizing settings' : 'Choose artwork'}</h2>
+      <h2>{art ? 'Automatic digitizing' : 'Choose artwork'}</h2>
+      {art && <p>Artwork is digitized automatically. Settings below are optional overrides.</p>}
+      {art && settings !== defaults && <button type="button" onClick={()=>setSettings(defaults)}>Restore automatic settings</button>}
       <button className={art ? '' : 'artwork-import-zone'} disabled={busy} onClick={chooseArtwork}>
         <ImagePlus size={art ? 16 : 28} /> <strong>{art ? 'Choose another image or PDF' : 'Choose or drop an image'}</strong>
       </button>
