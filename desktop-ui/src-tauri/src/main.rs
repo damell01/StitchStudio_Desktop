@@ -4,6 +4,7 @@ mod lettering_edit;
 mod project_recovery;
 mod design_archive;
 mod saved_templates;
+mod starter_designs;
 mod fabric_profiles;
 mod specialty;
 mod thread_recolor;
@@ -428,7 +429,17 @@ fn personal_design_dir(app:&tauri::AppHandle)->Result<std::path::PathBuf,String>
 }
 #[tauri::command]
 fn personal_designs(app:tauri::AppHandle)->Result<Vec<String>,String>{
- let mut names=Vec::new();for entry in std::fs::read_dir(personal_design_dir(&app)?).map_err(|e|e.to_string())?.flatten(){if entry.file_type().map(|t|t.is_file()).unwrap_or(false){names.push(entry.file_name().to_string_lossy().into_owned());}}names.sort();Ok(names)
+    let mut names: Vec<_> = std::fs::read_dir(personal_design_dir(&app)?)
+        .map_err(|error| error.to_string())?.flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        .map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+    for name in starter_designs::names() {
+        if !names.iter().any(|existing| existing.eq_ignore_ascii_case(name)) {
+            names.push(name.to_owned());
+        }
+    }
+    names.sort();
+    Ok(names)
 }
 #[tauri::command]
 async fn import_design_archive(app: tauri::AppHandle) -> Result<Option<design_archive::Report>, String> {
@@ -461,14 +472,22 @@ async fn import_personal_designs(folder:bool,app:tauri::AppHandle)->Result<usize
 #[tauri::command]
 async fn insert_embroidery(x_mm:f64,y_mm:f64,file:Option<String>,app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>)->Result<Option<Preview>,String>{
  if ![x_mm,y_mm].iter().all(|v|v.is_finite()&&v.abs()<=500.0){return Err("Invalid placement".into())}
+ let from_library = file.is_some();
  let path=if let Some(name)=file{let p=std::path::Path::new(&name);if p.components().count()!=1||!matches!(p.components().next(),Some(std::path::Component::Normal(_))){return Err("Invalid design filename".into())}personal_design_dir(&app)?.join(p)}else{let Some(path)=rfd::AsyncFileDialog::new().add_filter("Embroidery designs",&["dst","pes","pec","exp","jef"]).pick_file().await else{return Ok(None)};path.path().to_owned()};
  let (name, svg) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
-     if std::fs::metadata(&path).map_err(|err| err.to_string())?.len() > 20_000_000 {
-         return Err("Design exceeds 20 MB".into());
-     }
-     let bytes = std::fs::read(&path).map_err(|err| err.to_string())?;
-     let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-     let file = formats::read::read_stitch_file(&bytes, ext).map_err(|err| err.to_string())?;
+     let bundled = if from_library && !path.try_exists().map_err(|error| error.to_string())? {
+         path.file_name().and_then(|name| name.to_str()).and_then(starter_designs::open)
+     } else { None };
+     let file = if let Some(result) = bundled {
+         result?
+     } else {
+         if std::fs::metadata(&path).map_err(|err| err.to_string())?.len() > 20_000_000 {
+             return Err("Design exceeds 20 MB".into());
+         }
+         let bytes = std::fs::read(&path).map_err(|err| err.to_string())?;
+         let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+         formats::read::read_stitch_file(&bytes, ext).map_err(|err| err.to_string())?
+     };
      if file.blocks.is_empty() { return Err("No stitches found".into()); }
      let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Imported design").to_owned();
      Ok((name, formats::read::to_svg(&file)))
