@@ -497,8 +497,71 @@ impl Studio {
         }
     }
 
+    /// Review bulk color matching before changing the artwork.
+    fn thread_mapping_window(&mut self, ctx: &egui::Context) {
+        let id = egui::Id::new("thread-mapping-open");
+        let mut open = ctx.data_mut(|d| d.get_temp::<bool>(id).unwrap_or(false));
+        if !open { return; }
+        let mut apply = false;
+        let source = self.palettes.source;
+        let palette = self.palettes.colors(source, self.view_tools.brand);
+        let threads = self.design_threads();
+        let mappings: Vec<_> = threads.iter().filter_map(|(c, objects, _)| {
+            let (target, name) = palette.iter().min_by(|a,b| {
+                zigzag::formats::perceptual_distance(*c, a.0)
+                    .total_cmp(&zigzag::formats::perceptual_distance(*c, b.0))
+            })?;
+            Some((*c, *target, name.as_str(), objects.len()))
+        }).collect();
+        let unique: std::collections::HashSet<_> = mappings.iter().map(|m| m.1).collect();
+        let changed = mappings.iter().filter(|m| m.0 != m.1).count();
+        egui::Window::new("Match design threads")
+            .open(&mut open).collapsible(false).resizable(true)
+            .default_width(480.0)
+            .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.label(egui::RichText::new(self.palettes.name(source)).strong().size(16.0));
+                caption(ui, format!("{} source colors → {} matched threads · {} colors change", threads.len(), unique.len(), changed));
+                caption(ui, "Preview only. Colors change when you apply the mapping.");
+                ui.separator();
+                egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                    for &(original, target, name, count) in &mappings {
+                        ui.horizontal(|ui| {
+                            swatch(ui, original, 24.0, false).on_hover_text(format!("Original #{:02X}{:02X}{:02X}", original[0], original[1], original[2]));
+                            ui.label("→");
+                            swatch(ui, target, 24.0, false);
+                            ui.vertical(|ui| {
+                                ui.label(name);
+                                caption(ui, format!("{count} objects · {}", if original == target { "Exact match" } else { "Suggested match" }));
+                            });
+                        });
+                    }
+                });
+                if palette.is_empty() { caption(ui, "Choose a palette containing threads first."); }
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.add_enabled(changed > 0, egui::Button::new("Apply matching")).clicked() { apply = true; }
+                    caption(ui, "Use Undo to restore previous colors.");
+                });
+            });
+        if apply {
+            self.match_all_to_palette();
+            open = false;
+        }
+        ctx.data_mut(|d| d.insert_temp(id, open));
+    }
+
     pub fn threads_body(&mut self, ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing.y = crate::theme::space::S;
+
+        let colors = self.design_threads().len();
+        ui.horizontal(|ui| {
+            caption(ui, format!("{colors} unique colors"));
+            if ui.add_enabled(colors > 0, egui::Button::new("Review matching")).clicked() {
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("thread-mapping-open"), true));
+            }
+        });
+        self.thread_mapping_window(ui.ctx());
 
         // ---- The design's threads: in sewing order, or once each by color.
         crate::theme::segmented(
