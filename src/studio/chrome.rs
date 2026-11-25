@@ -33,6 +33,7 @@ impl Studio {
                             button = egui::Button::new(egui::RichText::new(label).strong().color(Color32::WHITE)).fill(p.accent).min_size(Vec2::new(width, 36.0));
                         }
                         if ui.add_enabled(self.action_enabled(action), button).clicked() {
+                            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("studio-home-page"), false));
                             self.run_action(action);
                         }
                     }
@@ -57,7 +58,10 @@ impl Studio {
                                 ui.add(egui::Label::new(egui::RichText::new(name.as_ref()).strong()).truncate())
                                     .on_hover_text(path.display().to_string());
                                 caption(ui, format!("{ext} design"));
-                                if ui.button("Open design").clicked() { self.load(path); }
+                                if ui.button("Open design").clicked() {
+                                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("studio-home-page"), false));
+                                    self.load(path);
+                                }
                             });
                         });
                 }
