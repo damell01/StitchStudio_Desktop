@@ -35,7 +35,7 @@ export function CommandPalette({ commands }: { commands: Command[] }) {
   }
 
   return <>
-    <button className="studio-tool-icon command-launch" aria-label="Search commands" title="Search commands (Ctrl+K or Cmd+K)" onClick={show}><Search size={17}/></button>
+    <button className="studio-tool-icon command-launch" aria-label="Search commands" title="Search commands (Ctrl+K or Cmd+K)" onClick={show}><Search size={17}/><span className="command-launch-label">Search tools and pages…</span><kbd>Ctrl K</kbd></button>
     <dialog ref={dialog} className="studio-modal command-dialog" aria-label="Search commands">
       <div className="studio-modal-heading"><h2>Search commands</h2><button onClick={()=>dialog.current?.close()}>Close</button></div>
       <label className="library-search"><Search size={17}/><input ref={input} value={query} placeholder="Find an action or page…" aria-label="Find an action or page"
