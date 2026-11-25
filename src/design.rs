@@ -491,7 +491,11 @@ fn fill_runs(
     }
     let top = FillParams {
         angle,
-        spacing: mm(p.fill_spacing(f)),
+        // Automatic artwork uses a moderate density floor on stable woven.
+        // Explicit object spacing and other fabric presets remain untouched.
+        spacing: mm(if p.spacing.is_none() && shape.params.kind.is_none() && opt.hat_order && f.id == "standard" {
+            p.fill_spacing(f).max(0.36)
+        } else { p.fill_spacing(f) }),
         len: mm(p.fill_len(f)),
         inset: 0.0,
         pull: mm(p.fill_pull(f)),
