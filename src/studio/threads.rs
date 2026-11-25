@@ -590,6 +590,21 @@ impl Studio {
             self.color_list(ui);
         }
         ui.spacing_mut().item_spacing.y = crate::theme::space::S;
+        let selected = self.sel_indices();
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(colors > 0, egui::Button::new("Select all colors")).clicked() {
+                let all: Vec<_> = self.design_threads().into_iter().flat_map(|(_, objects, _)| objects).collect();
+                self.set_selection(&all);
+            }
+            if ui.add_enabled(!selected.is_empty(), egui::Button::new("Recolor selection")).clicked() {
+                let rect = ui.min_rect();
+                self.picker = Some(egui::pos2((rect.left() - PICKER_W - 24.0).max(8.0), rect.top()));
+            }
+            if ui.add_enabled(!selected.is_empty(), egui::Button::new("Clear")).clicked() {
+                self.set_selection(&[]);
+            }
+        });
+        caption(ui, format!("{} selected · Shift-click colors to combine", self.sel_indices().len()));
         ui.add_space(crate::theme::space::S);
         ui.horizontal(|ui| {
             if ui
