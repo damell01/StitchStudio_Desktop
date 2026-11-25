@@ -57,6 +57,13 @@ For installation, open the DMG and copy the app into Applications. Local packagi
 5. Use the canvas zoom and pan to inspect stitches. Use the design transformation controls to change physical dimensions or placement. Save an editable `.stitchstudio` project before exporting.
 6. Review the machine format, dimensions and thread sequence, then save the machine file. Keep a separate project file for edits. Use the [sew-out worksheet](SEW_OUT.md) for the first machine test.
 
+## Browse and reuse designs
+
+- **Template Library** includes built-in bow, sports, botanical, animal, monogram and patch artwork. Filter by category, favorites or recent designs. **Preview design** generates a stitch preview before you open the template.
+- **Design Library** imports compatible embroidery files or scans a folder for editable Stitch Studio projects. Search for a machine file and choose **Insert design** to add its stitch paths to the workspace.
+- Choose disk files or a folder that you have permission to use. Keep original machine files for reference. Current machine-file insertion creates a stitch-based combined design.
+- The editor's panel-width sliders remember the space you allocate to artwork and properties. Close either panel to give the canvas more room.
+
 ## Developer checks
 
 From the repository root:

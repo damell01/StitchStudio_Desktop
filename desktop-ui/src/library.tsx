@@ -1,6 +1,111 @@
-import {confirmAction} from './dialogs';
-import {useState} from 'react';
-import {invoke} from '@tauri-apps/api/core';
-import {FolderOpen,Search,File} from 'lucide-react';
-type Entry={file:string;name:string;stitches:number;colors:number;width:number;height:number;modified:number};
-export function Library({onDone}:{onDone:()=>void}){const [items,setItems]=useState<Entry[]>([]),[q,setQ]=useState(''),[sort,setSort]=useState('recent'),[busy,setBusy]=useState(false),[error,setError]=useState('');async function scan(){setBusy(true);setError('');try{const r=await invoke<Entry[]|null>('scan_projects');if(r)setItems(r)}catch(e){setError(String(e))}finally{setBusy(false)}}async function open(e:Entry){if(!await confirmAction('Open this project? Save existing work first.'))return;setBusy(true);try{const p=await invoke<{width:number;height:number;format:string}>('library_open',{file:e.file});sessionStorage.setItem('studio-open-project-settings',JSON.stringify(p));onDone()}catch(e){setError(String(e))}finally{setBusy(false)}}return <><p>Find saved Stitch Studio projects in a folder and its subfolders.</p><button className="primary" disabled={busy} onClick={scan}><FolderOpen size={18}/> Scan project folder</button><div className="font-filters"><Search size={18}/><input aria-label="Search projects" placeholder="Search projects" value={q} onChange={e=>setQ(e.target.value)}/><select aria-label="Sort projects" value={sort} onChange={e=>setSort(e.target.value)}><option value="recent">Recently modified</option><option value="name">Name A–Z</option><option value="stitches">Stitch count</option></select></div>{busy&&<p role="status">Working…</p>}{error&&<p role="alert">{error}</p>}<p>{items.length} projects found</p><div className="font-list">{items.filter(e=>(e.name+' '+e.file).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>sort==='name'?a.name.localeCompare(b.name):sort==='stitches'?b.stitches-a.stitches:b.modified-a.modified).map(e=><article key={e.file}><File size={24}/><div><strong>{e.name}</strong><small>{e.stitches.toLocaleString()} stitches · {e.colors} color blocks · {e.width} × {e.height} mm hoop</small><small>{e.file}</small></div><button disabled={busy} onClick={()=>open(e)}>Open</button></article>)}</div></>}
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { File, FilePlus, FolderOpen, Search } from 'lucide-react';
+import { confirmAction } from './dialogs';
+
+type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number };
+
+export function Library({ onDone }: { onDone: () => void }) {
+  const [tab, setTab] = useState<'embroidery' | 'projects'>('embroidery');
+  const [files, setFiles] = useState<string[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('recent');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const match = query.trim().toLowerCase();
+
+  useEffect(() => {
+    let active = true;
+    void invoke<string[]>('personal_designs')
+      .then(result => { if (active) setFiles(result); })
+      .catch(err => { if (active) setError(String(err)); });
+    return () => { active = false; };
+  }, []);
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try { await action(); }
+    catch (err) { setError(String(err)); }
+    finally { setBusy(false); }
+  }
+
+  function importDesigns(folder: boolean) {
+    void run(async () => {
+      const count = await invoke<number>('import_personal_designs', { folder });
+      setFiles(await invoke<string[]>('personal_designs'));
+      setMessage(count ? `Imported ${count} ${count === 1 ? 'design' : 'designs'}.` : 'No new embroidery files imported.');
+    });
+  }
+
+  function insert(file: string) {
+    void run(async () => {
+      const plan = await invoke('insert_embroidery', { file, xMm: 0, yMm: 0 });
+      if (plan) onDone();
+    });
+  }
+
+  function scan() {
+    void run(async () => {
+      const result = await invoke<Project[] | null>('scan_projects');
+      if (result) setProjects(result);
+    });
+  }
+
+  function open(project: Project) {
+    void run(async () => {
+      if (!await confirmAction('Open this project? Save existing work first.')) return;
+      const { width, height, format } = await invoke<{ width: number; height: number; format: string }>('library_open', { file: project.file });
+      sessionStorage.setItem('studio-open-project-settings', JSON.stringify({ width, height, format }));
+      onDone();
+    });
+  }
+
+  const visibleFiles = files.filter(file => file.toLowerCase().includes(match));
+  const visibleProjects = projects.filter(project => (project.name + ' ' + project.file).toLowerCase().includes(match))
+    .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : sort === 'stitches' ? b.stitches - a.stitches : b.modified - a.modified);
+  return <section className="design-library">
+    <div className="studio-tools" role="group" aria-label="Design library sources">
+      <button aria-pressed={tab === 'embroidery'} onClick={() => { setTab('embroidery'); setQuery(''); }}>Embroidery files</button>
+      <button aria-pressed={tab === 'projects'} onClick={() => { setTab('projects'); setQuery(''); }}>Stitch Studio projects</button>
+    </div>
+    <div className="library-filters">
+      <label className="library-search"><Search size={16} /><input aria-label="Search designs" placeholder="Search designs" value={query} onChange={event => setQuery(event.target.value)} /></label>
+      {tab === 'embroidery' ? <>
+        <button className="primary" disabled={busy} onClick={() => importDesigns(false)}><FilePlus size={16} /> Import files</button>
+        <button disabled={busy} onClick={() => importDesigns(true)}><FolderOpen size={16} /> Import folder</button>
+      </> : <>
+        <button className="primary" disabled={busy} onClick={scan}><FolderOpen size={16} /> Scan project folder</button>
+        <select aria-label="Sort projects" value={sort} onChange={event => setSort(event.target.value)}>
+          <option value="recent">Recently modified</option><option value="name">Name A–Z</option><option value="stitches">Stitch count</option>
+        </select>
+      </>}
+    </div>
+    {busy && <p role="status">Reading designs…</p>}
+    {error && <p role="alert">{error}</p>}
+    {message && <p role="status">{message}</p>}
+    {tab === 'embroidery' ? <>
+      {files.length === 0 && <p>Import machine files in DST, PES, PEC, EXP or JEF format to use them here.</p>}
+      {files.length > 0 && visibleFiles.length === 0 && <p>No files match your search.</p>}
+      <div className="font-list">
+        {visibleFiles.map(file => <article key={file}>
+          <File size={20} /><div><strong>{file}</strong></div>
+          <button disabled={busy} onClick={() => insert(file)} aria-label={`Insert ${file}`}>Insert design</button>
+        </article>)}
+      </div>
+    </> : <>
+      <p>{visibleProjects.length} projects found</p>
+      <div className="font-list">
+        {visibleProjects.map(project => <article key={project.file}>
+          <File size={20} /><div><strong>{project.name}</strong>
+            <small>{project.stitches.toLocaleString()} points · {project.colors} color blocks · {project.width} × {project.height} mm hoop</small>
+          </div>
+          <button disabled={busy} onClick={() => open(project)}>Open project</button>
+        </article>)}
+      </div>
+    </>}
+  </section>;
+}

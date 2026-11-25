@@ -1,5 +1,6 @@
-import {useState} from 'react';
-import {Search,ArrowRight} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { ArrowRight, Search, Star, X } from 'lucide-react';
 export const templates=[
 {id:'heart',name:'Classic heart',category:'Everyday',art:'<path fill="#b84d65" d="M50 85 C15 60 5 42 19 25 C30 12 45 18 50 32 C55 18 70 12 81 25 C95 42 85 60 50 85Z"/>'},
 {id:'star',name:'Five-point star',category:'Everyday',art:'<path fill="#c18b32" d="M50 8 L62 36 93 38 69 58 77 89 50 72 23 89 31 58 7 38 38 36Z"/>'},
@@ -53,7 +54,117 @@ export const templates=[
 {"id":"my-melody","name":"My Melody","category":"Cartoon characters","art":"<path fill=\"#e9a0b8\" d=\"M20 40 Q8 0 30 4 Q45 7 44 28 H56 Q55 7 70 4 Q92 0 80 40 Q96 85 50 94 Q4 85 20 40Z\"/><ellipse cx=\"50\" cy=\"61\" rx=\"32\" ry=\"25\" fill=\"#fff8ef\"/><g fill=\"#302b34\"><ellipse cx=\"37\" cy=\"59\" rx=\"3\" ry=\"5\"/><ellipse cx=\"63\" cy=\"59\" rx=\"3\" ry=\"5\"/></g><ellipse cx=\"50\" cy=\"69\" rx=\"4\" ry=\"3\" fill=\"#e5b84d\"/><path fill=\"#c77a9c\" d=\"M75 30 L62 21 62 39 75 33 88 39 88 21Z\"/>"},
 {"id":"pumpkin","name":"Sweet pumpkin","category":"Seasonal","art":"<g fill=\"#df9654\" stroke=\"#b8753d\" stroke-width=\"2\"><ellipse cx=\"30\" cy=\"58\" rx=\"23\" ry=\"32\"/><ellipse cx=\"70\" cy=\"58\" rx=\"23\" ry=\"32\"/><ellipse cx=\"50\" cy=\"58\" rx=\"23\" ry=\"35\"/></g><path d=\"M50 26 Q44 12 60 8\" stroke=\"#68855a\" stroke-width=\"7\" fill=\"none\"/><g fill=\"#493a37\"><circle cx=\"37\" cy=\"55\" r=\"4\"/><circle cx=\"63\" cy=\"55\" r=\"4\"/></g><path d=\"M42 68 Q50 76 58 68\" stroke=\"#493a37\" stroke-width=\"3\" fill=\"none\"/>"},
 {"id":"shell","name":"Scallop shell","category":"Coastal","art":"<path fill=\"#edc0a8\" stroke=\"#b97f70\" stroke-width=\"2\" d=\"M50 91 Q5 67 5 38 Q5 20 20 25 Q20 5 37 14 Q50 0 63 14 Q80 5 80 25 Q95 20 95 38 Q95 67 50 91Z\"/><path d=\"M50 86 L20 30 M50 86 L37 19 M50 86 V12 M50 86 L63 19 M50 86 L80 30\" stroke=\"#b97f70\" stroke-width=\"2\" fill=\"none\"/>"},
-{"id":"frame","name":"Scalloped monogram frame","category":"Cute & boutique","art":"<path d=\"M50 9 Q60 1 68 15 Q83 10 85 26 Q99 32 91 45 Q101 58 87 68 Q90 85 73 85 Q62 99 50 91 Q38 99 27 85 Q10 85 13 68 Q-1 58 9 45 Q1 32 15 26 Q17 10 32 15 Q40 1 50 9Z\" fill=\"none\" stroke=\"#b97c9b\" stroke-width=\"4\"/><circle cx=\"50\" cy=\"50\" r=\"30\" fill=\"none\" stroke=\"#e2b0c7\" stroke-width=\"2\"/>"}
+{"id":"frame","name":"Scalloped monogram frame","category":"Cute & boutique","art":"<path d=\"M50 9 Q60 1 68 15 Q83 10 85 26 Q99 32 91 45 Q101 58 87 68 Q90 85 73 85 Q62 99 50 91 Q38 99 27 85 Q10 85 13 68 Q-1 58 9 45 Q1 32 15 26 Q17 10 32 15 Q40 1 50 9Z\" fill=\"none\" stroke=\"#b97c9b\" stroke-width=\"4\"/><circle cx=\"50\" cy=\"50\" r=\"30\" fill=\"none\" stroke=\"#e2b0c7\" stroke-width=\"2\"/>"},
+{id:'prairie-flower',name:'Prairie coneflower',category:'Botanical',art:'<path id="tl-satin" d="M51 87 Q43 57 50 39" fill="none" stroke="#557a58" stroke-width="4"/><path fill="#7a9a66" d="M49 69 Q27 70 21 54 Q39 53 49 69Z M49 76 Q65 57 81 65 Q72 83 49 76Z"/><path fill="#b45878" d="M38 38 Q19 18 24 34 Q26 53 42 50Z M46 40 Q31 50 39 62 Q52 61 55 42Z M55 39 Q62 64 72 54 Q75 47 65 36Z M66 35 Q84 45 84 31 Q78 21 63 27Z"/><ellipse fill="#835032" cx="51" cy="34" rx="18" ry="11"/>'},
+{id:'spool-mark',name:'Thread spool',category:'Everyday',art:'<path fill="#6945a2" d="M29 25 H71 V75 H29Z"/><path fill="#ceaddd" d="M31 35 H69 V65 H31Z"/><path fill="none" stroke="#8463a3" stroke-width="3" d="M31 42 L69 38 M31 51 L69 47 M31 60 L69 56"/><rect fill="#443358" x="22" y="22" width="56" height="10" rx="4"/><rect fill="#443358" x="22" y="68" width="56" height="10" rx="4"/>'},
+{id:'pine-patch',name:'Three pines patch',category:'Patches',art:'<path fill="#ecd9aa" d="M50 9 L86 27 V67 L50 91 14 67 V27Z"/><path fill="none" stroke="#304c48" stroke-width="4" d="M50 9 L86 27 V67 L50 91 14 67 V27Z"/><path fill="#52735a" d="M34 40 L22 62 H46Z M66 40 L54 62 H78Z"/><path fill="#31564b" d="M50 30 L34 67 H66Z"/>'},
+{id:'sunday-ball',name:'Sunday football badge',category:'Sports',art:'<ellipse fill="#e9dcba" cx="50" cy="50" rx="44" ry="38"/><ellipse fill="none" stroke="#324750" stroke-width="4" cx="50" cy="50" rx="44" ry="38"/><path fill="#995d3a" d="M18 50 Q50 9 82 50 Q50 91 18 50Z"/><path d="M34 50 H66 M39 44 V56 M46 44 V56 M54 44 V56 M61 44 V56" fill="none" stroke="#fff1d5" stroke-width="2.4"/>'}
+
 ];
-function readIds(key:string):string[]{try{const v=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(v)?v.filter(x=>typeof x==='string'):[]}catch{return []}}
-export function TemplateLibrary({onChoose}:{onChoose:(id:string)=>void}){const [query,setQuery]=useState(''),[category,setCategory]=useState('All'),[favorites,setFavorites]=useState<string[]>(()=>readIds('studio-design-favorites')),[recent,setRecent]=useState<string[]>(()=>readIds('studio-design-recent'));function choose(id:string){const next=[id,...recent.filter(x=>x!==id)].slice(0,20);setRecent(next);localStorage.setItem('studio-design-recent',JSON.stringify(next));onChoose(id)}function favorite(id:string){const next=favorites.includes(id)?favorites.filter(x=>x!==id):[...favorites,id];setFavorites(next);localStorage.setItem('studio-design-favorites',JSON.stringify(next))}return <><p className="template-intro">Editable starter designs · Choose a design to generate stitches and personalize it.</p><div className="template-filters"><Search size={18}/><input aria-label="Search templates" placeholder="Search designs" value={query} onChange={e=>setQuery(e.target.value)}/>{['All','Favorites','Recent',...new Set(templates.map(t=>t.category))].map(c=><button className={category===c?'primary':''} key={c} onClick={()=>setCategory(c)}>{c}</button>)}</div><section className="template-grid">{templates.filter(t=>(category==='All'||category===t.category||category==='Favorites'&&favorites.includes(t.id)||category==='Recent'&&recent.includes(t.id))&&t.name.toLowerCase().includes(query.toLowerCase())).map(t=><article key={t.id}><button className="design-favorite" aria-label={(favorites.includes(t.id)?'Remove favorite ':'Favorite ')+t.name} aria-pressed={favorites.includes(t.id)} onClick={()=>favorite(t.id)}>{favorites.includes(t.id)?'★':'☆'}</button><svg className="template-art" viewBox="0 0 100 100" aria-label={t.name} dangerouslySetInnerHTML={{__html:t.art}}/><small>{t.category}</small><h2>{t.name}</h2><button onClick={()=>choose(t.id)}>Open design <ArrowRight size={16}/></button></article>)}</section><p className="muted">Artwork previews are not stitch-out guarantees. Inspect and test sew each generated design.</p></>}
+type Template = typeof templates[number];
+type TemplatePlan = { stitches: number; trims: number; blocks: { color: number[]; runs: number[][][] }[] };
+
+function readIds(key: string): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function TemplatePreview({ template, widthMm, insert, onCancel, onChoose }: {
+  template: Template; widthMm: number; insert: boolean; onCancel: () => void; onChoose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [plan, setPlan] = useState<TemplatePlan | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    dialog.current?.showModal();
+    let active = true;
+    void invoke<TemplatePlan>('preview_template', { id: template.id, art: template.art, widthMm })
+      .then(result => { if (active) setPlan(result); })
+      .catch(err => { if (active) setError(String(err)); });
+    return () => { active = false; };
+  }, [template, widthMm]);
+  return <dialog ref={dialog} className="studio-modal template-preview-dialog" aria-label={template.name} onClose={onCancel}>
+    <header className="studio-modal-heading">
+      <div><small>{template.category}</small><h2>{template.name}</h2></div>
+      <button title="Close preview" aria-label="Close preview" onClick={onCancel}><X size={18} /></button>
+    </header>
+    <div className="template-preview-grid">
+      <section><h3>Artwork</h3><svg viewBox="0 0 100 100" dangerouslySetInnerHTML={{ __html: template.art }} /></section>
+      <section><h3>Stitch preview</h3>
+        {plan ? <svg aria-label="Generated template stitches" viewBox={`${-widthMm / 2} ${-widthMm / 2} ${widthMm} ${widthMm}`}>
+          {plan.blocks.map((block, index) => <g key={index} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth=".28">
+            {block.runs.map((run, runIndex) => <polyline key={runIndex} points={run.map(point => point.join(',')).join(' ')} />)}
+          </g>)}
+        </svg> : <p role={error ? 'alert' : 'status'}>{error || 'Generating stitches…'}</p>}
+      </section>
+    </div>
+    {plan && <p>{plan.stitches.toLocaleString()} stitch points · {plan.blocks.length} color blocks · {plan.trims} planned trims</p>}
+    <footer className="studio-modal-actions">
+      <button onClick={onCancel}>Back to library</button>
+      <button className="primary" disabled={!plan} onClick={onChoose}>
+        {insert ? 'Insert design' : 'Open in design studio'} <ArrowRight size={15} />
+      </button>
+    </footer>
+  </dialog>;
+}
+
+export function TemplateLibrary({ onChoose, insert = false, widthMm = 65 }: {
+  onChoose: (id: string) => void; insert?: boolean; widthMm?: number;
+}) {
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('All');
+  const [favorites, setFavorites] = useState(() => readIds('studio-design-favorites'));
+  const [recent, setRecent] = useState(() => readIds('studio-design-recent'));
+  const [selected, setSelected] = useState<Template | null>(null);
+  const results = templates.filter(template => (
+    category === 'All' || category === template.category
+    || (category === 'Favorites' && favorites.includes(template.id))
+    || (category === 'Recent' && recent.includes(template.id))
+  ) && (template.name + ' ' + template.category).toLowerCase().includes(query.trim().toLowerCase()));
+
+  function choose(id: string) {
+    const next = [id, ...recent.filter(previous => previous !== id)].slice(0, 20);
+    setRecent(next);
+    localStorage.setItem('studio-design-recent', JSON.stringify(next));
+    setSelected(null);
+    onChoose(id);
+  }
+
+  function favorite(id: string) {
+    const next = favorites.includes(id) ? favorites.filter(item => item !== id) : [...favorites, id];
+    setFavorites(next);
+    localStorage.setItem('studio-design-favorites', JSON.stringify(next));
+  }
+
+  return <>
+    <div className="library-filters">
+      <label className="library-search"><Search size={16} /><input aria-label="Search templates" placeholder="Search templates" value={query} onChange={event => setQuery(event.target.value)} /></label>
+      <label>Category <select value={category} onChange={event => setCategory(event.target.value)}>
+        {['All', 'Favorites', 'Recent', ...new Set(templates.map(template => template.category))].map(item => <option key={item}>{item}</option>)}
+      </select></label>
+      <small>{results.length} {results.length === 1 ? 'design' : 'designs'}</small>
+    </div>
+    {results.length === 0 && <p role="status">No designs match your search.</p>}
+    <section className="template-grid" aria-label="Template results">
+      {results.map(template => <article key={template.id}>
+        <button className="design-favorite" title="Toggle favorite"
+          aria-label={(favorites.includes(template.id) ? 'Remove favorite ' : 'Favorite ') + template.name}
+          aria-pressed={favorites.includes(template.id)} onClick={() => favorite(template.id)}>
+          <Star size={15} fill={favorites.includes(template.id) ? 'currentColor' : 'none'} />
+        </button>
+        <svg className="template-art" viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{ __html: template.art }} />
+        <small>{template.category}</small>
+        <h3>{template.name}</h3>
+        <button onClick={() => setSelected(template)} aria-label={`Preview ${template.name}`}>
+          Preview design <ArrowRight size={15} />
+        </button>
+      </article>)}
+    </section>
+    {selected && <TemplatePreview template={selected} insert={insert} widthMm={widthMm}
+      onCancel={() => setSelected(null)} onChoose={() => choose(selected.id)} />}
+  </>;
+}
