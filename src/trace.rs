@@ -314,7 +314,30 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
             if candidate.colors == 0 { candidate.colors = 6; }
         }
         match trace(&prepared, &candidate) {
-            Ok(t) if t.shapes + t.lines > 0 => return Ok(t),
+            Ok(t) if t.shapes + t.lines > 0 => {
+                // Complex illustrations often contain tiny anti-alias islands.
+                // Compare one physically scaled cleanup candidate, not a blind
+                // reduction in colors or a destructive global hue merge.
+                if attempt==0 && cleanup && options.colors==0 && options.threads.is_empty()
+                    && !options.lines && t.shapes>40 && t.shapes<600 {
+                    let mut simplified=candidate.clone();
+                    simplified.speckle_mm=simplified.speckle_mm.max(0.85);
+                    // Respect the user's detail setting; change only island threshold.
+                    if simplified.speckle_mm>candidate.speckle_mm {
+                        if let Ok(next)=trace(&prepared,&simplified) {
+                            let baseline_regions=t.shapes+t.lines;
+                            let next_regions=next.shapes+next.lines;
+                            let same_palette=t.colors.iter().all(|&a|next.colors.iter().any(|&b|crate::formats::perceptual_distance(a,b)<=12.0));
+                            if next_regions>0 && next_regions*100<=baseline_regions*85 && same_palette {
+                                if let (Some(before),Some(after))=(spatial_error(&t.svg,&prepared.raster,false),spatial_error(&next.svg,&prepared.raster,false)) {
+                                    if after<=before+0.004 && after<=before*1.08+0.001 {return Ok(next)}
+                                }
+                            }
+                        }
+                    }
+                }
+                return Ok(t)
+            },
             Ok(_) => failures.push("No stitchable regions".to_string()),
             Err(e) => failures.push(e.to_string()),
         }
