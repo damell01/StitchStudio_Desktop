@@ -272,18 +272,26 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     // Avoid global hue merging: it destroys intentional shading in character artwork.
         // Preserve clean outlines by preferring logo tracing; retry complex artwork with fewer anchors.
     let prepared=Image{raster};
-    match trace(&prepared,&options) {
-        Ok(t) if t.shapes+t.lines>0=>Ok(t),
-        Ok(_)=>Err(anyhow!("No stitchable regions found. Try a larger finished width or lower cleanup.")),
-        Err(first)=>{
-            let mut fallback=options.clone();
-            fallback.detail=fallback.detail.min(40.0);
-            fallback.speckle_mm=fallback.speckle_mm.max(1.5);
-            if fallback.colors==0 {fallback.colors=6;}
-            let t=trace(&prepared,&fallback).map_err(|second|anyhow!("Automatic trace failed: {first}; simplified retry: {second}"))?;
-            if t.shapes+t.lines==0{return Err(anyhow!("No stitchable regions after simplified retry"));}Ok(t)
+    let mut failures = Vec::new();
+    // Try the requested fidelity first, then progressively simplify.
+    // Empty successful traces are also retried, rather than ending import.
+    for attempt in 0..3 {
+        let mut candidate = options.clone();
+        if attempt == 1 {
+            candidate.detail = candidate.detail.min(50.0);
+            candidate.speckle_mm = candidate.speckle_mm.max(0.8);
+        } else if attempt == 2 {
+            candidate.detail = candidate.detail.min(35.0);
+            candidate.speckle_mm = candidate.speckle_mm.max(1.5);
+            if candidate.colors == 0 { candidate.colors = 6; }
+        }
+        match trace(&prepared, &candidate) {
+            Ok(t) if t.shapes + t.lines > 0 => return Ok(t),
+            Ok(_) => failures.push("No stitchable regions".to_string()),
+            Err(e) => failures.push(e.to_string()),
         }
     }
+    Err(anyhow!("Automatic digitizing failed after three tracing attempts: {}. Try a larger finished width or disable background removal.", failures.join("; ")))
 }
 
 /// Trace raster artwork into editable geometry with automatic stitch parameters.
