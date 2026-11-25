@@ -1386,6 +1386,31 @@ pub fn effective_geometry(shapes: &[Shape], order: &[usize], opt: &PlanOptions) 
 /// depends on) for every shape whose outline, and the outlines and stitch
 /// types of what's sewn over it, haven't changed. Moving one object redoes
 /// only the objects it overlaps, not the whole design.
+// Coverage for subtracting underlying stitches must mean opaque sewn
+// coverage, not just the extent of an object. Open decorative patterns and
+// contour spirals can show the fabric between their stitches.
+fn occlusion_coverage(shape: &Shape, opt: &PlanOptions) -> Option<(Vec<Polyline>, FillRule)> {
+    let kind = shape.params.kind.unwrap_or(Kind::Fill);
+    match kind {
+        Kind::Fill => {
+            // Very open fills intentionally expose the underlying material.
+            if shape.params.fill_spacing(&opt.fabric) > 0.65 { return None; }
+        }
+        Kind::Contour => {
+            // Keep underlying coverage for decorative contour patterns.
+            return None;
+        }
+        Kind::Satin => {
+            // Multicolor satin strips and unusually open satin are not
+            // reliable masks for removing the supporting fill underneath.
+            if shape.params.colors.is_some() { return None; }
+        }
+        Kind::Applique => {} // The placed fabric itself provides coverage.
+        _ => return None,
+    }
+    coverage(shape)
+}
+
 fn effective_geometry_cached(
     shapes: &[Shape],
     order: &[usize],
@@ -1420,9 +1445,10 @@ fn effective_geometry_cached(
             k.hash(&mut h);
             let kind = s.params.kind.unwrap_or(Kind::Fill);
             kind.hash(&mut h);
-            if kind == Kind::Satin {
-                format!("{:?}", s.params).hash(&mut h);
-            }
+            // Include density and decorative settings in the cache key: a
+            // change from solid fill to sparse fill must restore the base.
+            format!("{:?}", s.params).hash(&mut h);
+            s.params.fill_spacing(&opt.fabric).to_bits().hash(&mut h);
             h.finish()
         })
         .collect();
@@ -1473,7 +1499,7 @@ fn effective_geometry_cached(
         let mut above: Vec<Vec<Polyline>> = Vec::new();
         for &j in &on_top {
             let c = cover[j].get_or_insert_with(|| {
-                coverage(&shapes[j]).map(|(r, f)| {
+                occlusion_coverage(&shapes[j], opt).map(|(r, f)| {
                     let rings = boolean::normalize(&r, f);
                     let mut bounds = Bounds::empty();
                     rings.iter().flatten().for_each(|&p| bounds.add(p));
@@ -2691,6 +2717,23 @@ mod tests {
             .count();
         assert_eq!(edge_hits, 80, "40 rows × 2 ends");
         assert_eq!(d.per_shape, vec![pts.len()]);
+    }
+
+    #[test]
+    fn sparse_top_fill_preserves_underlying_coverage_even_with_warm_cache() {
+        let base = shape(fill(sq(0.0, 0.0, 200.0)), Kind::Fill, [0, 0, 80]);
+        let mut top = shape(fill(sq(50.0, 50.0, 100.0)), Kind::Fill, [255, 200, 0]);
+        let opt = PlanOptions::default();
+        let mut cache = PlanCache::default();
+        let dense = plan_cached("t", &[base.clone(), top.clone()], &opt, &mut cache);
+        top.params.spacing = Some(1.2);
+        let sparse = plan_cached("t", &[base.clone(), top.clone()], &opt, &mut cache);
+        let fresh = plan("t", &[base, top], &opt);
+        assert!(same_stitches(&sparse, &fresh));
+        let hidden = |d: &Design| d.blocks[0].runs.iter().flat_map(|r| &r.pts)
+            .filter(|p| p.x > 60.0 && p.x < 140.0 && p.y > 60.0 && p.y < 140.0).count();
+        assert_eq!(hidden(&dense), 0);
+        assert!(hidden(&sparse) > 30);
     }
 
     #[test]
