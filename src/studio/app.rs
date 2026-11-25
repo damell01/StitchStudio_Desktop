@@ -1058,6 +1058,27 @@ impl Studio {
                     .inner_margin(egui::Margin::symmetric(10, 0)),
             )
             .show(ui, |ui| self.titlebar(ui));
+        let home_id = egui::Id::new("studio-home-page");
+        let mut home = ctx.data(|d| d.get_temp::<bool>(home_id))
+            .unwrap_or(self.doc.shapes.is_empty());
+        egui::Panel::top("studio-navigation").exact_size(42.0).resizable(false)
+            .frame(egui::Frame::new().fill(pal.toolbar).inner_margin(egui::Margin::symmetric(12, 4)))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Stitch Studio").strong().color(pal.accent));
+                    ui.separator();
+                    if ui.selectable_label(home, "Home").clicked() { home = true; }
+                    if ui.selectable_label(!home, "Studio").clicked() { home = false; }
+                });
+            });
+        ctx.data_mut(|d| d.insert_temp(home_id, home));
+        if home {
+            egui::CentralPanel::no_frame().show(ui, |ui| {
+                egui::ScrollArea::vertical().id_salt("studio-home-scroll").show(ui, |ui| {
+                    self.welcome_panel(ui);
+                });
+            });
+        } else {
         egui::Panel::top("workspace-toolbar")
             .exact_size(if ui.available_width() < 1500.0 { 84.0 } else { 48.0 })
             .resizable(false)
@@ -1124,14 +1145,9 @@ impl Studio {
             .frame(egui::Frame::new().fill(pal.dock))
             .show(ui, |ui| self.doc_tabs(ui));
         egui::CentralPanel::no_frame().show(ui, |ui| {
-            if self.doc.shapes.is_empty() && self.tool == Tool::Select {
-                let height = (ui.available_height() * 0.45).clamp(80.0, 240.0);
-                egui::ScrollArea::vertical().id_salt("welcome-actions-scroll")
-                    .max_height(height).auto_shrink([false, true])
-                    .show(ui, |ui| self.welcome_panel(ui));
-            }
             self.canvas(ui);
         });
+        }
         crate::profile::mark("canvas");
         if !focus {
             self.floating_panels(&ctx);
