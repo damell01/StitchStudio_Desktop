@@ -40,6 +40,18 @@ impl Studio {
                 ui.add_space(6.0);
             }
             ui.separator();
+            ui.label(egui::RichText::new("Recent projects").size(16.0).strong().color(p.text));
+            let recent = Self::recent_projects();
+            if recent.is_empty() {
+                caption(ui, "Your opened and saved designs will appear here.");
+            }
+            for path in recent.iter().take(8) {
+                let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
+                if ui.button(name.as_ref()).on_hover_text(path.display().to_string()).clicked() {
+                    self.load(path);
+                }
+            }
+            ui.separator();
             ui.horizontal_wrapped(|ui| {
                 caption(ui, "Artwork → Threads → Inspect → Export");
                 if ui.button("Quick tour").clicked() {
