@@ -15,7 +15,7 @@ return <><p>Manage your local font collection. Import an entire extracted bundle
 <div className="font-list">{page.items.map(row=><article key={row.id}>
   {row.asset?<Type size={21}/>:<span style={{fontFamily:row.name,fontSize:24}}>Aa</span>}
   <div><strong>{row.name}</strong><small>{row.asset?`${row.format.toUpperCase()} · ${Math.ceil(row.bytes/1024)} KB`:'System font'}</small></div>
-  <small>{row.format==='bx'?'BX reader pending':row.asset?'Install in OS to use':'Available for lettering'}</small>
+  <span className="font-sample" style={row.asset?undefined:{fontFamily:row.name}}>{row.asset?row.format.toUpperCase():"The quick brown fox"}</span><small>{row.format==='bx'?'BX reader pending':row.asset?'Install in OS to use':'Available for lettering'}</small>
   <button aria-label={'Favorite '+row.name} aria-pressed={favorites.includes(row.id)} onClick={()=>favorite(row.id)}><Star size={16} fill={favorites.includes(row.id)?'currentColor':'none'}/></button>
   {row.asset&&<button disabled={busy} aria-label={'Remove '+row.name} onClick={()=>{if(row.asset)void remove(row.asset)}}><Trash2 size={16}/></button>}
 </article>)}</div><ListNavigation {...page}/><p className="muted">BX files are collected locally but cannot yet be rendered or stitched. Extract ZIP bundles before importing. Identical files with the same name are skipped; conflicting names are preserved.</p></>}
