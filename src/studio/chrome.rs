@@ -45,12 +45,23 @@ impl Studio {
             if recent.is_empty() {
                 caption(ui, "Your opened and saved designs will appear here.");
             }
-            for path in recent.iter().take(8) {
-                let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy();
-                if ui.button(name.as_ref()).on_hover_text(path.display().to_string()).clicked() {
-                    self.load(path);
+            ui.horizontal_wrapped(|ui| {
+                let width = ((ui.available_width() - 24.0) / 3.0).clamp(130.0, 220.0);
+                for path in recent.iter().take(8) {
+                    let name = path.file_stem().unwrap_or(path.as_os_str()).to_string_lossy();
+                    let ext = path.extension().map(|e| e.to_string_lossy().to_uppercase()).unwrap_or_default();
+                    egui::Frame::new().fill(ui.visuals().widgets.inactive.bg_fill)
+                        .corner_radius(8.0).inner_margin(egui::Margin::same(8))
+                        .show(ui, |ui| {
+                            ui.allocate_ui_with_layout(Vec2::new(width, 60.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                                ui.add(egui::Label::new(egui::RichText::new(name.as_ref()).strong()).truncate())
+                                    .on_hover_text(path.display().to_string());
+                                caption(ui, format!("{ext} design"));
+                                if ui.button("Open design").clicked() { self.load(path); }
+                            });
+                        });
                 }
-            }
+            });
             ui.separator();
             ui.horizontal_wrapped(|ui| {
                 caption(ui, "Artwork → Threads → Inspect → Export");
