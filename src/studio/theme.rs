@@ -1,5 +1,5 @@
 //! Modified for Stitch Studio: a macOS-flavoured look for the studio: system font, light and dark
-//! palettes that follow the system appearance, forest and sage accents, rounded controls,
+//! palettes that follow the system appearance, lavender and purple accents, rounded controls,
 //! and a few helpers for Mac-style forms (right-aligned labels, grouped
 //! sections, segmented controls).
 
@@ -41,19 +41,19 @@ pub struct Pal {
 
 pub const LIGHT: Pal = Pal {
     dark: false,
-    toolbar: Color32::from_rgb(247, 248, 245),
+    toolbar: Color32::from_rgb(247, 243, 252),
     dock: Color32::from_rgb(255, 255, 255),
-    header: Color32::from_rgb(229, 237, 230),
-    desk: Color32::from_rgb(247, 248, 245),
-    separator: Color32::from_rgb(221, 228, 222),
-    text: Color32::from_rgb(32, 44, 38),
-    secondary: Color32::from_rgb(105, 118, 110),
-    tertiary: Color32::from_rgb(125, 139, 129),
-    accent: Color32::from_rgb(35, 69, 54),
+    header: Color32::from_rgb(235, 224, 250),
+    desk: Color32::from_rgb(247, 243, 252),
+    separator: Color32::from_rgb(220, 207, 239),
+    text: Color32::from_rgb(31, 23, 54),
+    secondary: Color32::from_rgb(91, 77, 117),
+    tertiary: Color32::from_rgb(113, 99, 139),
+    accent: Color32::from_rgb(112, 58, 180),
     hover: Color32::from_rgba_premultiplied(0, 0, 0, 13),
     pressed: Color32::from_rgba_premultiplied(0, 0, 0, 26),
     control: Color32::WHITE,
-    control_border: Color32::from_rgb(221, 228, 222),
+    control_border: Color32::from_rgb(220, 207, 239),
     warning: Color32::from_rgb(255, 149, 0),
     error: Color32::from_rgb(255, 59, 48),
     hud: Color32::from_rgba_premultiplied(30, 30, 30, 215),
@@ -61,19 +61,19 @@ pub const LIGHT: Pal = Pal {
 
 pub const DARK: Pal = Pal {
     dark: true,
-    toolbar: Color32::from_rgb(36, 45, 39),
-    dock: Color32::from_rgb(36, 45, 39),
-    header: Color32::from_rgb(36, 45, 39),
-    desk: Color32::from_rgb(23, 30, 26),
-    separator: Color32::from_rgb(54, 70, 60),
-    text: Color32::from_rgb(232, 238, 233),
-    secondary: Color32::from_rgb(170, 190, 176),
-    tertiary: Color32::from_rgb(115, 151, 123),
-    accent: Color32::from_rgb(154, 188, 159),
+    toolbar: Color32::from_rgb(39, 31, 53),
+    dock: Color32::from_rgb(39, 31, 53),
+    header: Color32::from_rgb(39, 31, 53),
+    desk: Color32::from_rgb(25, 20, 37),
+    separator: Color32::from_rgb(67, 53, 86),
+    text: Color32::from_rgb(240, 233, 250),
+    secondary: Color32::from_rgb(194, 180, 215),
+    tertiary: Color32::from_rgb(160, 143, 186),
+    accent: Color32::from_rgb(192, 151, 249),
     hover: Color32::from_rgba_premultiplied(20, 28, 22, 32),
     pressed: Color32::from_rgba_premultiplied(28, 28, 28, 28),
-    control: Color32::from_rgb(43, 56, 47),
-    control_border: Color32::from_rgb(65, 84, 71),
+    control: Color32::from_rgb(49, 39, 66),
+    control_border: Color32::from_rgb(86, 67, 110),
     warning: Color32::from_rgb(255, 159, 10),
     error: Color32::from_rgb(255, 69, 58),
     hud: Color32::from_rgba_premultiplied(20, 20, 22, 225),
@@ -152,14 +152,14 @@ fn visuals(p: &Pal) -> Visuals {
     w.inactive.fg_stroke = Stroke::new(1.0, p.text);
     w.inactive.corner_radius = r;
     let hover_bg = if p.dark {
-        Color32::from_rgb(49, 65, 54)
+        Color32::from_rgb(59, 44, 80)
     } else {
-        Color32::from_rgb(237, 243, 238)
+        Color32::from_rgb(244, 236, 253)
     };
     let active_bg = if p.dark {
-        Color32::from_rgb(59, 79, 65)
+        Color32::from_rgb(73, 53, 101)
     } else {
-        Color32::from_rgb(229, 237, 230)
+        Color32::from_rgb(235, 224, 250)
     };
     w.hovered.bg_fill = hover_bg;
     w.hovered.weak_bg_fill = hover_bg;
@@ -175,11 +175,11 @@ fn visuals(p: &Pal) -> Visuals {
     w.active.expansion = 0.0;
     w.open = w.hovered;
     v.selection.bg_fill = p.accent;
-    v.selection.stroke = Stroke::new(1.0, if p.dark { Color32::from_rgb(23, 30, 26) } else { Color32::WHITE });
+    v.selection.stroke = Stroke::new(1.0, if p.dark { Color32::from_rgb(25, 20, 37) } else { Color32::WHITE });
     v.hyperlink_color = p.accent;
     v.faint_bg_color = p.header;
     v.extreme_bg_color = if p.dark {
-        Color32::from_rgb(23, 30, 26)
+        Color32::from_rgb(25, 20, 37)
     } else {
         Color32::WHITE
     };
@@ -188,16 +188,16 @@ fn visuals(p: &Pal) -> Visuals {
     v.error_fg_color = p.error;
     v.panel_fill = p.dock;
     v.window_fill = if p.dark {
-        Color32::from_rgb(36, 45, 39)
+        Color32::from_rgb(39, 31, 53)
     } else {
         Color32::from_rgb(255, 255, 255)
     };
     v.window_stroke = Stroke::new(
         1.0,
         if p.dark {
-            Color32::from_rgb(54, 70, 60)
+            Color32::from_rgb(67, 53, 86)
         } else {
-            Color32::from_rgb(221, 228, 222)
+            Color32::from_rgb(220, 207, 239)
         },
     );
     v.window_corner_radius = CornerRadius::same(14);
@@ -433,9 +433,9 @@ pub fn icon_button(
     let hover = ui.ctx().animate_bool(resp.id.with("hover-motion"), enabled && resp.hovered());
     let bg = if selected {
         Some(if p.dark {
-            Color32::from_rgb(54, 70, 60)
+            Color32::from_rgb(67, 53, 86)
         } else {
-            Color32::from_rgb(229, 237, 230)
+            Color32::from_rgb(235, 224, 250)
         })
     } else if resp.is_pointer_button_down_on() {
         Some(p.pressed)
@@ -482,9 +482,9 @@ pub fn segmented<T: PartialEq + Copy>(
     let total: f32 = widths.iter().sum::<f32>() + 4.0;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(total, 24.0), Sense::hover());
     let track = if p.dark {
-        Color32::from_rgb(23, 30, 26)
+        Color32::from_rgb(25, 20, 37)
     } else {
-        Color32::from_rgb(229, 237, 230)
+        Color32::from_rgb(235, 224, 250)
     };
     ui.painter().rect_filled(rect, 10.0, track);
     let mut x = rect.left() + 2.0;
