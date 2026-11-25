@@ -58,6 +58,7 @@ vectorcraft-trace = { path = "vendor/vectorcraft-trace" }
 kurbo = "0.13"
 
 tiny_http = { version = "0.12", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
 ocrs = { version = "=0.11.0", optional = true }
 rten = { version = "0.22", optional = true }
 
@@ -73,7 +74,8 @@ objc2-foundation = { version = "0.3", optional = true, default-features = false,
 
 [features]
 default = []
-gui = ["dep:ocrs", "dep:rten", "dep:eframe", "dep:rfd", "dep:tiny_http", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
+ocr = ["dep:ocrs", "dep:rten", "dep:serde"]
+gui = ["ocr", "dep:eframe", "dep:rfd", "dep:tiny_http", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
 menu-check = ["gui", "dep:muda"]
 ble = ["dep:btleplug", "dep:futures", "dep:tokio", "dep:uuid", "dep:libdbus-sys"]
 
