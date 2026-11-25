@@ -1070,7 +1070,23 @@ fn geometry_bounds(g: &Geometry) -> Bounds {
 pub fn auto_stitch_types(shapes:&mut [Shape]){
  for s in shapes {
   if s.params.kind.is_some(){continue}
-  if let Geometry::Fill{rings,..}=&s.geometry{
+  if let Geometry::Fill{rings,rule}=&s.geometry{
+   // Closed narrow bands (e.g. cartoon outlines and letter counters) can
+   // use satin only when the rail solver confirms a usable column.
+   if rings.len()==2 {
+    let components=satin::components(rings,*rule);
+    if components.len()==1 {
+     if let Ok(rails)=satin::auto_rails(&components[0]) {
+      let pairs=satin::pairs(&rails,10.0);
+      if !pairs.is_empty() && pairs.iter().all(|(a,b)| {
+       let w=a.dist(*b); w.is_finite() && (6.0..=45.0).contains(&w)
+      }) {
+       s.params.kind=Some(Kind::Satin);
+      }
+     }
+    }
+    continue
+   }
    if rings.len()!=1{continue}
    // Estimate oriented dimensions using principal axes, including diagonal lettering.
    let ring=&rings[0];if ring.len()<3{continue}
