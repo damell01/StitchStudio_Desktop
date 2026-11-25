@@ -75,13 +75,19 @@ const designBounds=useMemo(()=>{
   for(const [x,y] of points){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
   return {left,top,width:right-left,height:bottom-top};
 },[points]);
-const outside=points.some(point=>Math.abs(point[0])>width/2||Math.abs(point[1])>height/2);
+const outside=!!designBounds&&(designBounds.left < -width/2||designBounds.left+designBounds.width>width/2||designBounds.top < -height/2||designBounds.top+designBounds.height>height/2);
 const stitchIndex=Math.min(points.length,playhead??points.length);
-let remaining=stitchIndex;
+const renderedRuns=useMemo(()=>{
+  let remaining=stitchIndex;
+  return (plan?.blocks??[]).map(block=>block.runs.map(run=>{
+    const count=Math.max(0,Math.min(run.length,remaining));remaining-=count;
+    return count>1?run.slice(0,count).map(p=>p.join(',')).join(' '):'';
+  }));
+},[plan,stitchIndex]);
 useEffect(()=>{
   if(!playing)return;
   const interval=window.setInterval(()=>{
-    setPlayhead(previous=>Math.min(points.length,(previous??0)+playbackSpeed));
+    setPlayhead(previous=>Math.min(points.length,(previous??0)+Math.max(1,Math.round(10*playbackSpeed))));
   },100);
   return()=>window.clearInterval(interval);
 },[playing,playbackSpeed,points.length]);
@@ -382,7 +388,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
  onPointerCancel={event=>finishCanvasGesture(event,false)}
  onLostPointerCapture={event=>finishCanvasGesture(event,false)} viewBox={[pan[0]-width*.6*100/zoom,pan[1]-height*.6*100/zoom,width*1.2*100/zoom,height*1.2*100/zoom].join(' ')} className="design-canvas" onWheel={e=>{const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const anchor=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());const next=Math.max(25,Math.min(400,zoom*(e.deltaY<0?1.1:1/1.1)));if(next===zoom)return;const ratio=zoom/next;setPan([anchor.x+(pan[0]-anchor.x)*ratio,anchor.y+(pan[1]-anchor.y)*ratio]);setZoom(next)}} style={{width:'100%',background:'var(--lav-bg,var(--canvas,#edf1ed))'}}><defs><pattern id="hoop-fabric" width="1.4" height="1.4" patternUnits="userSpaceOnUse"><path d="M0 .2H1.4 M.2 0V1.4" fill="none" stroke="#967a68" strokeWidth=".075" opacity=".18"/></pattern><pattern id="hoop-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#d8cce6" strokeWidth=".75" vectorEffect="non-scaling-stroke"/></pattern></defs><rect x={-width/2} y={-height/2} width={width} height={height} fill="#fffdf5" stroke="#aa90b1" strokeWidth="1.6" rx={2} vectorEffect="non-scaling-stroke" className="studio-hoop"/><rect x={-width/2} y={-height/2} width={width} height={height} fill="url(#hoop-fabric)" rx={2}/><rect x={-width/2} y={-height/2} width={width} height={height} fill={grid?"url(#hoop-grid)":"none"}/>{grid&&<g stroke="#896d98" opacity=".6" pointerEvents="none">
 <path d={`M ${-width/2} 0 H ${width/2} M 0 ${-height/2} V ${height/2}`} strokeDasharray="4 5" strokeWidth=".6" vectorEffect="non-scaling-stroke"/>
-</g>}<g transform={`translate(${designOffset.join(' ')})`}>{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=r.slice(0,Math.max(0,remaining));remaining-=visible.length;return <polyline key={j} points={visible.map(p=>p.join(',')).join(' ')} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .42 : 1} className={realistic?'studio-thread-path':undefined}/>})}</g>)}{canvasMode==='design'&&designBounds&&<rect
+</g>}<g transform={`translate(${designOffset.join(' ')})`}>{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=renderedRuns[i]?.[j];return visible?<polyline key={j} points={visible} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .42 : 1} className={realistic?'studio-thread-path':undefined}/>:null})}</g>)}{canvasMode==='design'&&designBounds&&<rect
   data-design-group x={designBounds.left-2} y={designBounds.top-2}
   width={designBounds.width+4} height={designBounds.height+4} rx={1}
   fill="transparent" pointerEvents="all" stroke="#8543aa" strokeWidth="1.5"
@@ -450,7 +456,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button title="Next stitch" aria-label="Next stitch" disabled={stitchIndex===points.length} onClick={()=>stepStitch(1)}><StepForward size={15}/></button>
   <label><span className="screen-reader-only">Planned stitch position</span><input type="range" min="0" max={points.length} disabled={!points.length} value={stitchIndex} onChange={e=>{setPlaying(false);setPlayhead(Number(e.target.value))}}/></label>
   <select aria-label="Playback speed" value={playbackSpeed} onChange={event=>setPlaybackSpeed(Number(event.target.value))}>
-    <option value={1}>1×</option><option value={4}>4×</option><option value={16}>16×</option>
+    <option value={1}>1×</option><option value={4}>4×</option><option value={16}>16×</option><option value={64}>64×</option>
   </select>
   <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>
 </div>
@@ -488,6 +494,6 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </article></div><footer className="workspace-status">
   <span>{width>0&&height>0?`Hoop ${(width/25.4).toFixed(2)} × ${(height/25.4).toFixed(2)} in`:'Set a hoop size'}</span>
   {plan&&<span>{plan.stitches.toLocaleString()} points <span aria-hidden="true">·</span> {plan.blocks.length} color blocks <span aria-hidden="true">·</span> {plan.trims} trims</span>}
-  <span>{outside?'Outside hoop':recoveryStatus}</span>
+  <span className="workspace-fit-status" data-outside={outside}>{outside?'Outside hoop':plan?'Fits hoop · '+recoveryStatus:recoveryStatus}</span>
 </footer>
 {exportOpen&&plan&&<ExportCenter assignments={threadAssignments} plan={plan} width={width} height={height} format={format} setFormat={setFormat} machine={machines.find(m=>m.id===machine)?.name||""} blocked={outside||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} busy={busy} onExport={save} onClose={()=>setExportOpen(false)}/>}{message&&<p role="status">{message}</p>}</>}
