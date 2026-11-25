@@ -74,6 +74,49 @@ fn audit_stitches(state: tauri::State<'_, Mutex<Workspace>>) -> Result<StitchAud
     let workspace = state.lock().map_err(|err| err.to_string())?;
     Ok(measure_stitches(workspace.current.as_ref().ok_or("Open artwork first")?))
 }
+// Replan the editable document, never flatten the artwork. Keep the same
+// layer order and explicit stitch settings; optimize only eligible solid fills.
+fn optimized_density(source:&zigzag::document::Document, original:&Design)->Option<(zigzag::document::Document,Design)>{
+ if source.settings.fabric!="standard" || original.stitch_count()==0 || original.stitch_count()>100_000{return None}
+ let mut next=source.clone();let mut changed=false;
+ for shape in &mut next.shapes {
+  use zigzag::params::Kind;
+  if shape.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill || shape.params.spacing.is_some(){continue}
+  if let zigzag::svg::Geometry::Fill{rings,rule}=&shape.geometry{
+   let comps=zigzag::stitch::satin::components(rings,*rule);
+   if comps.len()!=1||comps[0].len()!=1{continue}
+   let area=zigzag::boolean::ring_area(&comps[0][0]).abs();
+   let bounds=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
+   if area<20_000.0||bounds.width().min(bounds.height())<80.0{continue}
+   let spacing=shape.params.fill_spacing(zigzag::params::Fabric::standard()).max(0.38);
+   if spacing>=0.40{continue}
+   shape.params.spacing=Some((spacing+0.02).min(0.40));changed=true;
+  }
+ }
+ if !changed{return None}
+ let candidate=next.plan();let before=measure_stitches(original);let after=measure_stitches(&candidate);
+ let a=original.bounds();let b=candidate.bounds();
+ if candidate.stitch_count()>=original.stitch_count() || candidate.stitch_count()<original.stitch_count()*9/10
+ || candidate.trim_count()>original.trim_count() || after.short>before.short || after.long>before.long || after.zero>before.zero
+ || a.min.dist(b.min)>5.0 || a.max.dist(b.max)>5.0
+ || !original.blocks.iter().map(|b|b.color).eq(candidate.blocks.iter().map(|b|b.color))
+ || original.per_shape.len()!=candidate.per_shape.len()
+ || !original.per_shape.iter().zip(&candidate.per_shape).all(|(&a,&b)|a==0||b>0)
+ {return None}
+ Some((next,candidate))
+}
+#[tauri::command]
+async fn optimize_editable_design(app:tauri::AppHandle)->Result<Preview,String>{
+ use tauri::Manager;
+ tauri::async_runtime::spawn_blocking(move||{
+  let state=app.state::<Mutex<Workspace>>();
+  let mut w=state.lock().map_err(|e|e.to_string())?;
+  let source=w.source.as_ref().ok_or("Open editable artwork to optimize density")?;
+  let original=w.current.as_ref().ok_or("Open artwork first")?;
+  let (source,design)=optimized_density(source,original).ok_or("No conservative density improvement passed the checks. Original design retained.")?;
+  let result=preview(&design);w.checkpoint();w.source=Some(source);w.current=Some(design);Ok(result)
+ }).await.map_err(|e|e.to_string())?
+}
 #[tauri::command]
 fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  let mut w=state.lock().map_err(|e|e.to_string())?;
@@ -1159,44 +1202,11 @@ async fn digitize_artwork(
                 }
             }
         }
-        // Conservative automatic density optimization for generated raster
-        // artwork only. Keep explicit stitch settings, small details, satin,
-        // specialty stitches and manually imported needle paths unchanged.
         let mut optimization = None;
-        if mime != "image/svg+xml" && fabric == "standard" && design.stitch_count() <= 100_000 {
-            let mut alternate = document.clone();
-            let mut changed = 0usize;
-            for shape in &mut alternate.shapes {
-                use zigzag::params::Kind;
-                if shape.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill || shape.params.spacing.is_some(){continue}
-                if let zigzag::svg::Geometry::Fill{rings,rule}=&shape.geometry {
-                    let comps=zigzag::stitch::satin::components(rings,*rule);
-                    if comps.len()!=1 || comps[0].len()!=1 {continue}
-                    let area=zigzag::boolean::ring_area(&comps[0][0]).abs();
-                    let bounds=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
-                    if area<20_000.0 || bounds.width().min(bounds.height())<80.0 {continue}
-                    let spacing=shape.params.fill_spacing(zigzag::params::Fabric::standard()).max(0.38);
-                    shape.params.spacing=Some((spacing+0.02).min(0.40).max(spacing));
-                    changed+=1;
-                }
-            }
-            if changed>0 {
-                let candidate=alternate.plan();
-                let before=measure_stitches(&design);
-                let after=measure_stitches(&candidate);
-                let old_bounds=design.bounds();let new_bounds=candidate.bounds();
-                let same_extent=(old_bounds.min.dist(new_bounds.min)<=5.0)&&(old_bounds.max.dist(new_bounds.max)<=5.0);
-                let same_colors=design.blocks.iter().map(|b|b.color).eq(candidate.blocks.iter().map(|b|b.color));
-                let all_preserved=design.per_shape.iter().zip(&candidate.per_shape).all(|(&a,&b)|a==0||b>0);
-                if same_extent && same_colors && all_preserved
-                    && candidate.stitch_count()>=design.stitch_count()*9/10
-                    && candidate.stitch_count()<design.stitch_count()
-                    && candidate.trim_count()<=design.trim_count()
-                    && after.long<=before.long && after.zero<=before.zero
-                    && after.short<=before.short {
-                    optimization=Some([design.stitch_count(),candidate.stitch_count()]);
-                    document=alternate;design=candidate;
-                }
+        if mime != "image/svg+xml" {
+            if let Some((next,candidate))=optimized_density(&document,&design){
+                optimization=Some([design.stitch_count(),candidate.stitch_count()]);
+                document=next;design=candidate;
             }
         }
         let count = design.stitch_count();
@@ -1536,4 +1546,4 @@ async fn check_beta_update(app:tauri::AppHandle)->Result<Option<String>,String>{
  let update=app.updater().map_err(|e|e.to_string())?.check().await.map_err(|e|e.to_string())?;
  Ok(update.map(|u|u.version))
 }
-fn main(){tauri::Builder::default().plugin(tauri_plugin_updater::Builder::new().build()).manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().plugin(tauri_plugin_updater::Builder::new().build()).manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
