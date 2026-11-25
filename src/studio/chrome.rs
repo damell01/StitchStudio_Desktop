@@ -138,6 +138,19 @@ impl Studio {
                     return;
                 }
                 ui.set_min_width(190.0);
+                let recent = ui.ctx().data(|d| d.get_temp::<Vec<Action>>(egui::Id::new("recent-quick-actions")).unwrap_or_default());
+                if !recent.is_empty() {
+                    caption(ui, "Recent actions");
+                    for action in recent {
+                        if let Some((_, label, _)) = registry.iter().find(|(a, _, _)| *a == action) {
+                            if ui.add_enabled(self.action_enabled(action), egui::Button::new(*label)).clicked() {
+                                self.run_action(action);
+                                ui.close();
+                            }
+                        }
+                    }
+                    ui.separator();
+                }
                 for (heading, actions) in [
                     ("Position", &[("Center in hoop", Action::CenterInHoop), ("Fit to hoop", Action::FitToHoop), ("Fit canvas view", Action::ZoomFit)][..]),
                     ("Edit selection", &[("Duplicate", Action::Duplicate), ("Flip horizontal", Action::FlipH), ("Flip vertical", Action::FlipV), ("Rotate 90°", Action::RotateRight)][..]),
