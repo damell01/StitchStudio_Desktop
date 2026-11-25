@@ -670,18 +670,54 @@ impl Studio {
         });
     }
 
+    fn sewing_speed(ui: &egui::Ui) -> u32 {
+        let id = egui::Id::new("production-spm");
+        let speed = ui.data(|d| d.get_temp::<u32>(id)).unwrap_or_else(|| {
+            crate::dock::config_file("sewing-speed.json")
+                .and_then(|p| std::fs::read(p).ok())
+                .and_then(|b| serde_json::from_slice::<u32>(&b).ok())
+                .unwrap_or(SPM as u32)
+        }).clamp(100, 1500);
+        ui.data_mut(|d| d.insert_temp(id, speed));
+        speed
+    }
+
+    fn sewing_time_menu(&self, ui: &mut egui::Ui) {
+        let mut speed = Self::sewing_speed(ui);
+        let count = self.design.stitch_count();
+        let minutes = count as f64 / speed as f64;
+        let response = ui.small_button(format!("~{minutes:.1} min"));
+        egui::Popup::menu(&response).show(|ui| {
+            ui.label("Estimated sewing time");
+            let before = speed;
+            ui.add(egui::DragValue::new(&mut speed).range(100..=1500).speed(10).suffix(" spm"));
+            ui.horizontal_wrapped(|ui| {
+                for preset in [400, 600, 800, 1000, 1200] {
+                    if ui.small_button(preset.to_string()).clicked() { speed = preset; }
+                }
+            });
+            if speed != before {
+                ui.data_mut(|d| d.insert_temp(egui::Id::new("production-spm"), speed));
+                if let Some(p) = crate::dock::config_file("sewing-speed.json") {
+                    if let Ok(bytes) = serde_json::to_vec(&speed) { let _ = std::fs::write(p, bytes); }
+                }
+            }
+            caption(ui, format!("{} stitches · {:.1} min at {} spm", fmt_int(count), count as f64 / speed as f64, speed));
+            caption(ui, "Needle time only; excludes trims, thread changes, acceleration and stops.");
+            if self.planner.pending { caption(ui, "Based on the previous stitch plan."); }
+        });
+    }
+
     pub fn status_bar(&mut self, ui: &mut egui::Ui) {
         let p = pal_ui(ui);
-        let total = self.design.stitch_count();
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             let b = self.design_bounds();
             let stats = format!(
-                "{} · {} color blocks · {} trims · ~{:.0} min",
+                "{} · {} color blocks · {} trims",
                 crate::units::fmt_size(b.width(), b.height()),
                 self.design.blocks.len(),
-                self.design.trim_count(),
-                (total as f64 / SPM).ceil()
+                self.design.trim_count()
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.issues_button(ui);
@@ -689,6 +725,7 @@ impl Studio {
                 self.mcp_chip(ui);
                 ui.add_space(4.0);
                 self.units_picker(ui);
+                self.sewing_time_menu(ui);
                 if self.planner.pending {
                     // A big design re-planning on the worker: the stitches
                     // shown are the last plan's until it's done.
@@ -701,7 +738,7 @@ impl Studio {
                 }
                 ui.label(egui::RichText::new(stats).size(11.0).color(p.secondary))
                     .on_hover_text(format!(
-                        "Estimate at {SPM} stitches/min. Planned in {:.1} ms.",
+                        "Planned in {:.1} ms.",
                         self.plan_ms
                     ));
                 ui.add_space(12.0);
