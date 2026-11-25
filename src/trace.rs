@@ -417,6 +417,17 @@ pub fn digitize_raster(
         }
         document.shapes = merged;
     }
+    // Small neutral ink shapes in text-like rows retain their individual
+    // contours. Detect geometry rather than guessing the actual characters.
+    if options.remove_background && trace.colors.len()==1 && trace.colors[0].iter().all(|&v|v<55) {
+        let bounds:Vec<_>=document.shapes.iter().map(|s|crate::svg::shapes_bounds(std::slice::from_ref(s))).collect();
+        let candidates:Vec<_>=bounds.iter().enumerate().filter(|(_,b)|!b.is_empty()&&b.height()>=8.0&&b.height()<=55.0&&b.width()>=2.0&&b.width()<=65.0).map(|(i,_)|i).collect();
+        for &i in &candidates {
+            let b=&bounds[i];
+            let peers=candidates.iter().filter(|&&j|j!=i && (bounds[j].max.y-b.max.y).abs()<=b.height()*0.28 && (bounds[j].height()-b.height()).abs()<=b.height()*0.35 && (bounds[j].center().x-b.center().x).abs()<=b.height()*8.0).count();
+            if peers>=3 {document.shapes[i].groups.push("tl-small-ink-detail".into());}
+        }
+    }
     crate::design::auto_stitch_types(&mut document.shapes);
     document.settings.hat_order = document.shapes.len() <= 1000;
     Ok(document)
