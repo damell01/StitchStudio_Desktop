@@ -1768,3 +1768,34 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 @keyframes simplify-spin{to{transform:rotate(360deg)}}
 @keyframes simplify-progress{from{transform:translateX(-100%)}to{transform:translateX(390%)}}
 @media(prefers-reduced-motion:reduce){.simplify-spinner,.simplify-progress span{animation:none}}
+
+/* Job costing and customer quote workspace */
+.pricing-calculator{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr);align-items:start;gap:16px;min-width:0}
+.pricing-inputs{display:grid;gap:12px;min-width:0}
+.pricing-calculator article{padding:18px;min-width:0;background:var(--lav-panel,Canvas);border:1px solid var(--lav-border,#ddd0eb);border-radius:12px}
+.pricing-calculator h2{display:flex;align-items:center;gap:8px;font-size:17px;margin:0 0 14px}
+.pricing-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pricing-fields label{display:grid;gap:5px;font-size:12px;font-weight:600;min-width:0}
+.pricing-fields input{width:100%;min-width:0;font-size:14px;background:var(--lav-bg,Canvas);color:inherit}
+.pricing-field-unit{display:flex;align-items:center;gap:6px;min-width:0}
+.pricing-field-unit span{font-size:10px;white-space:nowrap;opacity:.75;flex:none}
+.pricing-calculator small{display:block;line-height:1.5;letter-spacing:normal;font-size:11px;font-weight:400;margin-top:10px}
+.pricing-summary{position:sticky;top:10px}
+.pricing-total{display:grid;gap:4px;border-radius:10px;padding:14px;background:var(--brand-soft,#f3ecfa);border:1px solid var(--lav-border,#ddd0eb)}
+.pricing-total small{margin:0}
+.pricing-total strong{font-size:32px;font-variant-numeric:tabular-nums}
+.pricing-total span{font-size:13px}
+.pricing-summary dl{margin:10px 0}
+.pricing-summary dl>div{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--lav-border,#ddd0eb);font-size:12px}
+.pricing-summary dd{margin:0;white-space:nowrap;font-weight:650;font-variant-numeric:tabular-nums}
+.pricing-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pricing-actions button{margin:0;font-size:12px}
+.pricing-metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pricing-metrics>div{padding:9px;border:1px solid var(--lav-border,#ddd0eb);border-radius:8px}
+.pricing-metrics small{margin:0 0 4px}
+.pricing-modal-backdrop{position:fixed;inset:0;background:#17102288;display:grid;place-items:center;z-index:1200;padding:16px}
+.pricing-modal{width:min(1100px,100%);max-height:90vh;overflow:auto;background:var(--lav-panel,Canvas);color:inherit;padding:18px;border-radius:14px;box-shadow:0 20px 70px #0004}
+.pricing-modal-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.pricing-modal-title h2{margin:0;font-size:20px}
+@media(max-width:850px){.pricing-calculator{grid-template-columns:1fr}.pricing-summary{position:static}}
+@media(max-width:500px){.pricing-fields{grid-template-columns:1fr}}
