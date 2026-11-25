@@ -335,7 +335,7 @@ impl Studio {
         };
         ui.label(egui::RichText::new("Lettering styles").strong());
         ui.horizontal_wrapped(|ui| {
-            for (label, radius) in [("Straight", 0.0_f64), ("Arch up", 35.0), ("Arch down", -35.0), ("Tight arch", 15.0)] {
+            for (label, radius) in [("Straight", 0.0_f64), ("Gentle up", 80.0), ("Arch up", 35.0), ("Tight up", 15.0), ("Gentle down", -80.0), ("Arch down", -35.0), ("Tight down", -15.0)] {
                 if ui.small_button(label).on_hover_text("Set the lettering baseline; text remains editable").clicked() {
                     spec.path = None;
                     spec.arc_mm = radius;
@@ -344,6 +344,13 @@ impl Studio {
             }
         });
         ui.horizontal_wrapped(|ui| {
+            for (label, width, height) in [("Condensed", 75.0, 100.0), ("Wide", 125.0, 100.0), ("Tall", 100.0, 125.0)] {
+                if ui.small_button(label).on_hover_text("Change letter proportions without converting to outlines").clicked() {
+                    spec.h_scale = width;
+                    spec.v_scale = height;
+                    committed = true;
+                }
+            }
             if ui.small_button("Reset spacing").clicked() {
                 spec.spacing_mm = 0.0;
                 spec.kern.clear();
