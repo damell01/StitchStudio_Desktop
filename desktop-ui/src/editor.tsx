@@ -15,7 +15,7 @@ import {useState,useEffect,useRef,useMemo,type PointerEvent as ReactPointerEvent
 import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2,GripHorizontal,Search,X,Waypoints,Group,Shapes,Wrench,Palette,MoreHorizontal,CheckCircle2} from 'lucide-react';
 import {invoke,isTauri} from '@tauri-apps/api/core';
 type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
-type EditableObject={uid:number;label:string;color:number[];kind:string;bounds?:[number,number,number,number];path?:string;fill_rule?:'evenodd'|'nonzero';stroke_width?:number};
+type EditableObject={uid:number;groups?:string[];label:string;color:number[];kind:string;bounds?:[number,number,number,number];path?:string;fill_rule?:'evenodd'|'nonzero';stroke_width?:number};
 type ObjectOperation={kind:'move';dx:number;dy:number}|{kind:'scale';factor:number}|{kind:'rotate'|'duplicate'|'delete'}|ResizeOperation;
 type ResizeOperation={kind:'resize';sx:number;sy:number;x:number;y:number};
 type ResizeHandle={x:number;y:number;dx:number;dy:number;cursor:string};
@@ -44,7 +44,10 @@ const [canvasMode,setCanvasMode]=useState<'pan'|'select'|'design'>('design');
 const [objectOffset,setObjectOffset]=useState<[number,number]>([0,0]);
 const [resizePreview,setResizePreview]=useState<ResizeOperation|null>(null);
 const [designOffset,setDesignOffset]=useState<[number,number]>([0,0]);
-const designGesture=useRef<{pointer:number;x:number;y:number}|null>(null);
+const designGesture=useRef<{pointer:number;x:number;y:number;uids?:number[]}|null>(null);
+const [activeGroup,setActiveGroup]=useState<string|null>(null);
+const designGroups=useMemo(()=>{const map=new Map<string,EditableObject[]>();for(const o of objects){const key=o.groups?.find(g=>g.startsWith('tl-added-'))||o.groups?.find(g=>g.startsWith('tl-lettering-'))||'original';const list=map.get(key)||[];list.push(o);map.set(key,list)}return Array.from(map,([key,members])=>{const b=members.flatMap(o=>o.bounds?[o.bounds]:[]);if(!b.length)return {key,members,bounds:null};const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return {key,members,bounds:[x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]}})},[objects]);
+const independentGroups=designGroups.length>1;
 const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchorX:number;anchorY:number}|null>(null);
 const objectGesture=useRef<{uid:number;x:number;y:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
@@ -144,7 +147,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))):undefined;
   const position=pointerPosition(event);
   if(canvasMode==='design'&&event.button===0&&position&&event.target instanceof Element&&event.target.hasAttribute('data-design-group')){
-    designGesture.current={pointer:event.pointerId,x:position.x,y:position.y};
+    const key=event.target.getAttribute('data-design-group');const group=independentGroups?designGroups.find(g=>g.key===key):undefined;setActiveGroup(group?.key??null);designGesture.current={pointer:event.pointerId,x:position.x,y:position.y,uids:group?.members.map(o=>o.uid)};
     event.currentTarget.setPointerCapture(event.pointerId);
     return;
   }
@@ -174,7 +177,7 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const position=pointerPosition(event);
   if(!position)return;
   if(designGesture.current?.pointer===event.pointerId){
-    setDesignOffset(snapped(position.x-designGesture.current.x,position.y-designGesture.current.y) as [number,number]);
+    const offset=snapped(position.x-designGesture.current.x,position.y-designGesture.current.y) as [number,number];if(designGesture.current.uids)setObjectOffset(offset);else setDesignOffset(offset);
     return;
   }
   if(resizeGesture.current?.pointer===event.pointerId){
@@ -199,9 +202,9 @@ function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boole
     designGesture.current=null;
     if(position){
       const [dx,dy]=snapped(position.x-start.x,position.y-start.y);
-      if(Math.hypot(dx,dy)>=.05){setDesignOffset([dx,dy]);void transform(1,0,dx,dy);return;}
+      if(Math.hypot(dx,dy)>=.05){if(start.uids){setObjectOffset([dx,dy]);void edit('move_artwork_objects',{uids:start.uids,dx,dy})}else{setDesignOffset([dx,dy]);void transform(1,0,dx,dy)}return;}
     }
-    setDesignOffset([0,0]);return;
+    setDesignOffset([0,0]);setObjectOffset([0,0]);return;
   }
   if(resizeGesture.current?.pointer===event.pointerId){
     const position=commit?pointerPosition(event):null;
@@ -413,11 +416,12 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
  onPointerCancel={event=>finishCanvasGesture(event,false)}
  onLostPointerCapture={event=>finishCanvasGesture(event,false)} viewBox={[pan[0]-width*.56*100/zoom,pan[1]-height*.56*100/zoom,width*1.12*100/zoom,height*1.12*100/zoom].join(' ')} className="design-canvas" onWheel={e=>{const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const anchor=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());const next=Math.max(25,Math.min(400,zoom*(e.deltaY<0?1.1:1/1.1)));if(next===zoom)return;const ratio=zoom/next;setPan([anchor.x+(pan[0]-anchor.x)*ratio,anchor.y+(pan[1]-anchor.y)*ratio]);setZoom(next)}} style={{width:'100%',background:'var(--lav-bg,var(--canvas,#edf1ed))'}}><defs><pattern id="hoop-fabric" width="1.4" height="1.4" patternUnits="userSpaceOnUse"><path d="M0 .2H1.4 M.2 0V1.4" fill="none" stroke="#967a68" strokeWidth=".075" opacity=".18"/></pattern><pattern id="hoop-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#d8cce6" strokeWidth=".75" vectorEffect="non-scaling-stroke"/></pattern></defs><rect x={-width/2} y={-height/2} width={width} height={height} fill="#fffdf5" stroke="#ad8cd1" strokeWidth="1.6" rx={4} vectorEffect="non-scaling-stroke" className="studio-hoop"/><rect x={-width/2} y={-height/2} width={width} height={height} fill="url(#hoop-fabric)" rx={2}/><rect x={-width/2} y={-height/2} width={width} height={height} fill={grid?"url(#hoop-grid)":"none"}/>{grid&&<g stroke="#896d98" opacity=".6" pointerEvents="none">
 <path d={`M ${-width/2} 0 H ${width/2} M 0 ${-height/2} V ${height/2}`} strokeDasharray="4 5" strokeWidth=".6" vectorEffect="non-scaling-stroke"/>
-</g>}<g transform={`translate(${designOffset.join(' ')})`}>{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=renderedRuns[i]?.[j];return visible?<polyline key={j} points={visible} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .42 : 1} className={realistic?'studio-thread-path':undefined}/>:null})}</g>)}{canvasMode==='design'&&designBounds&&<rect
+</g>}<g transform={`translate(${designOffset.join(' ')})`}>{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} stroke={'rgb('+b.color.join(',')+')'} fill="none" strokeWidth={realistic?".48":".3"} strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((r,j)=>{const visible=renderedRuns[i]?.[j];return visible?<polyline key={j} points={visible} vectorEffect={realistic?undefined:"non-scaling-stroke"} strokeWidth={realistic ? .42 : 1} className={realistic?'studio-thread-path':undefined}/>:null})}</g>)}{canvasMode==='design'&&!independentGroups&&designBounds&&<rect
   data-design-group x={designBounds.left-2} y={designBounds.top-2}
   width={designBounds.width+4} height={designBounds.height+4} rx={1}
   fill="transparent" pointerEvents="all" stroke="#8543aa" strokeWidth="1.5"
   vectorEffect="non-scaling-stroke" strokeDasharray="5 4"><title>Drag to move the whole design</title></rect>}</g>
+{canvasMode==='design'&&independentGroups&&designGroups.map((group,i)=>{const b=group.bounds;if(!b)return null;return <g key={group.key} transform={activeGroup===group.key?'translate('+objectOffset.join(' ')+')':undefined}><rect data-design-group={group.key} x={b[0]-1} y={b[1]-1} width={b[2]+2} height={b[3]+2} fill="transparent" pointerEvents="all" stroke={activeGroup===group.key?'#754bb0':'#b49acb'} strokeDasharray="5 4" vectorEffect="non-scaling-stroke"><title>Move design {i+1}</title></rect></g>})}
 {canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
  {objects.filter(object=>object.path).map(object=><path key={object.uid} d={object.path}
    data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();void invoke<unknown>('lettering_settings',{uid:object.uid}).then(s=>{if(s){setSelectedObject(object.uid);openText(object.uid)}}).catch(()=>{})}} fill={object.fill_rule?'transparent':'none'}
