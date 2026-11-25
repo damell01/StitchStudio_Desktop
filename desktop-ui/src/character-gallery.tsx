@@ -1,6 +1,7 @@
 import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {useEffect,useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
+import {Upload} from 'lucide-react';
 type Entry={group:string;name:string;file:string};
 export type Art={name:string;mime:string;bytes:number[];classic?:boolean};
 function mime(file:string){return /\.webp$/i.test(file)?'image/webp':/\.jpe?g$/i.test(file)?'image/jpeg':'image/png'}
@@ -16,6 +17,7 @@ export function CharacterGallery({onArt}:{onArt:(a:Art)=>void}){
  useEffect(()=>{void refresh()},[]);
  const filtered=entries.filter(e=>(group==='All'||e.group===group)&&matchesName(e.name,query)).sort((a,b)=>compareNames(a.name,b.name));
  const page=usePagedList(filtered,JSON.stringify([query,group]));
+ async function saveArtwork(){setBusy(true);setError('');try{const count=await invoke<number|null>('import_artwork_files');if(count!==null){await refresh();setGroup('My imported artwork');setQuery('');}}catch(e){setError(String(e))}finally{setBusy(false)}}
  async function importArtwork(file:File){
    setError('');
    if(file.size>20_000_000){setError('Choose artwork under 20 MB.');return}
@@ -23,6 +25,6 @@ export function CharacterGallery({onArt}:{onArt:(a:Art)=>void}){
      onArt({name:file.name.replace(/\.[^.]+$/,''),mime:mime(file.name),bytes:Array.from(new Uint8Array(await file.arrayBuffer()))});
    } catch(error) {setError(String(error));}
  }
- return <section><h2>Character artwork</h2><label>Add artwork from disk<input type="file" accept=".png,.webp,.jpg,.jpeg"
-   onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void importArtwork(file);}}/></label><div className="template-filters"><input aria-label="Search characters" placeholder="Search characters" value={query} onChange={e=>{setQuery(e.target.value)}}/><select aria-label="Collection" value={group} onChange={e=>{setGroup(e.target.value)}}>{['All',...new Set(entries.map(e=>e.group))].map(g=><option key={g}>{g}</option>)}</select><button onClick={refresh} disabled={busy}>Refresh</button></div>{error&&<p role="alert">{error}</p>}{busy?<p>Loading collections…</p>:!entries.length?<p>No local artwork yet. Add artwork you have permission to use to collection folders inside StitchStudio Artwork in your home folder.</p>:<><small>{filtered.length} designs</small><div className="template-grid">{page.items.map(e=><Tile key={e.group+'/'+e.file} entry={e} onArt={onArt}/>)}</div><ListNavigation {...page}/></>}</section>
+ return <section><div className="artwork-library-heading"><h2>Artwork library</h2><button className="primary" disabled={busy} onClick={()=>void saveArtwork()}><Upload size={16}/> Import artwork files</button></div><label>Digitize a file without saving to library<input type="file" accept=".png,.webp,.jpg,.jpeg"
+   onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void importArtwork(file);}}/></label><div className="template-filters"><input aria-label="Search characters" placeholder="Search characters" value={query} onChange={e=>{setQuery(e.target.value)}}/><select aria-label="Collection" value={group} onChange={e=>{setGroup(e.target.value)}}>{['All',...new Set(entries.map(e=>e.group))].map(g=><option key={g}>{g}</option>)}</select><button onClick={refresh} disabled={busy}>Refresh</button></div>{error&&<p role="alert">{error}</p>}{busy?<p>Loading collections…</p>:!entries.length?<p>No local artwork yet. Import individual artwork files to build your library.</p>:<><small>{filtered.length} designs</small><div className="template-grid">{page.items.map(e=><Tile key={e.group+'/'+e.file} entry={e} onArt={onArt}/>)}</div><ListNavigation {...page}/></>}</section>
 }
