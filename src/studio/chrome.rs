@@ -166,6 +166,9 @@ impl Studio {
                     ui.separator();
                 }
             });
+            if ui.button("＋ Text").on_hover_text("Add editable embroidery lettering").clicked() {
+                self.run_action(Action::AddText);
+            }
             let tools = [("Fit hoop", Action::FitToHoop), ("Fit view", Action::ZoomFit),
                 ("Simulate", Action::PlayPause), ("Density", Action::ToggleDensity), ("Inspect", Action::ShowIssues)];
             if compact {
