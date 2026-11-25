@@ -10,7 +10,7 @@ mod specialty;
 mod thread_recolor;
 use std::sync::Mutex;
 #[derive(Default)]
-struct Workspace { plan_cache: zigzag::design::PlanCache, digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)>, undo_labels: Vec<String>, redo_labels: Vec<String> }
+struct Workspace { simplify_draft: Option<SimplifyDraft>, plan_cache: zigzag::design::PlanCache, digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)>, undo_labels: Vec<String>, redo_labels: Vec<String> }
 impl Workspace {
  fn checkpoint(&mut self){self.checkpoint_named("Edit design");}
  fn checkpoint_named(&mut self,label:&str){
@@ -568,7 +568,7 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
     }
     best
 }
-#[derive(Default,serde::Deserialize)]
+#[derive(Clone,Default,serde::Deserialize)]
 #[serde(rename_all="camelCase",default)]
 struct SimplifyOptions {
     solid:bool, merge:bool, auto_types:bool, lighter_underlay:bool,
@@ -718,29 +718,20 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
     }
     doc.sync().map_err(|e|e.to_string())
 }
-#[tauri::command]
-async fn simplify_current_design(strength:u8,uids:Option<Vec<usize>>,remove_detail:Option<bool>,options:Option<SimplifyOptions>,app:tauri::AppHandle)->Result<Preview,String>{
-    use tauri::Manager;
-    tauri::async_runtime::spawn_blocking(move||{
-        let state=app.state::<Mutex<Workspace>>();
-        let mut w=state.lock().map_err(|e|e.to_string())?;
-        let original=w.current.as_ref().ok_or("Open a design first")?;
-        let source=editable_base(&w,"Simplified design")?;
-        if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
-        let options=options.unwrap_or_default();
+fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
         let seconds=|d:&Design|d.stitch_count() as f64/speed*60.0+d.trim_count() as f64*trim;
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
         let mut candidates=Vec::new();
-        if let Some(v)=simplify_design_candidate(&source,original,strength,uids.as_deref(),remove_detail.unwrap_or(false)){candidates.push(v);}
+        if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
         if options.solid||options.merge||options.auto_types||options.lighter_underlay{
             let radii:&[f64]=if options.solid&&strength>=3{&[2.0,4.0,6.0]}else if options.solid&&strength==2{&[2.0,4.0]}else{&[2.0]};
             for &radius in radii{
                 let mut geometry=source.clone();
-                if optimize_geometry(&mut geometry,&options,uids.as_deref(),radius).is_ok(){
+                if optimize_geometry(&mut geometry,&options,uids,radius).is_ok(){
                     let plan=geometry.plan();
-                    if let Some(v)=simplify_design_candidate(&geometry,&plan,strength,uids.as_deref(),false){candidates.push(v);}
+                    if let Some(v)=simplify_design_candidate(&geometry,&plan,strength,uids,false){candidates.push(v);}
                     candidates.push((geometry,plan));
                 }
             }
@@ -757,9 +748,67 @@ async fn simplify_current_design(strength:u8,uids:Option<Vec<usize>>,remove_deta
             let a=rank(a);let b=rank(b);a.0.cmp(&b.0).then(a.1.total_cmp(&b.1))
         });
         let (doc,design)=candidates.into_iter().next().ok_or("No eligible improvement passed the checks. Original retained.")?;
+        Ok((doc,design))
+}
+#[tauri::command]
+async fn simplify_current_design(strength:u8,uids:Option<Vec<usize>>,remove_detail:Option<bool>,options:Option<SimplifyOptions>,app:tauri::AppHandle)->Result<Preview,String>{
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move||{
+        let state=app.state::<Mutex<Workspace>>();
+        let mut w=state.lock().map_err(|e|e.to_string())?;
+        let original=w.current.as_ref().ok_or("Open a design first")?;
+        let source=editable_base(&w,"Simplified design")?;
+        if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
+        let options=options.unwrap_or_default();
+        let (doc,design)=choose_simplification(&source,original,strength,uids.as_deref(),remove_detail.unwrap_or(false),&options)?;
         let result=preview(&design);
         w.checkpoint_named("Simplify design");w.source=Some(doc);w.current=Some(design);Ok(result)
     }).await.map_err(|e|e.to_string())?
+}
+struct SimplifyDraft {
+    id:u64, original:Design, source_xml:Option<String>,
+    variants:Vec<(u8,zigzag::document::Document,Design)>,
+}
+#[derive(serde::Serialize)]
+struct SimplifyVariant { strength:u8, plan:Option<Preview>, reason:Option<String> }
+#[derive(serde::Serialize)]
+struct SimplifyReview { id:u64, variants:Vec<SimplifyVariant> }
+fn same_stitch_plan(a:&Design,b:&Design)->bool{
+    a.name==b.name&&a.blocks.len()==b.blocks.len()&&a.blocks.iter().zip(&b.blocks).all(|(x,y)|x.color==y.color&&x.runs.len()==y.runs.len()&&x.runs.iter().zip(&y.runs).all(|(p,q)|p.trim_before==q.trim_before&&p.pts==q.pts))
+}
+#[tauri::command]
+async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<bool>,options:Option<SimplifyOptions>,app:tauri::AppHandle)->Result<SimplifyReview,String>{
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move||{
+        let state=app.state::<Mutex<Workspace>>();
+        let mut w=state.lock().map_err(|e|e.to_string())?;
+        let original=w.current.clone().ok_or("Open a design first")?;
+        let source=editable_base(&w,"Simplified design")?;
+        if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
+        let options=options.unwrap_or_default();
+        let mut variants=Vec::new();let mut stored=Vec::new();
+        for strength in 1..=3{
+            let mut mode=options.clone();
+            if strength==1{mode.solid=false;mode.lighter_underlay=false;mode.merge=false;mode.auto_types=false;}
+            if strength==2{mode.lighter_underlay=false;}
+            match choose_simplification(&source,&original,strength,uids.as_deref(),strength>1&&remove_detail.unwrap_or(false),&mode){
+                Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None});stored.push((strength,doc,design));}
+                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
+            }
+        }
+        w.next_draft_id=w.next_draft_id.wrapping_add(1);
+        let id=w.next_draft_id;let source_xml=w.source.as_ref().map(|d|d.xml.clone());
+        w.simplify_draft=Some(SimplifyDraft{id,original,source_xml,variants:stored});
+        Ok(SimplifyReview{id,variants})
+    }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+fn apply_simplification(id:u64,strength:u8,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
+    let mut w=state.lock().map_err(|e|e.to_string())?;
+    let draft=w.simplify_draft.take().ok_or("Generate simplification previews first")?;
+    if draft.id!=id||!w.current.as_ref().is_some_and(|d|same_stitch_plan(d,&draft.original))||w.source.as_ref().map(|d|&d.xml)!=draft.source_xml.as_ref(){return Err("The design changed. Generate fresh previews.".into())}
+    let (_,doc,design)=draft.variants.into_iter().find(|(n,_,_)|*n==strength).ok_or("Choose an available preview")?;
+    let result=preview(&design);w.checkpoint_named("Simplify design");w.source=Some(doc);w.current=Some(design);Ok(result)
 }
 #[tauri::command]
 async fn optimize_editable_design(app:tauri::AppHandle)->Result<Preview,String>{
@@ -2292,7 +2341,7 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
 async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,preview_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
