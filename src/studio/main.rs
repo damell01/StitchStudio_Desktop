@@ -99,8 +99,10 @@ fn main() -> eframe::Result {
             let v = eframe::egui::ViewportBuilder::default()
                 .with_title("Stitch Studio")
                 .with_app_id("zigzag-studio")
-                .with_inner_size([1360.0, 860.0])
-                .with_min_inner_size([1000.0, 620.0])
+                .with_inner_size([1200.0, 720.0])
+                .with_min_inner_size([900.0, 540.0])
+                .with_maximized(true)
+                .with_fullscreen(false)
                 .with_drag_and_drop(true);
             // macOS: content runs under a transparent title bar, so the toolbar
             // and traffic lights share one strip (a unified toolbar).
