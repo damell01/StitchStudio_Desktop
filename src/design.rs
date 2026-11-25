@@ -1118,6 +1118,25 @@ fn shape_runs_guarded(
     }
 }
 
+/// A narrow filled mark can be sewn as a running centerline instead of
+/// repeatedly puncturing both sides. Reject holes, branches and wide rails.
+pub fn thin_centerline(rings:&[Polyline],rule:FillRule)->Option<Polyline>{
+    let comps=satin::components(rings,rule);
+    if comps.len()!=1||comps[0].len()!=1{return None}
+    let rails=satin::auto_rails(&comps[0]).ok()?;
+    if rails.closed{return None}
+    let pairs=satin::pairs(&rails,2.0);
+    if pairs.len()<5||pairs.len()>4000{return None}
+    let mut widths:Vec<f64>=pairs.iter().map(|(a,b)|a.dist(*b)).collect();
+    widths.sort_by(f64::total_cmp);
+    let median=widths[widths.len()/2];
+    if median<0.8||median>4.5||widths.last().copied()? > 7.0{return None}
+    let center:Vec<P>=pairs.iter().map(|(a,b)|a.lerp(*b,0.5)).collect();
+    if crate::geom::polyline_length(&center)<median*5.0{return None}
+    if !center.windows(2).all(|p|segment_inside(rings,rule,p[0],p[1],0.5)){return None}
+    Some(center)
+}
+
 fn shape_runs(
     shape: &Shape,
     geometry: &Geometry,
@@ -1186,6 +1205,16 @@ fn shape_runs(
                 fallback.push(pieces);
             }
             ShapeRuns::new(fallback, area)
+        }
+        (Geometry::Fill { rings, rule }, Kind::Run) if shape.params.border==Some(false) => {
+            // Explicit centerline mode retains the editable outline in SVG.
+            // If edited geometry no longer qualifies, preserve it as a fill.
+            if let Some(line)=thin_centerline(rings,*rule){
+                let run=running(&line,false,mm(p.run_len(f)),p.run_repeats());
+                ShapeRuns::new(vec![vec![Piece::reversible(run)]],None)
+            }else{
+                ShapeRuns::new(fill_runs(rings,*rule,shape,opt),Some((rings.clone(),*rule)))
+            }
         }
         (Geometry::Fill { rings, .. }, _) => {
             // Running stitch along each outline.
