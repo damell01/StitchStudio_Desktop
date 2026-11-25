@@ -584,6 +584,8 @@ struct DigitizerReview {
     warnings: Vec<String>,
     density: Vec<[i32; 3]>,
     jumps: usize,
+    dst_stitches: usize,
+    color_changes: usize,
 }
 
 #[tauri::command]
@@ -623,6 +625,10 @@ async fn digitize_artwork(
             zigzag::design::auto_stitch_types(&mut document.shapes);
             document.settings.hat_order = document.shapes.len() <= 1000;
         }
+        let artwork_bounds = zigzag::svg::shapes_bounds(&document.shapes);
+        if artwork_bounds.width() > 10_000.0 || artwork_bounds.height() > 10_000.0 {
+            return Err("Artwork is larger than 1 meter. Reduce the artwork dimensions before digitizing.".into());
+        }
         let design = document.plan();
         let count = design.stitch_count();
         if count == 0 { return Err("No stitchable artwork found".into()); }
@@ -635,27 +641,43 @@ async fn digitize_artwork(
         let mut density = std::collections::HashMap::new();
         let commands = formats::dst::stream(&design);
         let mut jumps = 0;
+        let mut dst_stitches = 0;
+        let mut color_changes = 0;
         for command in &commands {
             match command.op {
                 formats::Op::Stitch => {
+                    dst_stitches += 1;
                     let cell = [(command.x / 10.0).floor() as i32, (command.y / 10.0).floor() as i32];
                     *density.entry(cell).or_insert(0) += 1;
                 }
                 formats::Op::Jump => jumps += 1,
+                formats::Op::ColorChange => color_changes += 1,
                 _ => {}
             }
         }
         let mut density: Vec<_> = density.into_iter().map(|([x, y], count)| [x, y, count]).collect();
         density.sort_unstable_by_key(|&[x, y, count]| (std::cmp::Reverse(count), y, x));
         density.truncate(512);
+        let mut issues = zigzag::checks::check(&document.shapes, &design, &document.plan_options(), None);
+        issues.sort_by_key(|issue| std::cmp::Reverse(issue.level));
+        let mut warnings: Vec<_> = issues.into_iter().filter(|issue| issue.level != zigzag::checks::Level::Info)
+            .map(|issue| match issue.shape {
+                Some(index) => format!("Object {}: {}", index + 1, issue.message),
+                None => issue.message,
+            }).collect();
+        warnings.extend(design.notes.iter().map(|(index, message)| format!("Object {}: {message}", index + 1)));
+        let mut seen = std::collections::HashSet::new();
+        warnings.retain(|message| seen.insert(message.clone()));
+        warnings.truncate(12);
         let review = DigitizerReview {
             id,
             plan: preview(&design),
             quality: measure_stitches(&design),
-            warnings: design.notes.iter().take(12)
-                .map(|(index, message)| format!("Object {}: {message}", index + 1)).collect(),
+            warnings,
             density,
             jumps,
+            dst_stitches,
+            color_changes,
         };
         Ok((document, design, review))
     }).await.map_err(|err| err.to_string())??;

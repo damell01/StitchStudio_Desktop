@@ -18,6 +18,8 @@ type Review = {
   warnings: string[];
   density: [number, number, number][];
   jumps: number;
+  dst_stitches: number;
+  color_changes: number;
 };
 
 const defaults = {
@@ -264,7 +266,10 @@ export function Digitizer({ onDone }: { onDone: () => void }) {
           <div><strong>{review.plan.blocks.length}</strong><small>Color blocks</small></div>
           <div><strong>{review.plan.trims}</strong><small>Planned trims</small></div>
         </div>
-        <p>{(review.quality.sewn_mm / 1000).toFixed(2)} m of sewn path · {review.jumps} DST jumps</p>
+        <p>{(review.quality.sewn_mm / 1000).toFixed(2)} m of sewn path</p>
+        <p>DST preview · {review.jumps} jumps · {review.color_changes} color changes</p>
+        <p>About {(review.dst_stitches / 600).toFixed(1)} minutes of needle time at 600 stitches/min,
+          excluding travel and stops.</p>
         {(review.quality.short > 0 || review.quality.long > 0 || review.quality.zero > 0) &&
           <p>{review.quality.short} short, {review.quality.long} long, and {review.quality.zero} near-zero segments.</p>}
         {review.warnings.length > 0 && <ul>{review.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}

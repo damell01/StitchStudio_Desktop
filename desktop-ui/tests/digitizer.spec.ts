@@ -29,6 +29,8 @@ test.beforeEach(async ({ page }) => {
             warnings: [],
             density: [[0, 0, 4]],
             jumps: 1,
+            dst_stitches: 64,
+            color_changes: 0,
           };
         }
         if (command === 'apply_digitizer_draft') current = draft;
@@ -46,6 +48,8 @@ test('an artwork selection generates a draft immediately and only opens it on re
   await expect(page.getByText('Preparing artwork and generating stitches…')).toBeVisible();
   const open = page.getByRole('button', { name: 'Open in design studio' });
   await expect(open).toBeVisible();
+  await page.getByRole('button', { name: 'Density', exact: true }).click();
+  await expect(page.locator('.digitizer-stitch-image rect')).toHaveCount(1);
   expect(await page.evaluate(() => (window as unknown as { stitchTestCalls: string[] }).stitchTestCalls))
     .not.toContain('apply_digitizer_draft');
 
