@@ -1,6 +1,6 @@
 import {readThreads} from './threads';
 import {FabricPicker} from './fabric-picker';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowRight, ChartNoAxesColumn, Columns2, Image as ArtworkIcon, ImagePlus, Layers2 } from 'lucide-react';
 import { ArtworkEdit } from './artwork-edit';
@@ -66,6 +66,11 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const artworkUrl = useArtworkUrl(original);
   const vector = art?.mime === 'image/svg+xml';
   const review = generated?.art === art && generated?.settings === settings ? generated.review : null;
+  const threadUsage=useMemo(()=>{
+    const usage=new Map<string,number>();
+    for(const block of review?.plan.blocks??[]){const key=block.color.join(',');let length=0;for(const run of block.runs)for(let i=1;i<run.length;i++)length+=Math.hypot(run[i][0]-run[i-1][0],run[i][1]-run[i-1][1]);usage.set(key,(usage.get(key)??0)+length/1000);}
+    return Array.from(usage,([key,meters])=>({key,meters}));
+  },[review]);
   const generationError = failed?.art === art && failed?.settings === settings ? failed.message : '';
   const valid = vector || (settings.widthMm >= 5 && settings.widthMm <= 300);
   const processing = Boolean(art && valid && !review && !generationError);
@@ -307,6 +312,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         </div>
         <div hidden={inspector!=='threads'} className="digitizer-inspector-content">        <section className="digitizer-options">
           <h3>Thread setup · {new Set(review.plan.blocks.map(b=>b.color.join(','))).size} unique colors</h3>
+          <h4>Thread usage by color</h4><small>Estimated sewn path only; excludes bobbin, tails and waste.</small><div className="digitizer-quality-summary">{threadUsage.map((t,i)=><div key={t.key}><span><span style={{display:'inline-block',width:12,height:12,border:'1px solid #888',borderRadius:3,background:`rgb(${t.key})`,marginRight:6}}/>Slot {i+1}</span><b>{t.meters.toFixed(2)} m</b></div>)}</div>
           <p>Follow this sewing order on your machine. Repeated colors reuse the same thread slot. DST does not store thread colors.</p>
           <div style={{maxHeight:280,overflow:'auto'}}>
           {review.plan.blocks.map((b,i)=>{
