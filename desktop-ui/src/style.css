@@ -1600,3 +1600,11 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .inline-lettering .live-text-toggle{justify-content:flex-start;font-size:11px}
 .alignment-pair{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .alignment-pair button{white-space:normal;font-size:11px;justify-content:center}
+
+/* Nonblocking feedback for ordinary editor transactions. */
+.inline-work-status{display:inline-flex;align-items:center;gap:7px;color:var(--brand);white-space:nowrap;font-size:11px;font-weight:600}
+.inline-work-spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--brand-soft);border-top-color:var(--brand);border-radius:50%;animation:studio-inline-spin .8s linear infinite}
+@keyframes studio-inline-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.inline-work-spinner{animation:none}}
+.editor-workspace .workspace-sidebar{overflow-x:hidden;min-width:0}
+.editor-workspace .workspace-inspector .workspace-segments button{overflow-wrap:normal;font-size:clamp(9px,.72vw,11px);letter-spacing:-.2px}
