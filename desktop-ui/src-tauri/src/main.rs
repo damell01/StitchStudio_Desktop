@@ -77,6 +77,8 @@ fn audit_stitches(state: tauri::State<'_, Mutex<Workspace>>) -> Result<StitchAud
 #[tauri::command]
 fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  let mut w=state.lock().map_err(|e|e.to_string())?;
+ // Do not silently flatten editable source artwork or discard its metadata.
+ if w.source.is_some(){return Err("This design contains editable artwork. Adjust its stitch settings and regenerate it instead of repairing fixed stitches.".into())}
  let mut d=w.current.clone().ok_or("Open artwork first")?;
  let mut total=0usize;
  for run in d.blocks.iter_mut().flat_map(|b|&mut b.runs){
@@ -85,7 +87,7 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
      if let Some(last)=out.last().copied(){
        let last:zigzag::geom::P=last;
        let distance=(p.x-last.x).hypot(p.y-last.y);
-       if distance==0.0{continue}
+       // Preserve coincident penetrations: they may be intentional ties.
        let n=(distance/100.0).ceil().max(1.0);
        if !n.is_finite()||n>10000.0{return Err("Invalid stitch geometry".into())}
        for k in 1..n as usize{let t=k as f64/n;out.push(zigzag::geom::P::new(last.x+(p.x-last.x)*t,last.y+(p.y-last.y)*t));}
@@ -96,7 +98,7 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
    total+=out.len();if total>2000000{return Err("Repair exceeds stitch limit".into())}
    run.pts=out;
  }
- w.checkpoint();w.source=None;let result=preview(&d);w.current=Some(d);Ok(result)
+ let result=preview(&d);if d.stitch_count()!=w.current.as_ref().unwrap().stitch_count(){w.checkpoint();w.current=Some(d);}Ok(result)
 }
 fn place_design(workspace: &mut Workspace, matrix: [f64; 6]) -> Result<Preview, String> {
     let [a, b, c, d, tx, ty] = matrix;
