@@ -703,7 +703,38 @@ impl Studio {
                 }
             }
             caption(ui, format!("{} stitches · {:.1} min at {} spm", fmt_int(count), count as f64 / speed as f64, speed));
-            caption(ui, "Needle time only; excludes trims, thread changes, acceleration and stops.");
+            let id = egui::Id::new("production-overheads");
+            let path = crate::dock::config_file("sewing-overheads.json");
+            let mut delays: [f64; 2] = ui.data(|d| d.get_temp(id)).unwrap_or_else(|| {
+                path.as_ref().and_then(|p| std::fs::read(p).ok())
+                    .and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or([2.0, 5.0])
+            });
+            for delay in &mut delays {
+                *delay = if delay.is_finite() { delay.clamp(0.0, 120.0) } else { 0.0 };
+            }
+            let before = delays;
+            ui.collapsing("Machine delays", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Per trim");
+                    ui.add(egui::DragValue::new(&mut delays[0]).range(0.0..=120.0).suffix(" sec"));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Per color change");
+                    ui.add(egui::DragValue::new(&mut delays[1]).range(0.0..=120.0).suffix(" sec"));
+                });
+            });
+            ui.data_mut(|d| d.insert_temp(id, delays));
+            if delays != before {
+                if let Some(p) = path {
+                    if let Ok(bytes) = serde_json::to_vec(&delays) { let _ = std::fs::write(p, bytes); }
+                }
+            }
+            let trims = self.design.trim_count();
+            let changes = self.design.blocks.len().saturating_sub(1);
+            let overhead = (trims as f64 * delays[0] + changes as f64 * delays[1]) / 60.0;
+            ui.label(egui::RichText::new(format!("Estimated machine time: {:.1} min", count as f64 / speed as f64 + overhead)).strong());
+            caption(ui, format!("{trims} trims · {changes} color-block transitions · {overhead:.1} min estimated overhead"));
+            caption(ui, "Excludes acceleration, hooping, manual stops and thread breaks. Adjust delays to match your machine.");
             if self.planner.pending { caption(ui, "Based on the previous stitch plan."); }
         });
     }
