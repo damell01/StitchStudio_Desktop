@@ -14,17 +14,19 @@ const thumbnailCache=new Map<string,{image:string;stitches:number;colors:number}
 function DesignThumbnail({file}:{file:string}){const [preview,setPreview]=useState(()=>thumbnailCache.get(file));useEffect(()=>{let active=true;const cached=thumbnailCache.get(file);setPreview(cached);if(!cached)void invoke<ThumbnailPlan>('library_thumbnail',{file}).then(plan=>{if(!active)return;const result={image:thumbnailOf(plan),stitches:plan.stitches,colors:plan.blocks.length};if(thumbnailCache.size>=100)thumbnailCache.delete(thumbnailCache.keys().next().value!);thumbnailCache.set(file,result);setPreview(result)}).catch(()=>{});return()=>{active=false}},[file]);return <><div className="library-thumb">{preview?.image?<img src={preview.image} alt="Stitch path preview"/>:<File size={30}/>}</div>{preview&&<small>{preview.stitches.toLocaleString()} points · {preview.colors} color blocks</small>}</>}
 
 
+const projectThumbnailCache=new Map<string,string>();
 function ProjectThumbnail({project}:{project:Project}) {
-  const [image,setImage]=useState(project.thumbnail||'');
-  useEffect(()=>{let active=true;setImage(project.thumbnail||'');if(!project.thumbnail)void invoke<ThumbnailPlan>('project_thumbnail',{file:project.file}).then(plan=>{if(active)setImage(thumbnailOf(plan))}).catch(()=>{});return()=>{active=false}},[project.file,project.modified,project.thumbnail]);
+  const cacheKey=project.file+'@'+project.modified;
+  const [image,setImage]=useState(project.thumbnail||projectThumbnailCache.get(cacheKey)||'');
+  useEffect(()=>{let active=true;const cached=project.thumbnail||projectThumbnailCache.get(cacheKey)||'';setImage(cached);if(!cached)void invoke<ThumbnailPlan>('project_thumbnail',{file:project.file}).then(plan=>{if(active){const next=thumbnailOf(plan);if(projectThumbnailCache.size>=100)projectThumbnailCache.delete(projectThumbnailCache.keys().next().value!);projectThumbnailCache.set(cacheKey,next);setImage(next)}}).catch(()=>{});return()=>{active=false}},[project.file,cacheKey,project.thumbnail]);
   return <div className="library-thumb">{image?<img src={image} alt="Project stitch preview"/>:<File size={25}/>}</div>;
 }
 export function RecentProjects({onOpen}:{onOpen:()=>void}) {
   const [projects,setProjects]=useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
   const [error,setError]=useState('');
   async function scan(){try{const result=await invoke<Project[]|null>('scan_projects');if(result){const recent=result.sort((a,b)=>b.modified-a.modified).slice(0,5);recent.slice().reverse().forEach(rememberProject);setProjects(JSON.parse(localStorage.getItem('studio-recent-projects')||'[]'))}}catch(e){setError(String(e))}}
-  async function open(project:Project){try{if(!await confirmAction('Open this project? Save existing work first.'))return;const settings=await invoke<{width:number;height:number;format:string}>('library_open',{file:project.file});sessionStorage.setItem('studio-open-project-settings',JSON.stringify(settings));onOpen()}catch(e){setError(String(e))}}
-  return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><ProjectThumbnail project={p}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
+  async function open(project:Project){try{if(!await confirmAction('Open this project? Save existing work first.'))return;const settings=await invoke<{width:number;height:number;format:string}>('library_open',{file:project.file});sessionStorage.setItem('studio-open-project-settings',JSON.stringify(settings));rememberProject(project);onOpen()}catch(e){setError(String(e))}}
+  return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><ProjectThumbnail project={p}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><small>{p.modified?new Date(p.modified*1000).toLocaleDateString():''}</small><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
 }
 
 export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;initialTab?:'embroidery'|'projects'|'artwork' }) {
@@ -32,7 +34,8 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
   const [files, setFiles] = useState<string[]>([]);
   const [projects, setProjects] = useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
   const [query, setQuery] = useState('');
-  const [layout,setLayout]=useState<'grid'|'list'>('grid');
+  const [layout,setLayout]=useState<'grid'|'list'>(()=>localStorage.getItem('studio-library-layout')==='list'?'list':'grid');
+  useEffect(()=>{localStorage.setItem('studio-library-layout',layout)},[layout]);
   const [sort, setSort] = useState('recent');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -84,6 +87,7 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
       if (!await confirmAction('Open this project? Save existing work first.')) return;
       const { width, height, format, thread_assignments } = await invoke<{ width: number; height: number; format: string;thread_assignments?:Record<number,string> }>('library_open', { file: project.file });
       sessionStorage.setItem('studio-open-project-settings', JSON.stringify({ width, height, format, thread_assignments }));
+      rememberProject(project);
       onDone();
     });
   }
