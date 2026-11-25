@@ -44,3 +44,19 @@ test('recognizes scoped selection and density optimization',()=>{
  for(const [input,expected] of cases) expect(assistantIntent(input),input).toEqual(expected);
  for(const s of ['Select color #GG0000','Select objects named ""','Select all files','Select all satin objects and delete them'])expect(assistantIntent(s),s).toBeNull();
 });
+
+test('scoped transforms preserve units and reject invalid bounds',()=>{
+ const cases=[
+ ['Move selected objects 5 mm right',{kind:'moveSelected',dx:5,dy:0}],
+ ['Move the selected objects 2 cm down',{kind:'moveSelected',dx:0,dy:20}],
+ ['Move selected design 1 inch left',{kind:'moveSelected',dx:-25.4,dy:0}],
+ ['Move selected lettering 3 mm up',{kind:'moveSelected',dx:0,dy:-3}],
+ ['Make selected lettering 20% larger',{kind:'scaleSelected',value:1.2}],
+ ['Make selected objects 15% smaller',{kind:'scaleSelected',value:.85}],
+ ['Scale selected design to 80%',{kind:'scaleSelected',value:.8}],
+ ['Rotate selected objects 90 degrees',{kind:'rotateSelected',value:90}],
+ ['Rotate selected lettering 45 degrees counterclockwise',{kind:'rotateSelected',value:-45}],
+ ] as const;
+ for(const [input,expected] of cases)expect(assistantIntent(input),input).toEqual(expected);
+ for(const input of ['Move selected objects 501 mm right','Move selected objects 0 mm right','Move selected objects 1 yard left','Scale selected objects to 0%','Make selected objects 100% smaller','Rotate selected objects 361 degrees'])expect(assistantIntent(input),input).toBeNull();
+});
