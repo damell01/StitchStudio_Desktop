@@ -1,3 +1,4 @@
+import {rememberProject,thumbnailOf,type Project} from './library';
 import {Lettering} from './lettering';
 import {Type} from 'lucide-react';
 import {GarmentPreview} from './garment-preview';
@@ -29,7 +30,7 @@ const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
 const [left,setLeft]=useState(true),[right,setRight]=useState(true),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",220,160,340)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,180,360));useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(100),[pan,setPan]=useState([0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
-const [cameraTop,setCameraTop]=useState(()=>localStorage.getItem('studio-camera-top')==='1');
+const [cameraTop,setCameraTop]=useState(()=>localStorage.getItem('studio-camera-top')!=='0');
 useEffect(()=>localStorage.setItem('studio-camera-top',cameraTop?'1':'0'),[cameraTop]);
 const cameraDrag=useRef<number|null>(null);
 const [canvasMode,setCanvasMode]=useState<'pan'|'select'|'design'>('select');
@@ -41,7 +42,7 @@ const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchor
 const objectGesture=useRef<{uid:number;x:number;y:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
 const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
-const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'>('hoop');
+const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'>('hoop');
 const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(''),[hoop,setHoop]=useState('');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 async function edit(command:string,args:Record<string,unknown>){setBusy(true);setMessage('');try{setPlan(await invoke<Plan>(command,args));setPlayhead(null)}catch(e){setMessage(String(e))}finally{setBusy(false)}}
@@ -242,7 +243,7 @@ function openInsertDialog() {
 }
 
 async function open(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);setMessage('');try{const p=await invoke<Plan|null>('open_svg',{widthMm:artWidth,colors,removeBackground,detail});if(p){setPlan(p);setHidden([]);setPlayhead(null)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
-async function projectSave(){setBusy(true);try{if(await invoke<boolean>('save_project',{width,height,format}))toast('Project saved.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
+async function projectSave(){setBusy(true);try{const project=await invoke<Project|null>('save_project',{width,height,format});if(project){rememberProject({...project,thumbnail:plan?thumbnailOf(plan):undefined});toast('Project saved.')}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 async function projectOpen(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string}|null>('open_project');if(p){setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 async function save(){setBusy(true);try{if(await invoke<boolean>('export_design',{format,width,height}))toast('Embroidery file saved. Test sew before production.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 useEffect(()=>{const key=(e:KeyboardEvent)=>{if (document.querySelector('dialog[open]')||busy) return;
@@ -314,7 +315,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {plan&&<ThreadOrder blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
   <button className="primary studio-export" disabled={!plan||outside||busy||machines.some(m=>m.id===machine&&(width>m.width||height>m.height))} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
-{busy&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:'minmax(0,1fr)'}}>
+{busy&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:`48px ${left?`min(${leftWidth}px, 24vw)`:'0px'} minmax(0,1fr) ${right?`min(${rightWidth}px, 28vw)`:'0px'}`}}>
+<div className="editor-toolrail" role="group" aria-label="Editor tools"><button aria-pressed={canvasMode==='select'} onClick={()=>setCanvasMode('select')}><MousePointer2 size={19}/><small>Select</small></button><button aria-pressed={canvasMode==='pan'} onClick={()=>setCanvasMode('pan')}><Hand size={19}/><small>Pan</small></button><button disabled={busy} onClick={openInsertDialog}><FilePlus size={19}/><small>Insert</small></button><button disabled={busy} onClick={()=>textDialog.current?.showModal()}><Type size={19}/><small>Text</small></button><button onClick={()=>{setRight(true);setInspectorTab('transform')}}><Move size={19}/><small>Size</small></button><button onClick={()=>{setRight(true);setInspectorTab('stitches')}}><Scissors size={19}/><small>Stitch</small></button><button onClick={()=>{setLeft(true);setLayerTab('threads')}}><Layers3 size={19}/><small>Colors</small></button><button aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}><Eye size={19}/><small>Thread</small></button></div>
 <article className="workspace-sidebar studio-layers-dock" style={{width:`min(${leftWidth}px, 28vw)`}}>
   <div className="layers-dock-header">
     <div className="layers-dock-title"><Layers3 size={17} aria-hidden="true"/><h2>Layers</h2>
@@ -454,7 +456,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </article><article className="workspace-sidebar workspace-inspector studio-inspector-dock" style={{width:`min(${rightWidth}px, 30vw)`}}>
   <h2>Inspector</h2>
   <div className="workspace-segments" role="group" aria-label="Inspector">
-    <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}>Hoop</button>
+    <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}>Design</button>
+    <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}>Sequence</button>
     <button aria-pressed={inspectorTab==='stitches'} onClick={()=>setInspectorTab('stitches')}>Stitches</button>
     <button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}>Size</button>
   </div>
@@ -463,8 +466,9 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <label>Export format<select value={format} onChange={e=>setFormat(e.target.value)}>
       {['dst','pes','jef','exp','vp3','pec'].map(f=><option value={f} key={f}>{f.toUpperCase()}</option>)}
     </select></label>
-    {outside&&<p className="workspace-warning" role="alert">Design exceeds the hoop.</p>}
+    {plan&&<div className="inspector-design-info"><h3>Design information</h3><dl><dt>Stitch points</dt><dd>{plan.stitches.toLocaleString()}</dd><dt>Color blocks</dt><dd>{plan.blocks.length}</dd><dt>Trims</dt><dd>{plan.trims}</dd></dl></div>}{outside&&<p className="workspace-warning" role="alert">Design exceeds the hoop.</p>}
   </section>}
+  {inspectorTab==='sequence'&&<section className="workspace-inspector-group"><h3>Sewing sequence</h3>{plan?.blocks.map((b,i)=><div className="sequence-item" key={i}><span>{i+1}</span><i style={{background:`rgb(${b.color.join(',')})`}}/><strong>{b.runs.reduce((n,r)=>n+r.length,0).toLocaleString()} points</strong></div>)}{!plan&&<p className="workspace-helper">Open a design to see its sewing sequence.</p>}</section>}
   {inspectorTab==='stitches'&&<section className="workspace-inspector-group">
     <h3>Generation settings</h3>
     <button onClick={()=>setAdvanced(v=>!v)} aria-expanded={advanced}>{advanced?'Hide stitch parameters':'Show stitch parameters'}</button>
