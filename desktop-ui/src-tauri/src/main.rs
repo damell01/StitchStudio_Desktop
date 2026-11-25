@@ -463,6 +463,32 @@ fn optimized_density(source:&zigzag::document::Document, original:&Design)->Opti
 }
 // Simplification keeps original outlines, lettering and underlay. Test several
 // density levels, and accept only a measurable improvement with intact coverage.
+// Remove redundant penetrations on an existing run without changing its
+// direction reversals, ties, or visible path beyond a small tolerance.
+fn simplify_needle_path(points:&[zigzag::geom::P],max_length:f64,tolerance:f64)->Vec<zigzag::geom::P>{
+    use zigzag::geom::{P,cross};
+    if points.len()<8{return points.to_vec()}
+    let mut out:Vec<P>=points[..3].to_vec();
+    let mut anchor=2usize;
+    while anchor<points.len()-4{
+        let mut best=anchor+1;
+        for end in anchor+2..=(anchor+12).min(points.len()-4){
+            let a=points[anchor];let b=points[end];let ab=b-a;let len=ab.len();
+            if len>max_length||len<0.001{break}
+            let mut last=0.0;let mut valid=true;
+            for k in anchor+1..=end{
+                let d=points[k]-points[k-1];let ap=points[k]-a;
+                let t=ap.dot(ab)/len;
+                if d.len()<0.5||t<=last||cross(ap,ab).abs()/len>tolerance{valid=false;break}
+                last=t;
+            }
+            if !valid{break}
+            best=end;
+        }
+        out.push(points[best]);anchor=best;
+    }
+    out.extend_from_slice(&points[anchor+1..]);out
+}
 fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool)->Option<(zigzag::document::Document,Design)>{
     use zigzag::{params::Kind,svg::Geometry,bezier::{Anchor,SubPath}};
     if original.stitch_count()==0||original.stitch_count()>200_000{return None}
@@ -480,7 +506,7 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
                 if let Geometry::Stroke{lines,..}=&shape.geometry{
                     let mut edited=false;let mut subpaths=Vec::new();
                     for (line,closed) in lines{
-                        let pts=if *closed{line.clone()}else{resize_fixed_run(line,true)};
+                        let pts=if *closed{line.clone()}else{simplify_needle_path(line,if strength>=3{35.0}else{25.0},if strength>=3{0.6}else{0.3})};
                         edited|=pts.len()<line.len();
                         subpaths.push(SubPath{anchors:pts.into_iter().map(Anchor::corner).collect(),closed:*closed});
                     }
@@ -496,6 +522,18 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
             if kind==Kind::Fill&&matches!(shape.geometry,Geometry::Fill{..})&&b.width().min(b.height())>=60.0{
                 let spacing=shape.params.fill_spacing(&fabric);let target=(spacing*factor).min(0.48);
                 if target>spacing+0.005{shape.params.spacing=Some(target);changed=true;}
+            }
+            // Reduce penetrations along already covered paths, not just
+            // between fill rows. Preserve explicit specialty stitch types.
+            if kind==Kind::Fill&&matches!(shape.geometry,Geometry::Fill{..})&&b.width().min(b.height())>=60.0{
+                let len=shape.params.fill_len(&fabric);
+                let target=(len*factor).min(if strength>=3{4.0}else{3.5});
+                if target>len+0.05{shape.params.len=Some(target);changed=true;}
+            }
+            if kind==Kind::Run&&matches!(shape.geometry,Geometry::Stroke{..}){
+                let len=shape.params.run_len(&fabric);
+                let target=(len*factor).min(if strength>=3{3.5}else{3.0});
+                if target>len+0.05{shape.params.len=Some(target);changed=true;}
             }
             if kind==Kind::Satin&&b.width().min(b.height())>=25.0{
                 let spacing=shape.params.satin_spacing(&fabric);let target=(spacing*factor).min(0.45);
@@ -2212,6 +2250,8 @@ fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).inv
 #[cfg(test)]
 mod fixed_resize_tests {
  use super::*;use zigzag::geom::P;
+ #[test] fn simplify_needle_path_removes_collinear_penetrations(){let p:Vec<_>=(0..40).map(|i|P::new(i as f64*5.,0.)).collect();let q=simplify_needle_path(&p,35.,0.6);assert!(q.len()<p.len()/2);assert_eq!(q.first(),p.first());assert_eq!(q.last(),p.last());assert!(q.windows(2).all(|w|w[0].dist(w[1])<=35.));}
+ #[test] fn simplify_needle_path_protects_zigzags(){let p:Vec<_>=(0..40).map(|i|P::new(i as f64*3.,if i%2==0{0.}else{20.})).collect();assert_eq!(simplify_needle_path(&p,35.,0.6),p);}
  #[test] fn curved_satin_preserves_endpoints(){let mut p=Vec::new();for i in 0..16{let a=i as f64*0.08;for r in [40.,60.]{p.push(P::new(r*a.cos()*1.5,r*a.sin()*1.5));}}let q=regenerate_satin_run(&p,1.5,1.5).unwrap();assert!(q.len()>p.len());assert!(q[0].dist(p[0])<0.001);assert!(q.last().unwrap().dist(*p.last().unwrap())<0.001);}
  #[test] fn running_stitch_pitch_survives_resize(){let p:Vec<_>=(0..12).map(|i|P::new(i as f64*40.,0.)).collect();let q=regenerate_running_run(&p,2.,1.).unwrap();assert!(q.len()>p.len());assert_eq!(q.first(),p.first());assert_eq!(q.last(),p.last());assert!(reconstruction_ok(&p,&q));}
  #[test] fn rejects_reconstruction_outside_original(){let a=vec![P::new(0.,0.),P::new(100.,0.)];let b=vec![a[0],P::new(50.,100.),a[1]];assert!(!reconstruction_ok(&a,&b));}
