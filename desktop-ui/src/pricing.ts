@@ -1,6 +1,6 @@
-export type PricingRates={garment:number;supplies:number;threadPerThousand:number;machineHourly:number;laborHourly:number;handlingMinutes:number;setupFee:number;digitizingFee:number;margin:number;minimum:number;shipping:number;tax:number;wastePercent:number};
+export type PricingRates={garment:number;supplies:number;threadPerThousand:number;machineHourly:number;laborHourly:number;handlingMinutes:number;setupFee:number;digitizingFee:number;margin:number;minimum:number;shipping:number;tax:number;wastePercent:number;minimumProfit:number};
 export type QuoteInput=PricingRates&{quantity:number;stitches:number;minutes:number;method?:'cost'|'stitch';stitchRate?:number;extraMaterial?:number;extraHandling?:number;priceOverride?:number;garmentMarkup?:number;specialtyMinimum?:number;customerProvided?:boolean;providedHandling?:number};
-export const defaultRates:PricingRates={garment:6,supplies:1,threadPerThousand:.15,machineHourly:8,laborHourly:20,handlingMinutes:4,setupFee:0,digitizingFee:0,margin:40,minimum:15,shipping:0,tax:0,wastePercent:5};
+export const defaultRates:PricingRates={garment:6,supplies:1,threadPerThousand:.15,machineHourly:8,laborHourly:20,handlingMinutes:4,setupFee:0,digitizingFee:0,margin:40,minimum:15,shipping:0,tax:0,wastePercent:5,minimumProfit:15};
 export function calculateQuote(i:QuoteInput){
  const safe=(v:number)=>Number.isFinite(v)?Math.max(0,v):0;
  const q=Math.max(1,Math.min(100000,Math.floor(safe(i.quantity))));
@@ -17,9 +17,9 @@ export function calculateQuote(i:QuoteInput){
  // Setup/digitizing are quoted charges, not assumed production expenses.
  const garmentRetail=garment*(1+safe(i.garmentMarkup??50)/100);
  const embroideryMinimum=Math.max(safe(i.minimum),safe(i.specialtyMinimum??0));
- const suggestedPrice=Math.ceil(Math.max(embroideryMinimum+garmentRetail,unitCost/(1-margin))*2-1e-8)/2;
+ const suggestedPrice=Math.ceil(Math.max(embroideryMinimum+garmentRetail,unitCost/(1-margin),unitCost+safe(i.minimumProfit??15))*2-1e-8)/2;
  const stitchPrice=Math.ceil((Math.max(embroideryMinimum,safe(i.stitches)/1000*safe(i.stitchRate??1.75)+safe(i.extraMaterial??0)+safe(i.extraHandling??0)/60*safe(i.laborHourly))+garmentRetail)*100-1e-8)/100;
- const unitPrice=i.priceOverride!==undefined?safe(i.priceOverride):i.method==='stitch'?stitchPrice:suggestedPrice;
+ const unitPrice=i.priceOverride!==undefined?safe(i.priceOverride):i.method==='stitch'?Math.max(stitchPrice,suggestedPrice):suggestedPrice;
  const subtotal=unitPrice*q+fees+safe(i.shipping);
  const tax=Math.round(subtotal*Math.min(100,safe(i.tax)))/100;
  const total=Math.round((subtotal+tax)*100)/100;
