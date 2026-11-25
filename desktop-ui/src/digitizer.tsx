@@ -21,6 +21,7 @@ type Review = {
   jumps: number;
   dst_stitches: number;
   color_changes: number;
+  optimization?: [number,number] | null;
 };
 
 const defaults = {
@@ -290,6 +291,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       {review && <>
         <div hidden={inspector!=='quality'} className="digitizer-inspector-content">
         <h3>Stitch quality</h3>
+        {review.optimization&&<section className="digitizer-quality-summary" aria-label="Automatic optimization results"><strong>Automatic density optimization applied</strong><div><span>Original plan</span><b>{review.optimization[0].toLocaleString()}</b></div><div><span>Optimized plan</span><b>{review.optimization[1].toLocaleString()}</b></div><div><span>Stitch points saved</span><b>{(review.optimization[0]-review.optimization[1]).toLocaleString()} ({(100*(review.optimization[0]-review.optimization[1])/Math.max(1,review.optimization[0])).toFixed(1)}%)</b></div><small>The alternative passed automated geometry and stitch-count comparisons. Test sew to confirm coverage.</small></section>}
         <section className="digitizer-quality-summary" aria-label="Design preflight">
           <strong>{review.warnings.length || review.quality.long || review.quality.zero ? 'Review recommended' : 'No flagged geometry issues'}</strong>
           <small>Automated geometry checks are not a substitute for a test sew.</small>
