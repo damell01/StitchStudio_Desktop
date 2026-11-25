@@ -607,7 +607,7 @@ fn satin_pieces_strip(
                 let w = mean_width(&rails);
                 let sp = SatinParams {
                     spacing: mm(p.satin_spacing_for(f, w / 10.0)),
-                    pull: mm(p.satin_pull(f)),
+                    pull: mm(p.satin_pull_for(f, w / 10.0)),
                     underlay: p.satin_underlay_for(w / 10.0),
                     run_len: mm(2.5),
                     short_stitches: p.short_stitches_on(),
