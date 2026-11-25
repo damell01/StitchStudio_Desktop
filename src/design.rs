@@ -460,7 +460,11 @@ fn fill_runs(
     let f = &opt.fabric;
     let angle = p.fill_angle().to_radians();
     let mut groups = Vec::new();
-    if p.underlay_on() {
+    let mut region = Bounds::empty();
+    rings.iter().flatten().for_each(|&point| region.add(point));
+    let narrow = region.width().min(region.height()) < mm(1.5);
+    // Avoid a second fill layer on tiny stable-woven automatic details.
+    if p.underlay_on() && !(opt.hat_order && f.id == "standard" && p.underlay.is_none() && narrow) {
         if f.fill_edge_walk {
             let inset = boolean::offset(rings, rule, -5.0);
             let walk: Vec<Piece> = inset
@@ -494,7 +498,7 @@ fn fill_runs(
         // Automatic artwork uses a moderate density floor on stable woven.
         // Explicit object spacing and other fabric presets remain untouched.
         spacing: mm(if p.spacing.is_none() && shape.params.kind.is_none() && opt.hat_order && f.id == "standard" {
-            p.fill_spacing(f).max(0.36)
+            if narrow { p.fill_spacing(f) } else { p.fill_spacing(f).max(0.36) }
         } else { p.fill_spacing(f) }),
         len: mm(p.fill_len(f)),
         inset: 0.0,
