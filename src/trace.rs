@@ -515,7 +515,7 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
 
     // Flat Logo first (it has no centre lines); anything that isn't flat art
     // is posterized instead.
-    let (result, method) = if o.lines {
+    let (mut result, method) = if o.lines {
         (run(r, &color_params(colors.or(Some(auto_colors))))?, "posterized")
     } else {
         match vectorcraft_trace::trace_within(r, &logo_params, MAX_ANCHORS) {
@@ -524,6 +524,34 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
             Err(e) => return Err(explain(e)),
         }
     };
+    // For automatic flat artwork, compare a richer candidate when the
+    // source palette is poorly represented. Bound the work to one retry.
+    if colors.is_none() && !o.lines && o.threads.is_empty() && auto_colors < 10 && significant >= 4 {
+        let score = |t: &TraceResult| -> f64 {
+            let palette: Vec<_> = t.paths.iter().map(|p| p.color).collect::<std::collections::HashSet<_>>().into_iter().collect();
+            if palette.is_empty() { return f64::INFINITY; }
+            let mut error = 0.0;
+            let mut weight = 0.0;
+            for (k, &n) in bins.iter().enumerate() {
+                if n == 0 || n < opaque / 200 { continue; }
+                let c = [(((k >> 8) & 15)*16+8) as u8, (((k >> 4) & 15)*16+8) as u8, ((k & 15)*16+8) as u8];
+                let d = palette.iter().map(|&p| crate::formats::perceptual_distance(c,p)).fold(f64::INFINITY,f64::min);
+                error += d * n as f64;
+                weight += n as f64;
+            }
+            error / weight.max(1.0)
+        };
+        let baseline = score(&result);
+        if baseline.is_finite() && baseline > 0.0 {
+            let mut richer = if method == "flat logo" { logo_params.clone() } else { color_params(Some(10)) };
+            richer.colors = 10;
+            if let Ok(candidate) = run(r, &richer) {
+                if !candidate.paths.is_empty() && candidate.paths.len() <= result.paths.len().saturating_mul(2) && score(&candidate) < baseline * 0.75 {
+                    result = candidate;
+                }
+            }
+        }
+    }
     Ok(to_svg(
         &result,
         r,
