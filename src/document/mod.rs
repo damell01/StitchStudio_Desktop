@@ -16,10 +16,12 @@ mod cleanup;
 mod edit;
 mod glyphs;
 mod lettering;
+mod layers;
 mod paths;
 pub use cleanup::{CleanUp, CleanUpReport};
 pub use edit::Fragment;
 pub use glyphs::{Carets, GlyphBox};
+pub use layers::LayerProperties;
 pub use lettering::{Align, Case, TextSpec, default_font, font_families};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -154,6 +156,7 @@ pub struct Document {
     pub offset: P,
     pub shapes: Vec<Shape>,
     pub settings: Settings,
+    layer_properties: HashMap<String, LayerProperties>,
     /// Parts removed from elements that still have another part.
     removed_parts: HashSet<(String, Part)>,
     next_uid: usize,
@@ -256,6 +259,7 @@ impl Document {
             name: name.to_string(),
             offset: P::default(),
             shapes: Vec::new(),
+            layer_properties: HashMap::new(),
             settings,
             removed_parts: HashSet::new(),
             next_uid: 0,
@@ -302,8 +306,10 @@ impl Document {
                 .filter_map(|n| n.attribute("id").map(str::to_string))
                 .collect()
         };
-        let (mut shapes, tree, ids) = svg::load_with_tree_and(self.xml.as_bytes(), lettering_ids)?;
-        self.lettering_ids = ids.unwrap_or_default();
+        let (mut shapes, tree, metadata) = svg::load_with_tree_and(self.xml.as_bytes(), |doc| {
+            (lettering_ids(doc), layers::read_layer_properties(doc))
+        })?;
+        (self.lettering_ids, self.layer_properties) = metadata.unwrap_or_default();
         self.tree = Some(std::sync::Arc::new(tree));
         shapes.retain(|s| !self.removed_parts.contains(&(s.id.clone(), s.part)));
         for s in &mut shapes {
@@ -742,12 +748,12 @@ impl Document {
     }
 
     pub fn plan(&self) -> crate::design::Design {
-        crate::design::plan(&self.name, &self.shapes, &self.plan_options())
+        self.plan_visible_layers(&mut crate::design::PlanCache::default())
     }
 
     /// [`Document::plan`], re-planning only what changed since `cache` was filled.
     pub fn plan_cached(&self, cache: &mut crate::design::PlanCache) -> crate::design::Design {
-        crate::design::plan_cached(&self.name, &self.shapes, &self.plan_options(), cache)
+        self.plan_visible_layers(cache)
     }
 }
 

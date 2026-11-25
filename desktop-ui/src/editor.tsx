@@ -1,3 +1,4 @@
+import {PathEditor} from './path-editor';
 import {assistantIntent} from './assistant-intent';
 import {rememberProject,thumbnailOf,type Project} from './library';
 import {InlineLettering} from './lettering';
@@ -5,6 +6,9 @@ import {Type,Clock3,Sparkles,ArrowUp,ArrowDown,ArrowLeft,ArrowRight} from 'lucid
 import {GarmentPreview} from './garment-preview';
 import {ThreadOrder,ReferenceColorPanel,type ThreadAssignments} from './thread-order';
 import {FabricPicker} from './fabric-picker';
+import {LayerDialog,SavedThreadDialog} from './layer-dialogs';
+import {InspectorDialog,StitchLengthReport} from './workspace-inspector';
+import './editor-frame.css';
 import {ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {CommandPalette,type Command} from './command-palette';
 import {InsertDesignDialog} from './insert-design-dialog';
@@ -12,11 +16,11 @@ import {confirmAction,toast} from './dialogs';
 import {ExportCenter} from './export-center';
 import {readThreads} from './threads';
 import {StitchPicker} from './stitch-guide';
-import {useState,useEffect,useRef,useMemo,type PointerEvent as ReactPointerEvent} from 'react';
-import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2,GripHorizontal,Search,X,Waypoints,Group,Shapes,Wrench,Palette,MoreHorizontal,CheckCircle2} from 'lucide-react';
+import {useState,useEffect,useRef,useMemo,type PointerEvent as ReactPointerEvent,type CSSProperties} from 'react';
+import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2,GripHorizontal,Search,X,Waypoints,Group,Wrench,Palette,MoreHorizontal,CheckCircle2,LockKeyhole,LockKeyholeOpen,GripVertical,SlidersHorizontal} from 'lucide-react';
 import {invoke,isTauri} from '@tauri-apps/api/core';
 type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
-type EditableObject={uid:number;groups?:string[];label:string;color:number[];kind:string;bounds?:[number,number,number,number];path?:string;fill_rule?:'evenodd'|'nonzero';stroke_width?:number};
+type EditableObject={uid:number;groups?:string[];label:string;locked?:boolean;hidden?:boolean;color:number[];kind:string;bounds?:[number,number,number,number];path?:string;fill_rule?:'evenodd'|'nonzero';stroke_width?:number};
 type ObjectOperation={kind:'move';dx:number;dy:number}|{kind:'scale';factor:number}|{kind:'rotate'|'duplicate'|'delete'}|ResizeOperation;
 type ResizeOperation={kind:'resize';sx:number;sy:number;x:number;y:number};
 type ResizeHandle={x:number;y:number;dx:number;dy:number;cursor:string};
@@ -30,23 +34,43 @@ function panelWidth(key: string, fallback: number, min: number, max: number) {
   const value = Number(localStorage.getItem(key));
   return value >= min && value <= max ? value : fallback;
 }
-export function Editor({beginner=true,navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const [focusCanvas,setFocusCanvas]=useState(false);
+export function Editor({navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const [focusCanvas,setFocusCanvas]=useState(false);
 const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
-const [left,setLeft]=useState(true),[right,setRight]=useState(true),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",280,160,340)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",420,180,460));useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(100),[pan,setPan]=useState([0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(true);const [exportOpen,setExportOpen]=useState(false);const [threadAssignments,setThreadAssignments]=useState<ThreadAssignments>({});const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
+const dockBreakpoint=1100;
+const [left,setLeft]=useState(()=>window.innerWidth>=dockBreakpoint),[right,setRight]=useState(()=>window.innerWidth>=dockBreakpoint),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",216,180,320)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,220,360));
+function showLayers(open:boolean){
+  if(open&&focusCanvas)changeFocus(false);
+  if(open&&window.innerWidth<dockBreakpoint)setRight(false);
+  setLeft(open);
+}
+function showInspector(open:boolean){
+  if(open&&focusCanvas)changeFocus(false);
+  if(open&&window.innerWidth<dockBreakpoint)setLeft(false);
+  setRight(open);
+}
+useEffect(()=>{
+  const query=window.matchMedia(`(max-width: ${dockBreakpoint-1}px)`);
+  function onNarrow(event:MediaQueryListEvent){if(event.matches)setLeft(false)}
+  query.addEventListener('change',onNarrow);
+  return()=>query.removeEventListener('change',onNarrow);
+},[]);useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(100),[pan,setPan]=useState([0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(true);const [exportOpen,setExportOpen]=useState(false);const [threadAssignments,setThreadAssignments]=useState<ThreadAssignments>({});const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
 const resizePanel=useRef<{side:'left'|'right';start:number;width:number;pointer:number}|null>(null);
 function panelResizeHandle(side:'left'|'right'){
  const value=side==='left'?leftWidth:rightWidth;
- const min=side==='left'?160:180,max=side==='left'?340:460;
+ const min=side==='left'?180:220,max=side==='left'?320:360;
  const change=(next:number)=>(side==='left'?setLeftWidth:setRightWidth)(Math.max(min,Math.min(max,next)));
  return <div className={'studio-panel-resizer resize-'+side} role="separator" aria-label={side==='left'?'Resize layers panel':'Resize inspector panel'} aria-orientation="vertical" aria-valuemin={min} aria-valuemax={max} aria-valuenow={value} tabIndex={0} onPointerDown={e=>{if(e.button!==0)return;resizePanel.current={side,start:e.clientX,width:value,pointer:e.pointerId};e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault()}} onPointerMove={e=>{const drag=resizePanel.current;if(drag?.pointer===e.pointerId&&drag.side===side)change(drag.width+(e.clientX-drag.start)*(side==='left'?1:-1))}} onLostPointerCapture={()=>{resizePanel.current=null}} onPointerCancel={()=>{resizePanel.current=null}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();change(value+(e.key==='ArrowRight'?1:-1)*(side==='left'?1:-1)*10)}else if(e.key==='Home'||e.key==='End'){e.preventDefault();change(e.key==='Home'?min:max)}}}/>;
 }
+const [cameraTop,setCameraTop]=useState(()=>localStorage.getItem('studio-camera-top')!=='0');
+useEffect(()=>localStorage.setItem('studio-camera-top',cameraTop?'1':'0'),[cameraTop]);
+const cameraDrag=useRef<number|null>(null);
 const [canvasMode,setCanvasMode]=useState<'pan'|'select'|'design'>('select');
 const [objectOffset,setObjectOffset]=useState<[number,number]>([0,0]);
 const [resizePreview,setResizePreview]=useState<ResizeOperation|null>(null);
 const [designOffset,setDesignOffset]=useState<[number,number]>([0,0]);
-const designGesture=useRef<{pointer:number;x:number;y:number;uids?:number[]}|null>(null);
+const designGesture=useRef<{pointer:number;x:number;y:number;clientX:number;clientY:number;uids?:number[]}|null>(null);
 const [activeGroup,setActiveGroup]=useState<string|null>(null);
 const groupResizeGesture=useRef<{pointer:number;uids:number[];cx:number;cy:number;x:number;y:number}|null>(null);
 const [groupScalePreview,setGroupScalePreview]=useState<[number,number]>([1,1]);
@@ -62,20 +86,20 @@ useEffect(()=>{setGroupWidth('');setGroupRotation('0')},[activeGroup]);
 const designGroups=useMemo(()=>{const map=new Map<string,EditableObject[]>();for(const o of objects){const key=o.groups?.find(g=>g.startsWith('tl-custom-group-')||g.startsWith('tl-independent-'))||o.groups?.find(g=>g.startsWith('tl-added-'))||o.groups?.find(g=>g.startsWith('tl-lettering-'))||'original';const list=map.get(key)||[];list.push(o);map.set(key,list)}return Array.from(map,([key,members])=>{const b=members.flatMap(o=>o.bounds?[o.bounds]:[]);if(!b.length)return {key,members,bounds:null};const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return {key,members,bounds:[x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]}})},[objects]);
 const independentGroups=designGroups.length>1;
 const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchorX:number;anchorY:number}|null>(null);
-const objectGesture=useRef<{uid:number;x:number;y:number;pointerId:number}|null>(null);
+const objectGesture=useRef<{uid:number;x:number;y:number;clientX:number;clientY:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
 const [multi,setMulti]=useState<number[]>([]);const [snap,setSnap]=useState(false);const [context,setContext]=useState<{uid:number;x:number;y:number}|null>(null);
-const selectionIds=multi.filter(id=>objects.some(o=>o.uid===id));
+const selectionIds=multi.filter(id=>objects.some(o=>o.uid===id&&!o.locked&&!o.hidden));
 const [nudgeStep,setNudgeStep]=useState(1);
-const [lockedObjects,setLockedObjects]=useState<number[]>([]);const [dragLayer,setDragLayer]=useState<number|null>(null);const [dropLayer,setDropLayer]=useState<number|null>(null);
-const [layerNames,setLayerNames]=useState<Record<number,string>>({});
+const lockedObjects=useMemo(()=>objects.filter(object=>object.locked||object.hidden).map(object=>object.uid),[objects]);
+const [dragLayer,setDragLayer]=useState<number|null>(null);
+const [dropLayer,setDropLayer]=useState<{uid:number;direction:'before'|'after'}|null>(null);
 const [renameDraft,setRenameDraft]=useState('');
-useEffect(()=>{setRenameDraft(selected?layerNames[selected.uid]||selected.label:'')},[selected?.uid,selected?.label,layerNames]);
 const [marquee,setMarquee]=useState<{x:number;y:number;w:number;h:number}|null>(null);
 const marqueeGesture=useRef<{pointer:number;x:number;y:number;clientX:number;clientY:number;add:boolean;initial:number[]}|null>(null);
 const [hoverUid,setHoverUid]=useState<number|null>(null);
 const [positionX,setPositionX]=useState(''),[positionY,setPositionY]=useState('');
-const movementIds=canvasMode==='design'?(designGroups.find(g=>g.key===activeGroup)?.members.map(o=>o.uid)??[]):selectionIds.length?selectionIds:selected?[selected.uid]:[];
+const movementIds=canvasMode==='design'?(designGroups.find(g=>g.key===activeGroup)?.members.filter(o=>!o.locked&&!o.hidden).map(o=>o.uid)??[]):selectionIds.length?selectionIds:selected?[selected.uid]:[];
 function nudge(dx:number,dy:number){if(busy||!movementIds.length||movementIds.some(id=>lockedObjects.includes(id)))return;void edit('move_artwork_objects',{uids:movementIds,dx,dy});}
 const multiBounds=useMemo(()=>{const b=objects.filter(o=>multi.includes(o.uid)&&o.bounds).map(o=>o.bounds!);if(!b.length)return null;const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return [x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]},[objects,multi]);
 
@@ -89,7 +113,7 @@ function selectNearbyRegion(){
  const nearby=(a:EditableObject,b:EditableObject)=>{if(!a.bounds||!b.bounds)return false;const [x,y,w,h]=a.bounds,[u,v,j,k]=b.bounds;return x<=u+j+gap&&u<=x+w+gap&&y<=v+k+gap&&v<=y+h+gap};
  const candidates=objects.filter(o=>o.color.join(',')===seed.color.join(',')&&!lockedObjects.includes(o.uid)&&!o.groups?.some(g=>g.startsWith('tl-lettering-'))&&!o.groups?.some(g=>g==='tl-small-ink-detail'));
  for(let pass=0;pass<8;pass++){let added=false;for(const o of candidates){if(!group.has(o.uid)&&candidates.some(q=>group.has(q.uid)&&nearby(o,q))){group.add(o.uid);added=true}}if(!added)break}
- setMulti([...group]);setCanvasMode('select');setSelectedObject(null);setActiveGroup(null);setLayerTab('objects');setLeft(true);
+ setMulti([...group]);setCanvasMode('select');setSelectedObject(null);setActiveGroup(null);setLayerTab('objects');showLayers(true);
 }
 function toggleMulti(uid:number){setCanvasMode('select');setMulti(old=>{const base=old.length?old:selectedObject!==null?[selectedObject]:[];return base.includes(uid)?base.filter(i=>i!==uid):[...base,uid]});setLayerTab('objects')}
 const [guides,setGuides]=useState<{x:number|null;y:number|null}>({x:null,y:null});
@@ -107,9 +131,9 @@ function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
  const [y,gy]=axis(dy,[source[1],(source[1]+source[3])/2,source[3]],ys);
  if(show)setGuides({x:gx,y:gy});return [x,y]
 }
-const objectPage=usePagedList(objects.filter(object=>matchesName(layerNames[object.uid]||object.label,objectQuery)),objectQuery,6);
-const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(false);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [assistantText,setAssistantText]=useState('');const [assistantReply,setAssistantReply]=useState('Describe a supported edit, or choose a suggestion. No model or internet required.');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);setRight(true);setInspectorTab('text')};
-const [advanced,setAdvanced]=useState(!beginner);const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>localStorage.getItem('studio-default-machine')||''),[hoop,setHoop]=useState(()=>localStorage.getItem('studio-default-hoop')||'');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
+const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
+const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(false);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [assistantText,setAssistantText]=useState('');const [assistantReply,setAssistantReply]=useState('Describe a supported edit, or choose a suggestion. No model or internet required.');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
+const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>localStorage.getItem('studio-default-machine')||''),[hoop,setHoop]=useState(()=>localStorage.getItem('studio-default-hoop')||'');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 const editLock=useRef(false);const [inlineWork,setInlineWork]=useState('');
 async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return;editLock.current=true;setInlineWork(command==='maximize_in_hoop'?'Fitting design and regenerating stitches…':command==='resize_artwork_selection'?'Regenerating stitches at new size…':command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null)}catch(e){setMessage(String(e))}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview([1,1]);setRotationPreview(0);setBusy(false)}}
@@ -133,11 +157,11 @@ async function runAssistant(input:string){
  if(intent.kind==='selectColor'||intent.kind==='selectLabel'||intent.kind==='selectKind'){
   const matches=objects.filter(o=>intent.kind==='selectColor'?o.color.join(',')===intent.color?.join(','):intent.kind==='selectLabel'?o.label.toLowerCase().includes(intent.text??''):o.kind.toLowerCase()===intent.text);
   if(!matches.length){setAssistantReply('No editable objects matched. Check the Layers panel for exact colors, labels and stitch types.');return}
-  setCanvasMode('select');setMulti(matches.map(o=>o.uid));setSelectedObject(null);setActiveGroup(null);setContext(null);setLeft(true);setLayerTab('objects');
+  setCanvasMode('select');setMulti(matches.map(o=>o.uid));setSelectedObject(null);setActiveGroup(null);setContext(null);showLayers(true);setLayerTab('objects');
   setAssistantReply('Selected '+matches.length+' matching object'+(matches.length===1?'':'s')+'. Use Properties to modify the selection. Whole-design commands still affect the entire canvas.');return;
  }
  if(['moveSelected','scaleSelected','rotateSelected'].includes(intent.kind)){
-  const ids=selectionIds.length?selectionIds:selectedObject!==null&&objects.some(o=>o.uid===selectedObject)?[selectedObject]:activeGroup!==null?designGroups.find(g=>g.key===activeGroup)?.members.map(o=>o.uid)??[]:[];
+  const ids=selectionIds.length?selectionIds:selectedObject!==null&&objects.some(o=>o.uid===selectedObject)?[selectedObject]:activeGroup!==null?designGroups.find(g=>g.key===activeGroup)?.members.filter(o=>!o.locked&&!o.hidden).map(o=>o.uid)??[]:[];
   if(!ids.length){setAssistantReply('Select editable objects or a design group before using a selected-object command. Nothing was changed.');return}
   if(!await confirmAction('Apply to '+ids.length+' selected object(s) only: '+input+'?'))return;
   if(editLock.current)return;
@@ -205,7 +229,7 @@ async function runAssistant(input:string){
 
 function fit(stretch=false){if(!plan||busy||invalidField||machineExceeded||incompatibleHoop)return;void edit('maximize_in_hoop',{widthMm:width,heightMm:height,marginMm:2,stretch});}
 useEffect(()=>{const m=machines.find(p=>p.id===machine);const h=hoops.find(p=>p.id===hoop);if(!m)setMachine('');if(h&&hoopFits(h,m)){setWidth(h.width);setHeight(h.height)}else{setHoop('');if(m){setWidth(m.width);setHeight(m.height)}}if(m?.format)setFormat(m.format.toLowerCase());try{const target=sessionStorage.getItem('studio-digitizer-output-format');if(target){if(['dst','pes','pec','jef','exp','vp3'].includes(target))setFormat(target);sessionStorage.removeItem('studio-digitizer-output-format')}const raw=sessionStorage.getItem('studio-open-project-settings');if(raw){const p=JSON.parse(raw);setWidth(p.width);setHeight(p.height);setFormat(p.format);setThreadAssignments(p.thread_assignments??{});sessionStorage.removeItem('studio-open-project-settings')}}catch{}let active=true;invoke<Plan|null>('current_preview').then(p=>{if(active&&p)setPlan(p)}).catch(()=>{});return ()=>{active=false}},[]);
-useEffect(()=>{let active=true;invoke<EditableObject[]>('editable_objects').then(items=>{if(active){setObjects(items);setSelectedObject(old=>items.some(o=>o.uid===old)?old:null)}}).catch(()=>{if(active){setObjects([]);if(plan)setLayerTab('threads')}});return()=>{active=false}},[plan]);
+useEffect(()=>{let active=true;invoke<EditableObject[]>('editable_objects').then(items=>{if(active){setObjects(items);setSelectedObject(old=>items.some(o=>o.uid===old&&!o.locked&&!o.hidden)?old:null)}}).catch(()=>{if(active){setObjects([]);if(plan)setLayerTab('threads')}});return()=>{active=false}},[plan]);
 useEffect(()=>{
   let active=true;
   if(plan)void invoke<string|null>('current_fabric').then(value=>{if(active&&value)setFabric(value);}).catch(()=>{});
@@ -224,7 +248,7 @@ const selectionTransform=resizePreview
   : `translate(${objectOffset.join(' ')})`;
 const points=useMemo(()=>plan?.blocks.flatMap(block=>block.runs.flat())??[],[plan]);
 const [historyLabels,setHistoryLabels]=useState<[string[],string[]]>([[],[]]);
-useEffect(()=>{if(busy)return;let active=true;invoke<[string[],string[]]>('history_labels').then(h=>{if(active)setHistoryLabels(h)}).catch(()=>{if(active)setHistoryLabels([[],[]])});return()=>{active=false}},[plan,busy]);
+useEffect(()=>{if(busy)return;let active=true;invoke<[string[],string[]]>('history_labels').then(h=>{if(active&&Array.isArray(h)&&h.length===2)setHistoryLabels(h)}).catch(()=>{if(active)setHistoryLabels([[],[]])});return()=>{active=false}},[plan,busy]);
 
 const [sewingSpmDraft,setSewingSpmDraft]=useState<string|null>(null);const [sewingSpm,setSewingSpm]=useState(()=>{const n=Number(localStorage.getItem('studio-sewing-spm')||800);return Number.isFinite(n)&&n>=100&&n<=1500?n:800});
 const [trimSeconds,setTrimSeconds]=useState(()=>{const n=Number(localStorage.getItem('studio-trim-seconds')||3);return Number.isFinite(n)&&n>=0&&n<=30?n:3});
@@ -240,6 +264,17 @@ const designBounds=useMemo(()=>{
   for(const [x,y] of points){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
   return {left,top,width:right-left,height:bottom-top};
 },[points]);
+const framedFirstDesign=useRef(false);
+useEffect(()=>{
+  if(framedFirstDesign.current||!designBounds)return;
+  framedFirstDesign.current=true;
+  const {left,top,width:artWidth,height:artHeight}=designBounds;
+  const framing=Math.min(165,Math.min(width/Math.max(1,artWidth),height/Math.max(1,artHeight))*82);
+  if(framing>100){
+    setZoom(framing);
+    setPan([left+artWidth/2,top+artHeight/2]);
+  }
+},[designBounds,width,height]);
 const sizePreview=useMemo(()=>{
  const b=movementBounds;
  if(b&&resizePreview)return {w:b[2]*resizePreview.sx,h:b[3]*resizePreview.sy,active:true};
@@ -281,7 +316,7 @@ function selectObject(object:EditableObject|null) {
   setMulti([]);setContext(null);
   const request=++selectionRequest.current;
   setSelectedObject(object?.uid??null);
-  if(object){setLayerTab('objects');setObjectKind(object.kind);void request;}
+  if(object){setLayerTab('objects');setObjectKind(object.kind);if(inspectorTab==='hoop')setInspectorTab('transform');void request;}
 }
 
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
@@ -306,6 +341,10 @@ function resizeAt(position:DOMPoint,shift=false) {
   }
   const clamp=(factor:number)=>Math.min(10,Math.max(.1,factor));
   return {kind:'resize' as const,sx:clamp(sx),sy:clamp(sy),x,y};
+}
+
+function movedOnScreen(event: ReactPointerEvent<SVGSVGElement>, origin: {clientX:number;clientY:number}) {
+  return Math.hypot(event.clientX-origin.clientX,event.clientY-origin.clientY) >= 3;
 }
 
 function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
@@ -337,7 +376,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
     if(group?.bounds){const [x,y,w,h]=group.bounds;const corner=Number(event.target.getAttribute('data-group-resize'));groupResizeGesture.current={pointer:event.pointerId,uids:group.members.map(o=>o.uid),cx:x+w/2,cy:y+h/2,x:x+(corner%2)*w,y:y+Math.floor(corner/2)*h};event.currentTarget.setPointerCapture(event.pointerId);return}
   }
   if(canvasMode==='design'&&event.button===0&&position&&event.target instanceof Element&&event.target.hasAttribute('data-design-group')){
-    const key=event.target.getAttribute('data-design-group');const group=independentGroups?designGroups.find(g=>g.key===key):undefined;setActiveGroup(group?.key??designGroups[0]?.key??null);designGesture.current={pointer:event.pointerId,x:position.x,y:position.y,uids:group?.members.map(o=>o.uid)};
+    const key=event.target.getAttribute('data-design-group');const group=independentGroups?designGroups.find(g=>g.key===key):undefined;setActiveGroup(group?.key??designGroups[0]?.key??null);designGesture.current={pointer:event.pointerId,x:position.x,y:position.y,clientX:event.clientX,clientY:event.clientY,uids:group?.members.map(o=>o.uid)};
     event.currentTarget.setPointerCapture(event.pointerId);
     return;
   }
@@ -354,7 +393,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   if(canvasMode==='select'&&event.button===0&&object&&position){
     if(event.shiftKey){toggleMulti(object.uid);return;}
     if(!selectionIds.includes(object.uid))selectObject(object);
-    objectGesture.current={uid:object.uid,x:position.x,y:position.y,pointerId:event.pointerId};
+    objectGesture.current={uid:object.uid,x:position.x,y:position.y,clientX:event.clientX,clientY:event.clientY,pointerId:event.pointerId};
     event.currentTarget.setPointerCapture(event.pointerId);
     return;
   }
@@ -375,7 +414,9 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   if(rotationGesture.current?.pointer===event.pointerId){setRotationPreview(rotationAt(position,event.shiftKey));return}
   if(groupResizeGesture.current?.pointer===event.pointerId){setGroupScalePreview(groupScaleAt(position,event.shiftKey));return}
   if(designGesture.current?.pointer===event.pointerId){
-    const offset=snapped(position.x-designGesture.current.x,position.y-designGesture.current.y,designGesture.current.uids,true) as [number,number];if(designGesture.current.uids)setObjectOffset(offset);else setDesignOffset(offset);
+    const start=designGesture.current;
+    const offset: [number,number] = movedOnScreen(event,start) ? snapped(position.x-start.x,position.y-start.y,start.uids,true) : [0,0];
+    if(start.uids)setObjectOffset(offset);else setDesignOffset(offset);
     return;
   }
   if(resizeGesture.current?.pointer===event.pointerId){
@@ -384,7 +425,9 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   }
   const gesture=objectGesture.current;
   if(gesture&&gesture.pointerId===event.pointerId){
-    setObjectOffset(snapped(position.x-gesture.x,position.y-gesture.y,selectionIds.includes(gesture.uid)?selectionIds:[gesture.uid],true));
+    setObjectOffset(movedOnScreen(event,gesture)
+      ? snapped(position.x-gesture.x,position.y-gesture.y,selectionIds.includes(gesture.uid)?selectionIds:[gesture.uid],true)
+      : [0,0]);
   }else if(drag){
     const matrix=event.currentTarget.getScreenCTM();
     if(!matrix)return;
@@ -423,7 +466,7 @@ function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boole
     const position=commit?pointerPosition(event):null;
     const start=designGesture.current;
     designGesture.current=null;
-    if(position){
+    if(position&&movedOnScreen(event,start)){
       const [dx,dy]=snapped(position.x-start.x,position.y-start.y,start.uids);
       if(Math.hypot(dx,dy)>=.05){if(start.uids){setObjectOffset([dx,dy]);void edit('move_artwork_objects',{uids:start.uids,dx,dy})}else{setDesignOffset([dx,dy]);void transform(1,0,dx,dy)}return;}
     }
@@ -443,7 +486,7 @@ function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boole
   objectGesture.current=null;
   if(!gesture){setDrag(null);return;}
   setDrag(null);
-  if(gesture&&position){
+  if(position&&movedOnScreen(event,gesture)){
     const [dx,dy]=snapped(position.x-gesture.x,position.y-gesture.y,selectionIds.includes(gesture.uid)?selectionIds:[gesture.uid]);
     if(Math.hypot(dx,dy)>=0.05){setObjectOffset([dx,dy]);if(selectionIds.includes(gesture.uid)&&selectionIds.length>1)void edit('move_artwork_objects',{uids:selectionIds,dx,dy});else editSelection({kind:'move',dx,dy},gesture.uid);return;}
   }
@@ -496,6 +539,7 @@ async function projectOpen(){if(plan&&!await confirmAction('Replace the current 
 async function save(companions=false,images?:{sheet?:number[];preview?:number[]}){if(outside||machineExceeded||incompatibleHoop||invalidField||!plan?.stitches){const reason='Select a compatible hoop with valid dimensions and fit the design before exporting.';setMessage(reason);throw new Error(reason)}setBusy(true);try{if(await invoke<boolean>('export_design',{format,width,height,companions,assignments:threadAssignments,sheetPng:images?.sheet,previewPng:images?.preview}))toast((companions||images?.sheet||images?.preview)?'Embroidery file and companion documents saved. Test sew before production.':'Embroidery file saved. Test sew before production.')}catch(e){setMessage(String(e));throw e}finally{setBusy(false)}}
 useEffect(()=>{const key=(e:KeyboardEvent)=>{if (document.querySelector('dialog[open]')||busy) return;
 if(e.key==='Escape'&&focusCanvas){changeFocus(false);return;}
+if(e.key==='Escape'&&window.innerWidth<dockBreakpoint&&(left||right)){setLeft(false);setRight(false);return;}
 if((e.target as HTMLElement)?.closest("input,select,textarea,[contenteditable=true],[role=separator]"))return;
 if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)&&movementIds.length&&!e.ctrlKey&&!e.metaKey){e.preventDefault();const step=e.shiftKey?nudgeStep*10:e.altKey?nudgeStep*.1:nudgeStep;nudge(e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0,e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0);return;}
 if(e.repeat)return;
@@ -522,13 +566,13 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
   <div className="studio-command-group studio-design-tools" role="group" aria-label="Create and edit"><button className="studio-add-text" disabled={busy||!plan} onClick={openSimplify}><Scissors size={17}/> Simplify</button>
     <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/></button>
-    <button className="studio-tool-icon" title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{setRight(true);setInspectorTab('transform')}}><Move size={17}/></button>
+    <button className="studio-tool-icon" title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{showInspector(true);setInspectorTab('transform')}}><Move size={17}/></button>
     
-    <button className="studio-tool-icon" title="Edit selected lettering" aria-label="Edit lettering" disabled={!selected||busy} onClick={()=>openText(selectedObject)}><Type size={17}/></button>
+    <button className="studio-add-text studio-toolbar-text" title="Add text" aria-label="Add text" disabled={busy} onClick={()=>openText()}><Type size={17}/><span>Add text</span></button>
   </div>
   <div className="studio-command-group studio-view-tools" role="group" aria-label="Workspace view">
-    <button className="studio-tool-icon" title="Layers" aria-label="Layers" aria-pressed={left} onClick={()=>setLeft(value=>!value)}><PanelLeft size={18}/></button>
-    <button className="studio-tool-icon" title="Inspector" aria-label="Inspector" aria-pressed={right} onClick={()=>setRight(value=>!value)}><PanelRight size={18}/></button>
+    <button className="studio-tool-icon" title="Layers" aria-label="Layers" aria-pressed={left} onClick={()=>showLayers(!left)}><PanelLeft size={18}/></button>
+    <button className="studio-tool-icon" title="Inspector" aria-label="Inspector" aria-pressed={right} onClick={()=>showInspector(!right)}><PanelRight size={18}/></button>
     <button className="studio-tool-icon" title={focusCanvas?'Exit focus view (Esc)':'Full-screen canvas (F11)'} aria-label={focusCanvas?'Exit focus view':'Focus canvas'} aria-pressed={focusCanvas} onClick={toggleFocus}>{focusCanvas?<Minimize size={18}/>:<Maximize size={18}/>}</button>
   </div>
   <div className="studio-command-group studio-intelligence-tools" role="group" aria-label="Design intelligence"><button className="studio-tool-icon studio-assistant-action" title="Offline design assistant" aria-label="Offline design assistant" aria-pressed={assistantOpen} onClick={()=>{setAssistantOpen(true)}}><Sparkles size={17}/></button></div>
@@ -537,11 +581,11 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {label:'Fit artwork',group:'View',run:fitArtwork,disabled:!plan},
     {label:'Fit hoop',group:'View',run:()=>{setZoom(100);setPan([0,0])}},
     {label:focusCanvas?'Exit focus view':'Focus canvas',group:'View',run:toggleFocus},
-    {label:'Layers',group:'View',run:()=>setLeft(value=>!value)},
+    {label:'Layers',group:'View',run:()=>showLayers(!left)},
     {label:'Offline design assistant',group:'Inspector',run:()=>{setAssistantOpen(true)}},
-    {label:'Hoop and machine',group:'Inspector',run:()=>{setRight(true);setInspectorTab('hoop')}},
-    {label:'Transform and resize',group:'Inspector',run:()=>{setRight(true);setInspectorTab('transform')},disabled:!plan},
-    {label:'Stitch tools and quality',group:'Inspector',run:()=>{setRight(true);setInspectorTab('stitches')},disabled:!plan},
+    {label:'Hoop and machine',group:'Inspector',run:()=>{showInspector(true);setInspectorTab('hoop')}},
+    {label:'Transform and resize',group:'Inspector',run:()=>{showInspector(true);setInspectorTab('transform')},disabled:!plan},
+    {label:'Stitch tools and quality',group:'Inspector',run:()=>{showInspector(true);setInspectorTab('stitches')},disabled:!plan},
     {label:'Add Text',group:'Create',run:()=>openText(),disabled:busy},
     {label:'Insert design',group:'File',run:openInsertDialog,disabled:busy},
     {label:'Duplicate selection',group:'Edit',run:()=>editSelection({kind:'duplicate'}),disabled:busy||!selected},
@@ -561,26 +605,22 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <div className="workspace-options-panel"><details className="studio-inspector-section"><summary>Editing history</summary><small>Undo · latest first</small>{historyLabels[0].length?<ol>{[...historyLabels[0]].reverse().map((label,i)=><li key={i}>{label}</li>)}</ol>:<p>No undo actions</p>}<small>Redo · latest first</small>{historyLabels[1].length?<ol>{[...historyLabels[1]].reverse().map((label,i)=><li key={i}>{label}</li>)}</ol>:<p>No redo actions</p>}</details>
       <button disabled={busy} onClick={projectOpen}>Open project</button>
       <button disabled={busy} onClick={recover}>Recover last design</button>
-      <label><span>Layers panel width</span><input aria-label="Left panel width" type="range" min="160" max="340" value={leftWidth} onChange={e=>setLeftWidth(Number(e.target.value))}/></label>
-      <label><span>Inspector width</span><input aria-label="Right panel width" type="range" min="180" max="460" value={rightWidth} onChange={e=>setRightWidth(Number(e.target.value))}/></label>
+      <label><span>Layers panel width</span><input aria-label="Left panel width" type="range" min="180" max="320" value={leftWidth} onChange={e=>setLeftWidth(Number(e.target.value))}/></label>
+      <label><span>Inspector width</span><input aria-label="Right panel width" type="range" min="220" max="360" value={rightWidth} onChange={e=>setRightWidth(Number(e.target.value))}/></label>
     </div>
   </details>
   {plan&&<GarmentPreview blocks={plan.blocks}/>}
   {plan&&<ThreadOrder assignments={threadAssignments} onAssign={(index,value)=>setThreadAssignments(old=>({...old,[index]:value}))} blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
   <button title="Delete selected design or objects (Delete)" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={17}/> Delete</button><button className="studio-save-design" title="Save editable Stitch Studio project (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={17}/> Save design</button><button className="primary studio-export" disabled={!plan?.stitches||outside||busy||machineExceeded||incompatibleHoop||invalidField} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
-{context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-210))}} role="group" aria-label="Object actions"><button onClick={()=>{const uid=context.uid;setContext(null);void invoke<unknown>('lettering_settings',{uid}).then(s=>{if(s)openText(uid);else{setRight(true);setInspectorTab('transform')}}).catch(e=>setMessage(String(e)))}}>Object properties</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${focusCanvas?'canvas-focus':''} ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{gridTemplateColumns:`${focusCanvas?'0px':'clamp(48px,5vw,80px)'} ${left?`min(${leftWidth}px, 24vw)`:'0px'} minmax(0,1fr) ${right?`min(${rightWidth}px, 27vw)`:'0px'}`}}>
+{context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-210))}} role="group" aria-label="Object actions"><button onClick={()=>{const uid=context.uid;setContext(null);void invoke<unknown>('lettering_settings',{uid}).then(s=>{if(s)openText(uid);else{showInspector(true);setInspectorTab('transform')}}).catch(e=>setMessage(String(e)))}}>Object properties</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${focusCanvas?'canvas-focus':''} ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{'--studio-layers-width':`${leftWidth}px`,'--studio-inspector-width':`${rightWidth}px`} as CSSProperties}>
 <div className="editor-toolrail" role="group" aria-label="Editor tools">
-<button aria-pressed={left} onClick={()=>setLeft(v=>!v)}><Layers3 size={24}/><small>Layers</small></button><button aria-pressed={right&&inspectorTab==='hoop'} onClick={()=>setHoopOpen(true)}><SquareDashed size={23}/><small>Hoop</small></button>
-<button disabled={busy} onClick={openInsertDialog}><FilePlus size={23}/><small>Insert</small></button>
-<button onClick={()=>{setRight(true);setInspectorTab('transform')}}><Scissors size={23}/><small>Edit</small></button>
-<button disabled={busy} onClick={()=>openText(selectedObject)}><Type size={23}/><small>Text</small></button>
-<button disabled={busy} onClick={openInsertDialog} title="Browse shapes and templates"><Shapes size={23}/><small>Shapes</small></button>
-<button disabled={busy} onClick={()=>{const command=navigation.find(n=>n.label==='Digitize an image');if(command)command.run();else void open()}}><Wrench size={23}/><small>Digitize</small></button>
-<button onClick={()=>{setRight(true);setInspectorTab('threads')}}><Palette size={23}/><small>Color</small></button>
-<button aria-pressed={right&&inspectorTab==='stitches'} onClick={()=>{setRight(true);setInspectorTab('stitches')}} title="Stitch settings and quality"><Scissors size={23}/><small>Stitches</small></button>
+  <button onClick={()=>setHoopOpen(true)} title="Hoop and machine settings"><SquareDashed size={20}/><small>Hoop</small></button>
+  <button aria-pressed={right&&inspectorTab==='stitches'} onClick={()=>{showInspector(true);setInspectorTab('stitches')}} title="Stitch settings and quality"><Scissors size={20}/><small>Stitches</small></button>
+  <button aria-pressed={right&&inspectorTab==='threads'} onClick={()=>{showInspector(true);setInspectorTab('threads')}} title="Edit design colors"><Palette size={20}/><small>Colors</small></button>
+  <button disabled={busy} onClick={()=>{const command=navigation.find(n=>n.label==='Digitize an image');if(command)command.run();else void open()}} title="Digitize an image"><Wrench size={20}/><small>Digitize</small></button>
 </div>
-<article className="workspace-sidebar studio-layers-dock" style={{width:`min(${leftWidth}px, 28vw)`}}>
+<article className="workspace-sidebar studio-layers-dock">
   <div className="layers-dock-header">
     <div className="layers-dock-title"><Layers3 size={17} aria-hidden="true"/><h2>Layers</h2>
       <button className="studio-tool-icon" title="Close layers" aria-label="Close layers" onClick={()=>setLeft(false)}><X size={15}/></button>
@@ -594,21 +634,72 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <label className="layers-search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Search objects"
       placeholder="Find an object" value={objectQuery} onChange={event=>setObjectQuery(event.target.value)}/></label>
     {!objectPage.total&&<p className="workspace-helper">No objects match your search.</p>}
-    <button disabled={busy||!selected?.bounds} title="Select neighboring same-color shapes; review the selection before simplifying" onClick={selectNearbyRegion}>Select nearby region</button><div className="layers-object-rows">
+    <div className="layers-object-rows">
       {objectPage.items.map(object=>{
-        const name=layerNames[object.uid]||object.label||`Object ${object.uid+1}`;
-        return <div key={object.uid} className={dropLayer===object.uid?'studio-layer-drop':''} onDragOver={e=>{if(dragLayer!==null&&dragLayer!==object.uid&&!lockedObjects.includes(object.uid)){e.preventDefault();setDropLayer(object.uid)}}} onDragLeave={()=>setDropLayer(null)} onDrop={e=>{e.preventDefault();if(dragLayer!==null&&dragLayer!==object.uid&&!busy&&!lockedObjects.includes(object.uid))void edit('reorder_artwork_object',{uid:dragLayer,direction:'before',targetUid:object.uid});setDragLayer(null);setDropLayer(null)}} style={{display:"flex",alignItems:"center",gap:4}}><span draggable={!busy&&!lockedObjects.includes(object.uid)} title="Drag to change sewing order" onDragStart={e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(object.uid));setDragLayer(object.uid)}} onDragEnd={()=>{setDragLayer(null);setDropLayer(null)}} style={{cursor:'grab'}}><GripHorizontal size={14}/></span><button disabled={lockedObjects.includes(object.uid)} style={{flex:1,minWidth:0}} aria-pressed={selectionIds.length?selectionIds.includes(object.uid):selectedObject===object.uid} onClick={e=>e.shiftKey?toggleMulti(object.uid):selectObject(object)} className="object-layer-row" title={name}>
-          <span className="layers-swatch" style={{backgroundColor:`rgb(${object.color.join(',')})`}}/>
-          <span className="layers-row-text"><strong>{name}</strong><small>{object.kind==='manual'?'Fixed stitch path':object.kind==='auto'?'Automatic stitch type':object.kind}</small></span>
-        </button><button type="button" aria-label={lockedObjects.includes(object.uid)?'Unlock '+name:'Lock '+name} title={lockedObjects.includes(object.uid)?'Unlock object':'Lock object'} aria-pressed={lockedObjects.includes(object.uid)} onClick={()=>{setLockedObjects(old=>old.includes(object.uid)?old.filter(id=>id!==object.uid):[...old,object.uid]);if(selectedObject===object.uid)setSelectedObject(null);setMulti(old=>old.filter(id=>id!==object.uid));}}>{lockedObjects.includes(object.uid)?'🔒':'🔓'}</button></div>;
+        const name=object.label||`Object ${object.uid+1}`;
+        const targetDirection=dropLayer?.uid===object.uid?dropLayer.direction:undefined;
+        const canDrop=dragLayer!==null&&dragLayer!==object.uid&&!busy;
+        return <div key={object.uid} className="studio-layer-item" data-drop={targetDirection} data-hidden={object.hidden||undefined}
+          onDragOver={event=>{
+            if(!canDrop)return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect='move';
+            const bounds=event.currentTarget.getBoundingClientRect();
+            const direction=event.clientY<bounds.top+bounds.height/2?'before':'after';
+            setDropLayer({uid:object.uid,direction});
+          }}
+          onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))setDropLayer(null)}}
+          onDrop={event=>{
+            event.preventDefault();
+            if(canDrop&&targetDirection)void edit('reorder_artwork_object',{uid:dragLayer,direction:targetDirection,targetUid:object.uid});
+            setDragLayer(null);setDropLayer(null);
+          }}>
+          <span draggable={!busy&&!object.locked&&!object.hidden} className="studio-layer-grip" title="Drag to change sewing order"
+            onDragStart={event=>{
+              event.dataTransfer.effectAllowed='move';
+              event.dataTransfer.setData('text/plain',String(object.uid));
+              setDragLayer(object.uid);
+            }} onDragEnd={()=>{setDragLayer(null);setDropLayer(null)}}><GripVertical size={14} aria-hidden="true"/></span>
+          <button disabled={object.locked||object.hidden} aria-pressed={selectionIds.length?selectionIds.includes(object.uid):selectedObject===object.uid}
+            onClick={event=>event.shiftKey?toggleMulti(object.uid):selectObject(object)} className="object-layer-row" title={name}>
+            <span className="layers-swatch" style={{backgroundColor:`rgb(${object.color.join(',')})`}}/>
+            <span className="layers-row-text"><strong>{name}</strong><small>{object.kind==='manual'?'Fixed stitches':object.kind==='auto'?'Auto':object.kind}</small></span>
+          </button>
+          <button type="button" className="layer-row-action" disabled={busy} aria-label={`${object.hidden?'Show':'Hide'} ${name}`}
+            title={object.hidden?'Include in preview and exports':'Hide from preview and exports'}
+            onClick={()=>void edit('set_artwork_layer',{uid:object.uid,hidden:!object.hidden})}>
+            {object.hidden?<EyeOff size={14}/>:<Eye size={14}/>}
+          </button>
+          <button type="button" className="layer-row-action" disabled={busy} aria-label={`${object.locked?'Unlock':'Lock'} ${name}`}
+            title={object.locked?'Unlock object':'Lock object'} onClick={()=>void edit('set_artwork_layer',{uid:object.uid,locked:!object.locked})}>
+            {object.locked?<LockKeyhole size={13}/>:<LockKeyholeOpen size={13}/>}
+          </button>
+        </div>;
       })}
     </div>
     <ListNavigation {...objectPage}/>
-    {selected&&<div className="layers-object-properties"><h3>Layer properties</h3><label>Layer name<input value={renameDraft} maxLength={80} onChange={e=>setRenameDraft(e.target.value)}/></label><button disabled={busy||!renameDraft.trim()} onClick={()=>setLayerNames(old=>({...old,[selected.uid]:renameDraft.trim()}))}>Rename layer</button><small>Layer names and locks are for this editing session.</small><h3>Sewing order</h3><div className="alignment-pair">{[['first','First'],['earlier','Earlier'],['later','Later'],['last','Last']].map(([direction,label])=><button key={direction} disabled={busy} onClick={()=>void edit('reorder_artwork_object',{uid:selected.uid,direction})}>{label}</button>)}</div><small>Manual order overrides automatic sequencing.</small></div>}
-    {selected?.kind==='manual'&&<p className="workspace-helper"><Waypoints size={14} aria-hidden="true"/> Fixed stitch path: drag its handles to resize. Stitch lengths are corrected automatically; large changes may alter coverage.</p>}
-    {selected&&selected.kind!=='manual'&&<div className="layers-object-properties">
-      <h3>Selected object stitch type</h3><StitchPicker value={objectKind} onChange={setObjectKind}/>
-      <button disabled={busy||objectKind==='manual'} onClick={()=>edit('set_object_kind',{uid:selected.uid,kind:objectKind})}>Apply to selected object</button>
+    {selected&&<div className="layer-dock-footer">
+      <LayerDialog label="Layer settings" title="Layer settings" icon={<SlidersHorizontal size={14}/>} disabled={busy} onOpen={()=>setRenameDraft(selected.label)}>
+        {close=><div className="layer-artwork-settings">
+          <label>Layer name<input value={renameDraft} maxLength={80} onChange={e=>setRenameDraft(e.target.value)}/></label>
+          <button disabled={busy||!renameDraft.trim()||renameDraft.trim()===selected.label} onClick={()=>{
+            close();
+            void edit('set_artwork_layer',{uid:selected.uid,name:renameDraft.trim()});
+          }}>Rename layer</button>
+          <h3>Sewing order</h3>
+          <div className="alignment-pair">{[['first','First'],['earlier','Earlier'],['later','Later'],['last','Last']].map(([direction,label])=>
+            <button key={direction} disabled={busy} onClick={()=>{close();void edit('reorder_artwork_object',{uid:selected.uid,direction})}}>{label}</button>)}</div>
+          <p className="workspace-helper">Manual order overrides automatic sequencing. Hidden layers are excluded from exports.</p>
+          <button disabled={busy||!selected.bounds} onClick={()=>{close();selectNearbyRegion()}}>Select nearby same-color shapes</button>
+        </div>}
+      </LayerDialog>
+      {selected.kind!=='manual'&&<LayerDialog label="Change stitch type" title="Selected object stitch type"
+        icon={<Waypoints size={14}/>} disabled={busy}>
+        {close=><div className="layer-stitch-choices">
+          <StitchPicker value={objectKind} onChange={setObjectKind}/>
+          <button disabled={busy||objectKind==='manual'} onClick={()=>{close();void edit('set_object_kind',{uid:selected.uid,kind:objectKind})}}>Apply to selected object</button>
+        </div>}
+      </LayerDialog>}
     </div>}
   </section> : <p className="workspace-helper">{plan ? 'This design has stitch paths. Open Threads to inspect the color blocks.' : 'Open artwork or insert a design to see its objects.'}</p>)}
   {layerTab==='threads' && (plan ? <section className="workspace-thread-list">
@@ -625,44 +716,64 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
         <div className="layers-row-text"><strong>Block {index+1}</strong><small>{color.toUpperCase()}</small></div>
         <button title={concealed?'Show this thread in the preview':'Hide this thread in the preview'} aria-label={concealed?'Show thread preview':'Hide thread preview'}
           onClick={()=>setHidden(items=>concealed?items.filter(item=>item!==index):[...items,index])}>{concealed?<EyeOff size={15}/>:<Eye size={15}/>}</button>
-        {!!threadLibrary.length&&<select aria-label={`Assign saved thread ${index+1}`} value="" disabled={busy} onChange={event=>{
-          const thread=threadLibrary.find(item=>item.id===event.target.value);
-          if(thread){recolor(thread.color);setThreadAssignments(old=>({...old,[index]:[thread.brand,thread.code,thread.name].filter(Boolean).join(' ')}));}
-        }}><option value="">Saved thread…</option>{threadLibrary.map(thread=><option key={thread.id} value={thread.id}>{thread.brand} {thread.code} {thread.name}</option>)}</select>}
+        {!!threadLibrary.length&&<SavedThreadDialog index={index} threads={threadLibrary} disabled={busy} onChoose={thread=>{
+          recolor(thread.color);
+          setThreadAssignments(old=>({...old,[index]:[thread.brand,thread.code,thread.name].filter(Boolean).join(' ')}));
+        }}/>}
       </div>;
     })}
     <ListNavigation {...threadPage}/>
   </section> : <p className="workspace-helper">Open a design to see its thread order.</p>)}
-  <details className="workspace-disclosure">
-    <summary>Artwork import settings</summary>
+  <div className="layer-dock-footer">
+    <LayerDialog label="Artwork import settings" title="Artwork import settings" icon={<SlidersHorizontal size={14}/>}>
+      {()=><div className="layer-artwork-settings">
     <label>Artwork width (in) <small>({artWidth.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((artWidth/25.4).toFixed(3))} onChange={e=>{setArtWidth(Number(e.target.value)*25.4)}}/></label><label>Thread colors<select value={colors} onChange={e=>setColors(Number(e.target.value))}><option value="0">Automatic</option>{[2,3,4,5,6,7,8,9,10].map(n=><option key={n}>{n}</option>)}</select></label><label><input type="checkbox" checked={removeBackground} onChange={e=>setRemoveBackground(e.target.checked)}/> Remove white background</label><label>Detail<input type="range" min="0" max="100" value={detail} onChange={e=>setDetail(Number(e.target.value))}/></label>
-  </details>
+  </div>}
+    </LayerDialog>
+  </div>
 </article>
 {left&&panelResizeHandle("left")}{right&&panelResizeHandle("right")}<article className="canvas-panel">
-<div className="studio-camera studio-camera-docked" role="group" aria-label="Canvas view"><button className="studio-hoop-shortcut" title="Change machine or hoop dimensions" onClick={()=>{setRight(true);setInspectorTab('hoop')}}><SquareDashed size={16}/><strong>{(width/25.4).toFixed(2)} × {(height/25.4).toFixed(2)} in</strong></button>
+<div className={`studio-camera studio-camera-docked ${cameraTop?'studio-camera-top':'studio-camera-bottom'}`} role="group" aria-label="Canvas view">
+  <button className="studio-tool-icon camera-dock-grip" title="Move camera controls to the top or bottom"
+    aria-label={cameraTop?'Move camera controls to bottom':'Move camera controls to top'}
+    onClick={event=>{if(event.detail===0)setCameraTop(value=>!value)}}
+    onPointerDown={event=>{
+      if(event.button!==0)return;
+      cameraDrag.current=event.clientY;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }} onPointerCancel={()=>{cameraDrag.current=null}} onPointerUp={event=>{
+      if(cameraDrag.current===null)return;
+      const movement=event.clientY-cameraDrag.current;
+      cameraDrag.current=null;
+      if(Math.abs(movement)<7)setCameraTop(value=>!value);
+      else setCameraTop(movement<0);
+    }}><GripHorizontal size={16}/></button>
+  <button className="studio-hoop-shortcut" title="Change machine or hoop dimensions" onClick={()=>setHoopOpen(true)}><SquareDashed size={16}/><strong>{(width/25.4).toFixed(2)} × {(height/25.4).toFixed(2)} in</strong></button>
   
-  <button className="studio-selection-mode" title="Select and move the entire design" aria-pressed={canvasMode==='design'} onClick={()=>{selectObject(null);setCanvasMode('design');setActiveGroup(designGroups.length===1?designGroups[0].key:null);setPlaying(false);setPlayhead(null)}}><Group size={17}/><span className="camera-label">Design</span></button>
-  <button className="studio-selection-mode" title="Select individual objects; Shift-click to select several" aria-pressed={canvasMode==='select'} onClick={()=>{setCanvasMode('select');setPlaying(false);setPlayhead(null)}}><MousePointer2 size={17}/><span className="camera-label">Objects</span></button>
+  <button className="studio-selection-mode" title="Select and move the entire design" aria-label="Move whole design" aria-pressed={canvasMode==='design'} onClick={()=>{selectObject(null);setCanvasMode('design');setActiveGroup(designGroups.length===1?designGroups[0].key:null);setPlaying(false);setPlayhead(null)}}><Group size={17}/><span className="camera-label">Design</span></button>
+  <button className="studio-selection-mode" title="Select individual objects; Shift-click to select several" aria-label="Select objects" aria-pressed={canvasMode==='select'} onClick={()=>{setCanvasMode('select');setPlaying(false);setPlayhead(null)}}><MousePointer2 size={17}/><span className="camera-label">Objects</span></button>
   <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>setCanvasMode('pan')}><Hand size={17}/></button>
   <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>
   <button className="camera-zoom-value" title="Reset zoom to 100%" aria-label="Reset zoom to 100%" onClick={()=>{setZoom(100);setPan([0,0])}}>{Math.round(zoom)}%</button>
   <button className="studio-tool-icon" title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(value=>Math.min(400,value+25))}><ZoomIn size={17}/></button>
   <button title="Fit artwork" aria-label="Fit artwork" disabled={!points.length} onClick={fitArtwork}><Maximize size={16}/><span className="camera-label">Fit</span></button>
-  <button title="Simplify artwork and reduce sewing time" disabled={!plan||busy} onClick={openSimplify}><Scissors size={16}/><strong style={{fontSize:12,whiteSpace:'nowrap'}}>Simplify</strong></button>
-  <button title="Maximize design in hoop · keep proportions · 2 mm edge margin" aria-label="Maximize design in hoop" disabled={!plan||busy||invalidField||machineExceeded||incompatibleHoop} onClick={()=>fit(false)}><Maximize size={16}/><strong style={{whiteSpace:"nowrap",fontSize:12}}>Max size</strong></button>
-  <button title="Stretch width and height to fill hoop · 2 mm edge margin" aria-label="Stretch design to fill hoop" disabled={!plan||busy||invalidField||machineExceeded||incompatibleHoop} onClick={()=>fit(true)}><SquareDashed size={16}/><strong style={{whiteSpace:"nowrap",fontSize:12}}>Fill hoop</strong></button>
   <button title="Fit hoop view" aria-label="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}><SquareDashed size={16}/><span className="camera-label">Hoop</span></button>
   <button className="studio-tool-icon" title="Hoop grid" aria-label="Hoop grid" aria-pressed={grid} onClick={()=>setGrid(value=>!value)}><Grid size={16}/></button>
   <button title="Thread view" aria-label="Thread view" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}><Eye size={16}/><span className="camera-label">Thread</span></button>
 <button title="Show sampled stitch directions" aria-label="Show stitch directions" aria-pressed={showDirections} onClick={()=>setShowDirections(v=>!v)}><Waypoints size={16}/><span className="camera-label">Direction</span></button>
 </div>
 {plan&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'4px 10px',flexWrap:'wrap',fontSize:12,borderBottom:'1px solid var(--border,#ddd)'}}><span title="Current artwork or live resize dimensions">{sizePreview?.active?'Resizing':'Design'}: <strong>{sizePreview?(sizePreview.w/25.4).toFixed(2)+' × '+(sizePreview.h/25.4).toFixed(2)+' in':'—'}</strong>{sizePreview&&<span> · {Math.round(sizePreview.w)} × {Math.round(sizePreview.h)} mm</span>}{sizePreview&&(sizePreview.w>width||sizePreview.h>height)&&<strong style={{color:'#b45309'}}> · Exceeds hoop size</strong>}</span>{selected&&canvasMode==='select'&&<div className="studio-selection-docked" style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4,flexWrap:"wrap"}} role="group" aria-label="Selected object actions">
-  <span style={{fontSize:12,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{layerNames[selected.uid]||selected.label||'Object '+selected.uid}</span>
+  <span style={{fontSize:12,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected.label||'Object '+selected.uid}</span>
   <button className="studio-tool-icon" title="Move left" aria-label="Move selected object left" disabled={busy} onClick={()=>nudge(-nudgeStep,0)}><ArrowLeft size={16}/></button>
   <button className="studio-tool-icon" title="Move up" aria-label="Move selected object up" disabled={busy} onClick={()=>nudge(0,-nudgeStep)}><ArrowUp size={16}/></button>
   <button className="studio-tool-icon" title="Move down" aria-label="Move selected object down" disabled={busy} onClick={()=>nudge(0,nudgeStep)}><ArrowDown size={16}/></button>
   <button className="studio-tool-icon" title="Move right" aria-label="Move selected object right" disabled={busy} onClick={()=>nudge(nudgeStep,0)}><ArrowRight size={16}/></button>
   <button className="studio-tool-icon" title="Rotate selection 90°" aria-label="Rotate selection 90 degrees" disabled={busy} onClick={()=>editSelection({kind:'rotate'})}><RotateCw size={16}/></button>
+  <PathEditor<Plan> key={selected.uid} object={selected} disabled={busy||lockedObjects.includes(selected.uid)}
+    onApply={next=>{
+      if(next.blocks.length!==plan.blocks.length||next.blocks.some((block,index)=>block.color.join(',')!==plan.blocks[index]?.color.join(',')))setThreadAssignments({});
+      setPlan(next);setPlayhead(null);setPlaying(false);setMessage('');
+    }}/>
   <button className="studio-tool-icon" title="Duplicate selection" aria-label="Duplicate selection" disabled={busy} onClick={()=>editSelection({kind:'duplicate'})}><Copy size={16}/></button>
   <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={16}/></button>
 </div>}</div>}
@@ -713,14 +824,20 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button onClick={openInsertDialog}><FilePlus size={16}/> Browse designs</button>
 </div>}</div>
 
-</article><article ref={inspectorScroll} className="workspace-sidebar workspace-inspector studio-inspector-dock" style={{width:`min(${rightWidth}px, 30vw)`}}>
-  <h2 className="editor-visually-hidden">Inspector</h2>
+</article><article ref={inspectorScroll} className="workspace-sidebar workspace-inspector studio-inspector-dock">
+  <div className="layers-dock-title"><h2>Inspector</h2>
+    <button className="studio-tool-icon" title="Close inspector" aria-label="Close inspector" onClick={()=>setRight(false)}><X size={15}/></button>
+  </div>
   <div className="workspace-segments" role="group" aria-label="Inspector">
     <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}><SquareDashed size={19}/>Hoop</button>
     <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={19}/>Sequence</button>
     <button aria-pressed={inspectorTab==='threads'} onClick={()=>setInspectorTab('threads')}><Palette size={19}/>Threads</button>
     <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={19}/>Text</button><button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={19}/>Edit</button><button aria-pressed={inspectorTab==='stitches'} onClick={()=>setInspectorTab('stitches')}><Scissors size={19}/>Stitches</button>
   </div>
+  {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
+    <strong title={selected?.label}>{selected?.label||`${movementIds.length} selected`}</strong>
+    {movementBounds&&<small>{(movementBounds[2]/25.4).toFixed(2)} × {(movementBounds[3]/25.4).toFixed(2)} in</small>}
+  </div>}
   {inspectorTab==='transform'&&movementIds.length>0&&<section className="workspace-inspector-group" aria-label="Move selection"><h3><Move size={16}/> Move selection</h3><label>Movement step<select value={nudgeStep} onChange={e=>setNudgeStep(Number(e.target.value))}><option value={.1}>0.1 mm · fine</option><option value={.5}>0.5 mm</option><option value={1}>1 mm</option><option value={5}>5 mm</option><option value={10}>10 mm</option></select></label><div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:4,maxWidth:180,margin:'6px auto'}}><span/><button disabled={busy} aria-label="Nudge up" onClick={()=>nudge(0,-nudgeStep)}><ArrowUp size={17}/></button><span/><button disabled={busy} aria-label="Nudge left" onClick={()=>nudge(-nudgeStep,0)}><ArrowLeft size={17}/></button><span style={{textAlign:'center',alignSelf:'center'}}>{nudgeStep} mm</span><button disabled={busy} aria-label="Nudge right" onClick={()=>nudge(nudgeStep,0)}><ArrowRight size={17}/></button><span/><button disabled={busy} aria-label="Nudge down" onClick={()=>nudge(0,nudgeStep)}><ArrowDown size={17}/></button><span/></div><small>Arrow keys move · Shift ×10 · Alt ×0.1</small>{selectionCenter&&<><div className="workspace-hoop-fields"><label>X center (mm)<input type="number" step=".1" value={positionX} onChange={e=>setPositionX(e.target.value)}/></label><label>Y center (mm)<input type="number" step=".1" value={positionY} onChange={e=>setPositionY(e.target.value)}/></label></div><button disabled={busy||!positionX.trim()||!positionY.trim()||!Number.isFinite(Number(positionX))||!Number.isFinite(Number(positionY))} onClick={applyPosition}>Set exact position</button><small>Hoop center is 0, 0 · positive X right, positive Y down.</small></>}</section>}
   {inspectorTab==='transform'&&<section className="workspace-inspector-group multi-align"><h3>{selectionIds.length>1?selectionIds.length+' objects selected':selected?'Object properties':'Design properties'}</h3>{canvasMode==='design'&&designGroups.length>0&&<><label>Design group<select value={activeGroup??''} disabled={busy} onChange={e=>{setActiveGroup(e.target.value||null);setCanvasMode('design');setMulti([]);setSelectedObject(null)}}><option value="">Choose a design</option>{designGroups.map((g,i)=><option key={g.key} value={g.key}>Design {i+1} · {g.members.length} objects</option>)}</select></label>{designGroups.filter(g=>g.key===activeGroup).map(g=><div key={g.key}><small>{g.bounds?(g.bounds[2]/25.4).toFixed(2)+' × '+(g.bounds[3]/25.4).toFixed(2)+' in':''}</small>{g.bounds&&g.bounds[2]>0&&<><label>Target width (in)<input type="number" min=".05" step=".01" value={groupWidth} placeholder={(g.bounds[2]/25.4).toFixed(2)} onChange={e=>setGroupWidth(e.target.value)}/></label><button disabled={busy||!groupWidth||!Number.isFinite(Number(groupWidth))||Number(groupWidth)*25.4/g.bounds[2]<.1||Number(groupWidth)*25.4/g.bounds[2]>10} onClick={()=>{if(g.bounds){void edit('transform_artwork_group',{uids:g.members.map(o=>o.uid),scale:Number(groupWidth)*25.4/g.bounds[2],rotation:0});setGroupWidth('')}}}>Apply width proportionally</button></>}<label>Rotate by (degrees)<input type="number" min="-360" max="360" step="1" value={groupRotation} onChange={e=>setGroupRotation(e.target.value)}/></label><button disabled={busy||!Number(groupRotation)||!Number.isFinite(Number(groupRotation))||Math.abs(Number(groupRotation))>360} onClick={()=>{void edit('transform_artwork_group',{uids:g.members.map(o=>o.uid),scale:1,rotation:Number(groupRotation)});setGroupRotation('0')}}>Apply rotation</button><div className="alignment-pair">{[{label:'Smaller 10%',scale:.9,rotation:0},{label:'Larger 10%',scale:1.1,rotation:0},{label:'Rotate left',scale:1,rotation:-90},{label:'Rotate right',scale:1,rotation:90}].map(a=><button key={a.label} disabled={busy} onClick={()=>void edit('transform_artwork_group',{uids:g.members.map(o=>o.uid),scale:a.scale,rotation:a.rotation})}>{a.label}</button>)}</div><button disabled={busy} onClick={()=>{setMulti(g.members.map(o=>o.uid));setSelectedObject(null);setCanvasMode('select')}}>Select group objects</button><button disabled={busy||g.members.length<2} onClick={()=>{void edit('set_artwork_group',{uids:g.members.map(o=>o.uid),group:false});setActiveGroup(null)}}>Ungroup design</button><details><summary>Group thread colors</summary>{Array.from(new Map(g.members.map(o=>[o.color.join(','),o.color])).values()).map(color=><PaletteRow key={color.join(',')} color={color} count={g.members.filter(o=>o.color.join(',')===color.join(',')).length} disabled={busy} library={threadLibrary} onSelectObjects={()=>{setMulti(g.members.filter(o=>o.color.join(',')===color.join(',')).map(o=>o.uid));setSelectedObject(null);setCanvasMode('select')}} onReplace={next=>void edit('recolor_artwork_group',{uids:g.members.map(o=>o.uid),previous:color,color:next})}/>)}</details></div>)}</>}<details className="studio-inspector-section" open={selectionIds.length>1||snap}><summary>Alignment & snapping</summary><label><input type="checkbox" checked={snap} onChange={e=>setSnap(e.target.checked)}/> Snap to grid, hoop and design edges</label><small>Shift-click objects or layers to select multiple.</small>{selectionIds.length>0&&<><strong>{selectionIds.length} selected</strong><div className="alignment-pair">{[{mode:'center_x',label:'Align X'},{mode:'center_y',label:'Align Y'},{mode:'distribute_x',label:'Distribute X'},{mode:'distribute_y',label:'Distribute Y'}].map(a=><button key={a.mode} disabled={busy||selectionIds.length<(a.mode.startsWith('distribute')?3:2)} onClick={()=>void edit('align_artwork_objects',{uids:selectionIds,mode:a.mode})}>{a.label}</button>)}</div><button disabled={busy||selectionIds.length<2} onClick={()=>{void edit('set_artwork_group',{uids:selectionIds,group:true});setActiveGroup(null);setCanvasMode('design');setMulti([])}}>Group selected objects</button><button onClick={()=>setMulti([])}>Clear selection</button></>}</details></section>}
   {inspectorTab==='text'&&<InlineLettering key={textSession} uid={textTarget} disabled={busy} onBusy={setBusy} onDone={uid=>{if(uid!==null){setSelectedObject(uid);setLayerTab('objects')}void invoke<Plan|null>('current_preview').then(p=>{if(p){if(p.blocks.length!==plan?.blocks.length||p.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(',')))setThreadAssignments({});setPlan(p);setPlayhead(null);setPlaying(false);setHidden([])}}).catch(e=>setMessage(String(e)))}}/>}
@@ -732,18 +849,40 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {plan&&<div className="inspector-design-info"><h3><Layers3 size={18}/> Design information</h3><dl><dt><Waypoints size={15}/> Stitch points</dt><dd>{plan.stitches.toLocaleString()}</dd><dt><Layers3 size={15}/> Color blocks</dt><dd>{plan.blocks.length}</dd><dt><Scissors size={15}/> Trims</dt><dd>{plan.trims}</dd></dl></div>}{(incompatibleHoop||invalidField)&&<p className="workspace-warning" role="alert">Select a compatible hoop and positive usable dimensions before exporting.</p>}{machineExceeded&&<p className="workspace-warning" role="alert">Selected field exceeds {selectedMachine?.name}: maximum {selectedMachine?.width} × {selectedMachine?.height} mm. Choose a smaller hoop or correct the machine profile.</p>}{outside?<p className="workspace-warning" role="alert">Design exceeds the hoop.</p>:plan&&!machineExceeded&&!incompatibleHoop&&!invalidField&&<div className="workspace-fit-card"><CheckCircle2 size={30}/><div><strong>Fits selected hoop</strong><small>Review export settings before sewing.</small></div></div>}
   </section>}
   {inspectorTab==='sequence'&&<section className="workspace-inspector-group"><h3>Sewing sequence</h3>{plan?.blocks.map((b,i)=><div className="sequence-item" key={i}><span>{i+1}</span><i style={{background:`rgb(${b.color.join(',')})`}}/><strong>{b.runs.reduce((n,r)=>n+r.length,0).toLocaleString()} points</strong></div>)}{!plan&&<p className="workspace-helper">Open a design to see its sewing sequence.</p>}</section>}
-  {inspectorTab==='threads'&&<section className="workspace-inspector-group palette-editor"><h3><Palette size={18}/> Design palette</h3>{plan&&<ReferenceColorPanel plan={plan} busy={busy} onApply={(original,colors)=>edit('apply_reference_colors',{original,colors})}/>}<p className="muted">Replace a color everywhere in the design, or edit individual sewing blocks in Layers.</p>{Array.from(new Map((plan?.blocks??[]).map(b=>[b.color.join(','),b.color])).values()).map(color=><PaletteRow key={color.join(',')} color={color} count={plan?.blocks.filter(b=>b.color.join(',')===color.join(',')).length??0} disabled={busy} library={threadLibrary} onSelectObjects={()=>{const ids=objects.filter(o=>o.color.join(',')===color.join(',')).map(o=>o.uid);if(ids.length){setCanvasMode('select');setMulti(ids);setSelectedObject(null);setLeft(true);setLayerTab('objects')}}} onReplace={next=>void edit('replace_design_color',{previous:color,color:next})}/>)}<button onClick={()=>{setLeft(true);setLayerTab('threads')}}>Individual sewing blocks</button></section>}
+  {inspectorTab==='threads'&&<section className="workspace-inspector-group palette-editor"><h3><Palette size={18}/> Design palette</h3>{plan&&<ReferenceColorPanel plan={plan} busy={busy} onApply={(original,colors)=>edit('apply_reference_colors',{original,colors})}/>}<p className="muted">Replace a color everywhere in the design, or edit individual sewing blocks in Layers.</p>{Array.from(new Map((plan?.blocks??[]).map(b=>[b.color.join(','),b.color])).values()).map(color=><PaletteRow key={color.join(',')} color={color} count={plan?.blocks.filter(b=>b.color.join(',')===color.join(',')).length??0} disabled={busy} library={threadLibrary} onSelectObjects={()=>{const ids=objects.filter(o=>o.color.join(',')===color.join(',')).map(o=>o.uid);if(ids.length){setCanvasMode('select');setMulti(ids);setSelectedObject(null);showLayers(true);setLayerTab('objects')}}} onReplace={next=>void edit('replace_design_color',{previous:color,color:next})}/>)}<button onClick={()=>{showLayers(true);setLayerTab('threads')}}>Individual sewing blocks</button></section>}
   {inspectorTab==='stitches'&&<section className="workspace-inspector-group">
     <h3>Generation settings</h3>
-    <button onClick={()=>setAdvanced(v=>!v)} aria-expanded={advanced}>{advanced?'Hide stitch parameters':'Show stitch parameters'}</button>
     <FabricPicker value={fabric} disabled={busy||!plan||!objects.length}
       onChange={id=>void edit('apply_fabric_profile',{fabric:id})}/>
-    {advanced&&<>{([{label:'Row spacing (mm)',value:spacing,set:setSpacing,min:.15,max:2,step:.05},{label:'Stitch length (mm)',value:length,set:setLength,min:.5,max:7,step:.1},{label:'Fill angle (°)',value:angle,set:setAngle,min:0,max:360,step:5},{label:'Pull compensation (mm)',value:pull,set:setPull,min:0,max:1,step:.05}]).map(f=><label key={f.label}>{f.label}<input type="number" min={f.min} max={f.max} step={f.step} value={f.value} onChange={e=>f.set(Number(e.target.value))}/></label>)}<label><input type="checkbox" checked={underlay} onChange={e=>setUnderlay(e.target.checked)}/> Underlay</label></>}{advanced&&<><label>Apply settings to<select value={scope} onChange={e=>setScope(e.target.value)}><option value="all">Entire design</option><option value="object" disabled={selectedObject===null}>Selected object</option></select></label><button disabled={!plan||busy||(scope==='object'&&selectedObject===null)} onClick={()=>edit('apply_stitch_properties',{uid:scope==='object'?selectedObject:null,fabric,spacing,length,angle,pull,underlay})}>Apply stitch parameters</button></>}
+    <InspectorDialog label="Stitch parameters" title="Stitch parameters" disabled={!plan||busy}>
+      <div className="inspector-dialog-fields">
+        <div className="inspector-fields">
+          {[
+            {label:'Row spacing (mm)',value:spacing,set:setSpacing,min:.15,max:2,step:.05},
+            {label:'Stitch length (mm)',value:length,set:setLength,min:.5,max:7,step:.1},
+            {label:'Fill angle (°)',value:angle,set:setAngle,min:0,max:360,step:5},
+            {label:'Pull compensation (mm)',value:pull,set:setPull,min:0,max:1,step:.05},
+          ].map(field=><label key={field.label}>{field.label}<input type="number" min={field.min} max={field.max}
+            step={field.step} value={field.value} onChange={event=>field.set(Number(event.target.value))}/></label>)}
+        </div>
+        <label className="inspector-checkbox"><input type="checkbox" checked={underlay}
+          onChange={event=>setUnderlay(event.target.checked)}/> Underlay</label>
+        <label>Apply settings to<select value={scope} onChange={event=>setScope(event.target.value)}>
+          <option value="all">Entire design</option><option value="object" disabled={selectedObject===null}>Selected object</option>
+        </select></label>
+        <button disabled={!plan||busy||(scope==='object'&&selectedObject===null)}
+          onClick={()=>void edit('apply_stitch_properties',{uid:scope==='object'?selectedObject:null,fabric,spacing,length,angle,pull,underlay})}>
+          Apply stitch parameters
+        </button>
+      </div>
+    </InspectorDialog>
     <h3>Quality</h3><div className="workspace-stack"><button disabled={busy||!plan?.stitches||!objects.some(o=>o.kind!=='manual'&&o.kind!=='skip')} onClick={openSimplify}>Simplify design</button><small>Compares a conservative alternative and preserves the original if checks fail.</small><button disabled={!plan?.stitches||busy||objects.length>0} title={objects.length?"Editable artwork: adjust stitch settings instead.":"Split long fixed stitches without removing tie stitches."} onClick={async()=>{if(await confirmAction("Split fixed stitches longer than 10 mm? Original tie stitches are retained. You can undo this change."))void edit("repair_stitches",{})}}>Repair fixed stitches</button>{objects.length>0&&<small>For editable artwork, adjust stitch properties and regenerate the design. Fixed-stitch repair is disabled to preserve editable objects.</small>}<button disabled={!plan||busy} onClick={audit}>Check stitch quality</button></div>
-    {plan&&<details className="workspace-disclosure"><summary>Stitch-length report</summary><section><h3>Quality review</h3>{(()=>{let short=0,long=0;for(const b of plan.blocks)for(const r of b.runs)for(let i=1;i<r.length;i++){const d=Math.hypot(r[i][0]-r[i-1][0],r[i][1]-r[i-1][1]);if(d<.3)short++;if(d>7)long++;}return <><p>{short} stitch segments shorter than 0.3 mm</p><p>{long} stitch segments longer than 7 mm</p>{short>0&&<p className="muted">Inspect tiny stitches for thread buildup.</p>}{long>0&&<p className="muted">Inspect long spans for snagging. Export may subdivide these.</p>}{plan.trims>50&&<p className="muted">Many trims: inspect artwork fragmentation and sewing order.</p>}</>})()}<small>Heuristic review of planned stitches, not a guarantee of sewability.</small></section></details>}
+    {plan&&<InspectorDialog title="Stitch-length report" label="Stitch-length report">
+      <StitchLengthReport blocks={plan.blocks} trims={plan.trims}/>
+    </InspectorDialog>}
   </section>}
   {inspectorTab==='transform'&&<section className="workspace-inspector-group">
-    <details className="studio-inspector-section" open><summary>Placement & size</summary><small>Drag canvas handles to resize. Editable artwork regenerates stitches; imported DST/PES receives conservative stitch-path correction. Hold Shift to keep proportions.</small><div className="workspace-stack placement-actions"><button onClick={()=>setInspectorTab('stitches')}>Stitch properties & quality</button><button disabled={!plan||busy} title="Move the design to the center of the selected hoop" onClick={()=>edit("center_design",{})}><Scan size={16}/> Center in hoop</button><div className="alignment-pair"><button disabled={!plan||busy} onClick={()=>edit("center_design_axis",{horizontal:true})}>Center horizontally</button><button disabled={!plan||busy} onClick={()=>edit("center_design_axis",{horizontal:false})}>Center vertically</button></div><button disabled={!plan||busy} title="Maximize and center the design with a 2 mm edge margin" onClick={()=>fit()}><Maximize size={16}/> Maximize in hoop</button><button disabled={!plan||busy} onClick={()=>transform(1,90,0,0)}><RotateCw size={16}/> Rotate 90°</button><button disabled={!plan||busy} title="Mirror the design left to right" onClick={()=>edit("mirror_design",{horizontal:true})}><FlipHorizontal size={16}/> Flip horizontal</button><button disabled={!plan||busy} title="Mirror the design top to bottom" onClick={()=>edit("mirror_design",{horizontal:false})}><FlipVertical size={16}/> Flip vertical</button></div>
+    <details className="studio-inspector-section" open={movementIds.length===0}><summary>Whole design placement & size</summary><small>Drag canvas handles to resize. Editable artwork regenerates stitches; imported DST/PES receives conservative stitch-path correction. Hold Shift to keep proportions.</small><div className="workspace-stack placement-actions"><button onClick={()=>setInspectorTab('stitches')}>Stitch properties & quality</button><button disabled={!plan||busy} title="Move the design to the center of the selected hoop" onClick={()=>edit("center_design",{})}><Scan size={16}/> Center in hoop</button><div className="alignment-pair"><button disabled={!plan||busy} onClick={()=>edit("center_design_axis",{horizontal:true})}>Center horizontally</button><button disabled={!plan||busy} onClick={()=>edit("center_design_axis",{horizontal:false})}>Center vertically</button></div><button disabled={!plan||busy} title="Maximize and center the design with a 2 mm edge margin" onClick={()=>fit()}><Maximize size={16}/> Maximize in hoop</button><button disabled={!plan||busy||invalidField||machineExceeded||incompatibleHoop} title="Stretch width and height to fill hoop · 2 mm edge margin" onClick={()=>fit(true)}><SquareDashed size={16}/> Fill hoop</button><button disabled={!plan||busy} onClick={()=>transform(1,90,0,0)}><RotateCw size={16}/> Rotate 90°</button><button disabled={!plan||busy} title="Mirror the design left to right" onClick={()=>edit("mirror_design",{horizontal:true})}><FlipHorizontal size={16}/> Flip horizontal</button><button disabled={!plan||busy} title="Mirror the design top to bottom" onClick={()=>edit("mirror_design",{horizontal:false})}><FlipVertical size={16}/> Flip vertical</button></div>
     </details><details className="studio-inspector-section"><summary>Precise transformation</summary><div className="workspace-transform-fields"><label>Scale (%)<input type="number" min="10" max="1000" value={scale} onChange={e=>setScale(Number(e.target.value))}/></label><label>Rotation (°)<input type="number" value={rotation} onChange={e=>setRotation(Number(e.target.value))}/></label><label>Move X (in) <small>({dx.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((dx/25.4).toFixed(3))} onChange={e=>{setDx(Number(e.target.value)*25.4)}}/></label><label>Move Y (in) <small>({dy.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((dy/25.4).toFixed(3))} onChange={e=>{setDy(Number(e.target.value)*25.4)}}/></label><button disabled={!plan||busy} onClick={()=>transform(scale/100,rotation,dx,dy)}>Apply transform to design</button>
     {selected&&canvasMode==='select'&&<button disabled={busy} onClick={()=>editSelection({kind:'scale',factor:scale/100})}>Scale selected object</button>}</div>
     <p className="workspace-helper">Editable artwork regenerates when resized. Test sew machine-only files after scaling.</p></details>
@@ -759,8 +898,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </select>
   <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>{plan&&<span className="simulation-fit" data-outside={outside}>{outside?"Outside hoop":"Fits hoop"}</span>}
 </div><footer className="workspace-status">{inlineWork&&<span className="inline-work-status" role="status"><span className="inline-work-spinner"/>{inlineWork}</span>}
-  <button title="Open hoop settings" onClick={()=>{setRight(true);setInspectorTab('hoop')}}><SquareDashed size={16}/>{width>0&&height>0?`Hoop ${(width/25.4).toFixed(2)} × ${(height/25.4).toFixed(2)} in`:'Set a hoop size'}</button>
-  {plan&&<div className="status-metrics">{designBounds&&<span title="Sewn design dimensions">{(designBounds.width/25.4).toFixed(2)} × {(designBounds.height/25.4).toFixed(2)} in</span>}<span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span title="Unique RGB thread colors">{uniqueColors} colors</span><span><Scissors size={16}/>{plan.trims} trims</span><button className="sewing-estimate" title={'Estimated machine time at '+sewingSpm+' stitches/min, '+trimSeconds+' seconds per trim and '+changeSeconds+' seconds per block transition. Excludes hooping, setup and interruptions.'} onClick={()=>{setRight(true);setInspectorTab('hoop')}}><Clock3 size={15}/> Est. {sewingDuration}</button></div>}
+  <button title="Open hoop settings" onClick={()=>setHoopOpen(true)}><SquareDashed size={16}/>{width>0&&height>0?`Hoop ${(width/25.4).toFixed(2)} × ${(height/25.4).toFixed(2)} in`:'Set a hoop size'}</button>
+  {plan&&<div className="status-metrics">{designBounds&&<span title="Sewn design dimensions">{(designBounds.width/25.4).toFixed(2)} × {(designBounds.height/25.4).toFixed(2)} in</span>}<span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span title="Unique RGB thread colors">{uniqueColors} colors</span><span><Scissors size={16}/>{plan.trims} trims</span><button className="sewing-estimate" title={'Estimated machine time at '+sewingSpm+' stitches/min, '+trimSeconds+' seconds per trim and '+changeSeconds+' seconds per block transition. Excludes hooping, setup and interruptions.'} onClick={()=>{showInspector(true);setInspectorTab('hoop')}}><Clock3 size={15}/> Est. {sewingDuration}</button></div>}
   <span className="workspace-fit-status" data-outside={outside}>{outside?'Outside hoop':plan?'Fits hoop · '+recoveryStatus:recoveryStatus}</span>
 </footer>
   {assistantOpen&&<div role="presentation" onClick={()=>setAssistantOpen(false)} style={{position:'fixed',inset:0,zIndex:1000,background:'#17102255',display:'grid',placeItems:'center'}}><section role="dialog" aria-modal="true" aria-label="Offline command assistant" onClick={e=>e.stopPropagation()} className="workspace-inspector-group" style={{background:'var(--panel,#fff)',padding:20,borderRadius:16,width:'min(480px,90vw)',maxHeight:'80vh',overflow:'auto'}}><button style={{float:'right'}} aria-label="Close assistant" onClick={()=>setAssistantOpen(false)}><X size={18}/></button><h3>Design assistant</h3><small>Offline commands · no model download</small><p role="status">{assistantReply}</p><form className="workspace-stack" onSubmit={e=>{e.preventDefault();void runAssistant(assistantText)}}><label>Describe your edit<input value={assistantText} maxLength={160} onChange={e=>setAssistantText(e.target.value)} placeholder="Rotate 90 degrees"/></label><button className="primary" disabled={busy||!assistantText.trim()}>Run command</button></form><div className="workspace-stack">{['Select all satin objects','Move selected objects 5 mm right','Make selected objects 20% larger','Rotate selected objects 90 degrees','Clear selection','Optimize design','Review design','Add text "Hello" at 12 mm','Center design','Fit to hoop','Check stitch quality','Recommend a hoop','Optimize for sweatshirt','Explain underlay','Rotate 90 degrees','Scale to 80%','Flip horizontally','Undo'].map(s=><button key={s} disabled={busy} onClick={()=>{setAssistantText(s);void runAssistant(s)}}>{s}</button>)}</div></section></div>}

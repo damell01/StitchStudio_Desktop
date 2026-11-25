@@ -1,0 +1,102 @@
+/* Keep the work surface available when tools and layers are open. */
+.editor-workspace .editor-grid.studio-canvas-layout {
+  --left-dock: min(var(--studio-layers-width), 21vw);
+  --right-dock: min(var(--studio-inspector-width), 24vw);
+  grid-template-columns: 49px var(--left-dock) minmax(0, 1fr) var(--right-dock);
+  gap: 6px;
+  padding: 6px;
+}
+.editor-workspace .editor-grid.studio-canvas-layout.hide-left { --left-dock: 0px; }
+.editor-workspace .editor-grid.studio-canvas-layout.hide-right { --right-dock: 0px; }
+html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-focus {
+  grid-template-columns: 0 0 minmax(0,1fr) 0;
+  gap: 0;
+  padding: 0;
+}
+.editor-workspace .editor-grid.studio-canvas-layout > .editor-toolrail {
+  padding: 4px;
+  gap: 3px;
+}
+.editor-workspace .editor-grid.studio-canvas-layout > .editor-toolrail button {
+  flex: 0 0 40px;
+  font-size: 10px;
+}
+.editor-workspace .editor-grid.studio-canvas-layout > .workspace-sidebar {
+  min-width: 0;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+.editor-workspace .editor-grid.studio-canvas-layout > .studio-layers-dock,
+.editor-workspace .editor-grid.studio-canvas-layout > .studio-inspector-dock { padding: 8px; }
+.editor-workspace .studio-edit-bar .studio-toolbar-text { white-space: nowrap; }
+.editor-workspace .studio-edit-bar .studio-toolbar-text svg { flex: none; }
+.editor-workspace .studio-inspector-dock > .layers-dock-title { padding: 0 3px; }
+.editor-workspace .studio-inspector-dock .workspace-segments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  position: static;
+  box-shadow: none;
+}
+.editor-workspace .studio-inspector-dock .workspace-segments button {
+  gap: 3px;
+  min-height: 28px;
+  flex-direction: row;
+  padding: 3px 2px;
+  font-size: 11px;
+}
+.editor-workspace .studio-inspector-dock .workspace-segments button svg {
+  width: 13px;
+  height: 13px;
+}
+.inspector-context {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--workspace-soft);
+  border: 1px solid var(--workspace-border);
+  border-radius: 6px;
+}
+.inspector-context strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspector-context small { color: var(--workspace-muted); }
+
+@media (max-width:1099px) {
+  html .app > main.editor-workspace > .editor-grid.studio-canvas-layout {
+    grid-template-columns: 0 0 minmax(0,1fr) 0;
+    gap: 0;
+    padding: 0;
+  }
+  .editor-workspace .editor-grid.studio-canvas-layout > .editor-toolrail,
+  .editor-workspace .editor-grid.studio-canvas-layout > .studio-panel-resizer { display: none; }
+  .editor-workspace .editor-grid.studio-canvas-layout > .workspace-sidebar {
+    position: absolute;
+    grid-area: 1 / 1 / -1 / -1;
+    top: 6px;
+    bottom: 6px;
+    height: auto;
+    z-index: 9;
+    box-shadow: 0 7px 24px #2c173035;
+  }
+  .editor-workspace .editor-grid.studio-canvas-layout > .studio-layers-dock {
+    left: 6px;
+    right: auto;
+    width: min(var(--studio-layers-width), 84vw) !important;
+  }
+  .editor-workspace .editor-grid.studio-canvas-layout > .studio-inspector-dock {
+    left: auto;
+    right: 6px;
+    width: min(var(--studio-inspector-width), 84vw) !important;
+  }
+}
+@media (max-width: 930px) {
+  .editor-workspace .studio-edit-bar .studio-toolbar-text span { display: none; }
+}
+
+.editor-workspace .studio-canvas-layout .studio-camera.studio-camera-bottom {
+  order: 3;
+  border-radius: 0 0 8px 8px;
+}
+.editor-workspace .studio-camera.studio-camera-docked .camera-dock-grip {
+  cursor: grab;
+  touch-action: none;
+}
+.editor-workspace .studio-camera.studio-camera-docked .camera-dock-grip:active { cursor: grabbing; }
