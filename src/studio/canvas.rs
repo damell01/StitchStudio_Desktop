@@ -139,12 +139,25 @@ fn thread_segment(out: &mut Vec<egui::Shape>, a: Pos2, b: Pos2, w: f32, shade: &
     // Light from the top left: the highlight sits on that side of the thread.
     let n = Vec2::new(-u.y, u.x);
     let n = if n.x + n.y > 0.0 { -n } else { n };
-    let off = n * (w * 0.14);
-    let (ha, hb) = (a.lerp(b, 0.15) + off, a.lerp(b, 0.85) + off);
+    let off = n * (w * 0.17);
+    // Rayon/polyester sheen varies with the stitch direction relative to light.
+    // Keep the same three primitives at normal zoom; close inspection adds
+    // a narrow core highlight without burdening the distant preview.
+    let incidence = ((n.x + n.y).abs() * std::f32::consts::FRAC_1_SQRT_2).clamp(0.0, 1.0);
+    let rgb = |c: Color32| [c.r(), c.g(), c.b()];
+    let highlight = mix(rgb(shade[1]), rgb(shade[2]), 0.30 + 0.70 * incidence);
+    let (ha, hb) = (a.lerp(b, 0.10) + off, a.lerp(b, 0.90) + off);
     out.push(egui::Shape::line_segment(
         [ha, hb],
-        Stroke::new((w * 0.22).max(0.8), shade[2]),
+        Stroke::new((w * 0.27).max(0.8), highlight),
     ));
+    if w >= 6.0 && len >= w * 2.0 {
+        let core = mix(rgb(highlight), [255, 255, 255], 0.12 * incidence);
+        out.push(egui::Shape::line_segment(
+            [a.lerp(b, 0.23) + off, a.lerp(b, 0.77) + off],
+            Stroke::new((w * 0.09).max(0.65), core),
+        ));
+    }
 }
 
 /// A tessellated stitch plan, kept between frames (see [`draw_design_cached`]).
