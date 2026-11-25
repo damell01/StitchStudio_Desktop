@@ -304,7 +304,7 @@ fn route_along(inset: &[Polyline], from: P, to: P, max_len: f64) -> Option<Polyl
     let mut path = ring_walk(ring, a, b, forward);
     let len =
         from.dist(path[0]) + crate::geom::polyline_length(&path) + path.last().unwrap().dist(to);
-    if len > max_len {
+    if !len.is_finite() || len > max_len {
         return None;
     }
     path.push(to);
@@ -1749,6 +1749,11 @@ pub fn plan_cached(
                             start,
                             opt.travel_route,
                         )
+                        // Validate the entire routed path, including the
+                        // connectors from and to the inset boundary.
+                        && std::iter::once(prev).chain(route.iter().copied())
+                            .zip(route.iter().copied().chain(std::iter::once(start)))
+                            .all(|(a,b)| segment_inside(rings, *rule, a, b, 1.0))
                     {
                         run.pts
                             .extend(route.into_iter().filter(|q| q.dist(start) > 1e-6));
