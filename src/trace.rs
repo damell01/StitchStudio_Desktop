@@ -547,7 +547,15 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
             richer.colors = 10;
             if let Ok(candidate) = run(r, &richer) {
                 if !candidate.paths.is_empty() && candidate.paths.len() <= result.paths.len().saturating_mul(2) && score(&candidate) < baseline * 0.75 {
-                    result = candidate;
+                    let baseline_svg = to_svg(&result, r, mm, &o.threads, o.remove_background, true, method);
+                    let candidate_svg = to_svg(&candidate, r, mm, &o.threads, o.remove_background, true, method);
+                    // Never trade spatial fidelity for a better palette alone.
+                    if let (Some(before), Some(after)) = (
+                        spatial_error(&baseline_svg.svg, r, o.remove_background),
+                        spatial_error(&candidate_svg.svg, r, o.remove_background),
+                    ) {
+                        if after <= before { result = candidate; }
+                    }
                 }
             }
         }
@@ -561,6 +569,50 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
         o.colors == 0,
         method,
     ))
+}
+
+
+/** Compare the rendered trace against the source at a bounded resolution.
+ * Foreground and background errors are balanced so large empty margins
+ * cannot hide missing details. Returns None if rendering is unavailable.
+ */
+fn spatial_error(svg: &str, r: &Raster, remove_white: bool) -> Option<f64> {
+    let longest = r.width.max(r.height);
+    if longest == 0 || r.width == 0 || r.height == 0 { return None; }
+    let scale = (192.0 / f64::from(longest)).min(1.0);
+    let w = (f64::from(r.width) * scale).round().max(1.0) as u32;
+    let h = (f64::from(r.height) * scale).round().max(1.0) as u32;
+    let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).ok()?;
+    let size = tree.size();
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h)?;
+    let transform = resvg::tiny_skia::Transform::from_scale(
+        w as f32 / size.width(), h as f32 / size.height());
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    let mut errors = [0.0_f64; 2];
+    let mut counts = [0_u64; 2];
+    for y in 0..h {
+        for x in 0..w {
+            let sx = (((2 * u64::from(x) + 1) * u64::from(r.width)) / (2 * u64::from(w))) as usize;
+            let sy = (((2 * u64::from(y) + 1) * u64::from(r.height)) / (2 * u64::from(h))) as usize;
+            let i = (sy * r.width as usize + sx) * 4;
+            let p = &r.rgba[i..i+4];
+            let white = p[..3].iter().map(|&v| (255.0 - f64::from(v)).powi(2)).sum::<f64>() <= 900.0;
+            let a = if remove_white && white { 0.0 } else { f64::from(p[3]) / 255.0 };
+            let q = &pixmap.data()[((y*w+x)*4) as usize..((y*w+x)*4+4) as usize];
+            let b = f64::from(q[3]) / 255.0;
+            let group = usize::from(a >= 0.5);
+            // tiny-skia pixels are premultiplied RGBA.
+            let color = (0..3).map(|k| (f64::from(p[k])*a/255.0 - f64::from(q[k])/255.0).abs()).sum::<f64>() / 3.0;
+            errors[group] += 0.5 * (a-b).abs() + 0.5 * color;
+            counts[group] += 1;
+        }
+    }
+    let mut sum = 0.0;
+    let mut groups = 0;
+    for k in 0..2 {
+        if counts[k] > 0 { sum += errors[k] / counts[k] as f64; groups += 1; }
+    }
+    Some(sum / f64::from(groups))
 }
 
 fn run(r: &Raster, p: &TraceParams) -> Result<TraceResult> {
@@ -857,6 +909,17 @@ mod tests {
         let out=median_texture(&r,false);
         assert_eq!(&out.rgba[(2*5+2)*4..(2*5+2)*4+4],&[180,20,40,255]);
     }
+    #[test]
+    fn spatial_score_penalizes_shifted_artwork() {
+        let r = Raster::from_fn(64, 32, |x, _| {
+            if x < 24 { [255, 0, 0, 255] } else { [0, 0, 0, 0] }
+        });
+        let good = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="32"><rect width="24" height="32" fill="#ff0000"/></svg>"##;
+        let bad = r##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="32"><rect x="32" width="24" height="32" fill="#ff0000"/></svg>"##;
+        assert!(spatial_error(good, &r, false).unwrap() < 0.01);
+        assert!(spatial_error(bad, &r, false).unwrap() > 0.2);
+    }
+
     #[test]
     fn garbage_is_an_error() {
         assert!(trace_bytes(b"not an image", &TraceOptions::default()).is_err());
