@@ -586,7 +586,21 @@ fn editable_object(shape: &zigzag::svg::Shape) -> Option<EditableObject> {
     };
     Some(EditableObject {
         uid: shape.uid,
-        label: shape.label.clone(),
+        label: if shape.params.kind == Some(zigzag::params::Kind::Manual) {
+            let mut parts = shape.id.split('_');
+            if parts.next() == Some("stitches") {
+                match (parts.next().and_then(|n| n.parse::<usize>().ok()), parts.next().and_then(|n| n.parse::<usize>().ok())) {
+                    (Some(thread), Some(run)) => format!("Thread {thread} · Run {run}"),
+                    _ => format!("Stitch path {}", shape.uid + 1),
+                }
+            } else if shape.label.is_empty() {
+                format!("Stitch path {}", shape.uid + 1)
+            } else {
+                shape.label.clone()
+            }
+        } else {
+            shape.label.clone()
+        },
         color: shape.color,
         kind: shape.params.kind.map(|kind| kind.name()).unwrap_or("auto").into(),
         bounds: [bounds.min.x / 10.0, bounds.min.y / 10.0, bounds.width() / 10.0, bounds.height() / 10.0],
@@ -607,6 +621,7 @@ fn editable_objects(state: tauri::State<'_, Mutex<Workspace>>) -> Result<Vec<Edi
 enum ObjectEdit {
     Move { dx: f64, dy: f64 },
     Scale { factor: f64 },
+    Resize { sx: f64, sy: f64, x: f64, y: f64 },
     Rotate,
     Duplicate,
     Delete,
@@ -627,6 +642,17 @@ fn apply_object_edit(workspace: &mut Workspace, uid: usize, operation: ObjectEdi
         ObjectEdit::Scale { factor } => {
             if !(0.1..=10.0).contains(&factor) { return Err("Scale must be from 10% to 1000%".into()); }
             document.transform(&[index], [factor, 0.0, 0.0, factor, center.x * (1.0 - factor), center.y * (1.0 - factor)])
+        }
+        ObjectEdit::Resize { sx, sy, x, y } => {
+            if ![sx, sy].iter().all(|factor| (0.1..=10.0).contains(factor))
+                || ![x, y].iter().all(|coord| coord.is_finite() && coord.abs() <= 100_000.0)
+            {
+                return Err("Invalid object resize".into());
+            }
+            if document.shapes[index].params.kind == Some(zigzag::params::Kind::Manual) {
+                return Err("Resize editable artwork with the handles. Use the Size inspector for fixed stitch paths.".into());
+            }
+            document.transform(&[index], [sx, 0.0, 0.0, sy, x * 10.0 * (1.0 - sx), y * 10.0 * (1.0 - sy)])
         }
         ObjectEdit::Rotate => document.transform(&[index], [0.0, 1.0, -1.0, 0.0, center.x + center.y, center.y - center.x]),
         ObjectEdit::Duplicate => document.duplicate(&[index], zigzag::geom::P::new(50.0, 50.0)).map(|_| ()),
@@ -1047,6 +1073,14 @@ mod tests {
         let before_resize = workspace.current.as_ref().unwrap().stitch_count();
         apply_object_edit(&mut workspace, first.uid, ObjectEdit::Scale { factor: 1.8 }).unwrap();
         assert_ne!(workspace.current.as_ref().unwrap().stitch_count(), before_resize);
+        let resized = editable_object(&workspace.source.as_ref().unwrap().shapes[0]).unwrap();
+        let [left, top, width, height] = resized.bounds;
+        apply_object_edit(&mut workspace, first.uid, ObjectEdit::Resize {
+            sx: 1.2, sy: 0.8, x: left, y: top,
+        }).unwrap();
+        let [x, y, w, h] = editable_object(&workspace.source.as_ref().unwrap().shapes[0]).unwrap().bounds;
+        assert!((x - left).abs() < 0.01 && (y - top).abs() < 0.01);
+        assert!((w - width * 1.2).abs() < 0.01 && (h - height * 0.8).abs() < 0.01);
         apply_object_edit(&mut workspace, first.uid, ObjectEdit::Duplicate).unwrap();
         assert_eq!(workspace.source.as_ref().unwrap().shapes.len(), 3);
         apply_object_edit(&mut workspace, first.uid, ObjectEdit::Delete).unwrap();
@@ -1090,4 +1124,4 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
     window.set_fullscreen(fullscreen).map_err(|error| error.to_string())
 }
 
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,edit_artwork_object,set_object_kind,create_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,digitize_artwork,apply_digitizer_draft,scan_projects,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}

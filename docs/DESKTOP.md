@@ -54,8 +54,8 @@ For installation, open the DMG and copy the app into Applications. Local packagi
 2. Review the stitch paths alongside the source. For raster artwork, use **Processed** to inspect the cleanup result. **Density** shows up to 512 one-square-millimeter cells with the highest needle penetration counts in the DST stream.
 3. Adjust fabric or open **Advanced artwork options**. The draft updates automatically after a short pause. Choose **Open in design studio** to apply it.
 4. Set the machine's verified embroidery field and preferred format in **Machine Manager**. Select the intended hoop in the editor. Hoops measure the usable sewing field.
-5. Use the canvas zoom and pan to inspect stitches. In Select mode, click or drag an editable object. Use **Insert design** to preview and place templates or saved designs. Use the design transformation controls to change physical dimensions or placement. Save an editable `.stitchstudio` project before exporting.
-6. Review the machine format, dimensions and thread sequence, then save the machine file. Keep a separate project file for edits. Use the [sew-out worksheet](SEW_OUT.md) for the first machine test.
+5. Use the canvas zoom and pan to inspect stitches. In Select mode, click or drag an editable object. Drag a corner to resize proportionally or a side to adjust one dimension. Use the grip to move the camera controls above or below the design. Use **Insert design** to preview and place templates, saved layouts, or machine designs inside the current workspace. Use the design transformation controls to change physical dimensions or placement. Save an editable `.stitchstudio` project before exporting.
+6. Use **Thread order** to match numbered color blocks to the spools or needles you assign on the machine. Review the machine format, dimensions and thread sequence, then save the machine file. Keep a separate project file for edits. Use the [sew-out worksheet](SEW_OUT.md) for the first machine test.
 
 ## Browse and reuse designs
 

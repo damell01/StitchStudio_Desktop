@@ -8,11 +8,13 @@ import {ExportCenter} from './export-center';
 import {readThreads} from './threads';
 import {StitchPicker} from './stitch-guide';
 import {useState,useEffect,useRef,useMemo,type PointerEvent as ReactPointerEvent} from 'react';
-import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2} from 'lucide-react';
+import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,Hand,Copy,Trash2,GripHorizontal} from 'lucide-react';
 import {invoke,isTauri} from '@tauri-apps/api/core';
 type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
 type EditableObject={uid:number;label:string;color:number[];kind:string;bounds?:[number,number,number,number];path?:string;fill_rule?:'evenodd'|'nonzero';stroke_width?:number};
-type ObjectOperation={kind:'move';dx:number;dy:number}|{kind:'scale';factor:number}|{kind:'rotate'|'duplicate'|'delete'};
+type ObjectOperation={kind:'move';dx:number;dy:number}|{kind:'scale';factor:number}|{kind:'rotate'|'duplicate'|'delete'}|ResizeOperation;
+type ResizeOperation={kind:'resize';sx:number;sy:number;x:number;y:number};
+type ResizeHandle={x:number;y:number;dx:number;dy:number;cursor:string};
 type Profile={id:string;name:string;width:number;height:number;format?:string};
 function profiles(key:string,fallback:Profile[]):Profile[]{try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
 function panelWidth(key: string, fallback: number, min: number, max: number) {
@@ -23,8 +25,13 @@ export function Editor({beginner=true,navigation=[]}:{beginner?:boolean;navigati
 const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const [left,setLeft]=useState(false),[right,setRight]=useState(false),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",220,160,340)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,180,360));useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(100),[pan,setPan]=useState([0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
+const [cameraTop,setCameraTop]=useState(()=>localStorage.getItem('studio-camera-top')==='1');
+useEffect(()=>localStorage.setItem('studio-camera-top',cameraTop?'1':'0'),[cameraTop]);
+const cameraDrag=useRef<number|null>(null);
 const [canvasMode,setCanvasMode]=useState<'pan'|'select'>('select');
 const [objectOffset,setObjectOffset]=useState<[number,number]>([0,0]);
+const [resizePreview,setResizePreview]=useState<ResizeOperation|null>(null);
+const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchorX:number;anchorY:number}|null>(null);
 const objectGesture=useRef<{uid:number;x:number;y:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
 const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,8);
@@ -37,12 +44,22 @@ async function recover(){if(plan&&!await confirmAction('Replace the current desi
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
 function fit(){if(!points.length)return;const maxX=points.reduce((m,p)=>Math.max(m,Math.abs(p[0])),0),maxY=points.reduce((m,p)=>Math.max(m,Math.abs(p[1])),0);const s=Math.min(width*.45/Math.max(maxX,.01),height*.45/Math.max(maxY,.01),10);if(s>=.1)void transform(s,0,0,0);else setMessage('Design is too large for a single fit operation.')}
 useEffect(()=>{try{const raw=sessionStorage.getItem('studio-open-project-settings');if(raw){const p=JSON.parse(raw);setWidth(p.width);setHeight(p.height);setFormat(p.format);sessionStorage.removeItem('studio-open-project-settings')}}catch{}let active=true;invoke<Plan|null>('current_preview').then(p=>{if(active&&p)setPlan(p)}).catch(()=>{});return ()=>{active=false}},[]);
-useEffect(()=>{let active=true;invoke<EditableObject[]>('editable_objects').then(items=>{if(active){setObjects(items);setSelectedObject(old=>items.some(o=>o.uid===old)?old:null)}}).catch(()=>{if(active)setObjects([])});return()=>{active=false}},[plan]);
+useEffect(()=>{let active=true;invoke<EditableObject[]>('editable_objects').then(items=>{if(active){setObjects(items);setLayerTab(items.length?'objects':'threads');setSelectedObject(old=>items.some(o=>o.uid===old)?old:null)}}).catch(()=>{if(active){setObjects([]);if(plan)setLayerTab('threads')}});return()=>{active=false}},[plan]);
 useEffect(()=>{
   let active=true;
   if(plan)void invoke<string|null>('current_fabric').then(value=>{if(active&&value)setFabric(value);}).catch(()=>{});
   return ()=>{active=false;};
 },[plan]);
+const resizeHandles:ResizeHandle[]=selected?.bounds&&selected.kind!=='manual'
+  &&selected.bounds[2]>.001&&selected.bounds[3]>.001
+  ? [[-1,-1,'nwse-resize'],[0,-1,'ns-resize'],[1,-1,'nesw-resize'],[1,0,'ew-resize'],
+    [1,1,'nwse-resize'],[0,1,'ns-resize'],[-1,1,'nesw-resize'],[-1,0,'ew-resize']].map(([dx,dy,cursor])=>{
+      const [x,y,width,height]=selected.bounds!;
+      return {x:x+width*(Number(dx)+1)/2,y:y+height*(Number(dy)+1)/2,dx:Number(dx),dy:Number(dy),cursor:String(cursor)};
+    }) : [];
+const selectionTransform=resizePreview
+  ? `translate(${resizePreview.x} ${resizePreview.y}) scale(${resizePreview.sx} ${resizePreview.sy}) translate(${-resizePreview.x} ${-resizePreview.y})`
+  : `translate(${objectOffset.join(' ')})`;
 const points=useMemo(()=>plan?.blocks.flatMap(block=>block.runs.flat())??[],[plan]);
 const outside=points.some(point=>Math.abs(point[0])>width/2||Math.abs(point[1])>height/2);
 const stitchIndex=Math.min(points.length,playhead??points.length);
@@ -70,11 +87,36 @@ function pointerPosition(event:ReactPointerEvent<SVGSVGElement>) {
   return matrix ? new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()) : null;
 }
 
+function resizeAt(position:DOMPoint) {
+  const gesture=resizeGesture.current;
+  if(!gesture)return null;
+  const {handle,anchorX:x,anchorY:y}=gesture;
+  let sx=handle.dx?(position.x-x)/(handle.x-x):1;
+  let sy=handle.dy?(position.y-y)/(handle.y-y):1;
+  if(handle.dx&&handle.dy){
+    const width=handle.x-x,height=handle.y-y;
+    sx=((position.x-x)*width+(position.y-y)*height)/(width*width+height*height);
+    sy=sx;
+  }
+  const clamp=(factor:number)=>Math.min(10,Math.max(.1,factor));
+  return {kind:'resize' as const,sx:clamp(sx),sy:clamp(sy),x,y};
+}
+
 function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   if(busy||event.button!==0&&event.button!==1)return;
   const target=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;
   const object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))):undefined;
   const position=pointerPosition(event);
+  const handleIndex=event.target instanceof Element?event.target.getAttribute('data-resize-handle'):null;
+  if(canvasMode==='select'&&event.button===0&&handleIndex!==null&&selected?.bounds){
+    const handle=resizeHandles[Number(handleIndex)];
+    const [x,y,width,height]=selected.bounds;
+    resizeGesture.current={uid:selected.uid,pointer:event.pointerId,handle,
+      anchorX:x+width*(handle.dx>0?0:handle.dx<0?1:.5),
+      anchorY:y+height*(handle.dy>0?0:handle.dy<0?1:.5)};
+    event.currentTarget.setPointerCapture(event.pointerId);
+    return;
+  }
   if(canvasMode==='select'&&event.button===0&&object&&position){
     selectObject(object);
     objectGesture.current={uid:object.uid,x:position.x,y:position.y,pointerId:event.pointerId};
@@ -89,6 +131,10 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const position=pointerPosition(event);
   if(!position)return;
+  if(resizeGesture.current?.pointer===event.pointerId){
+    setResizePreview(resizeAt(position));
+    return;
+  }
   const gesture=objectGesture.current;
   if(gesture&&gesture.pointerId===event.pointerId){
     setObjectOffset([position.x-gesture.x,position.y-gesture.y]);
@@ -101,6 +147,15 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 }
 
 function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boolean) {
+  if(resizeGesture.current?.pointer===event.pointerId){
+    const position=commit?pointerPosition(event):null;
+    const result=position?resizeAt(position):null;
+    const uid=resizeGesture.current.uid;
+    resizeGesture.current=null;
+    setResizePreview(null);
+    if(result&&(Math.abs(result.sx-1)>.007||Math.abs(result.sy-1)>.007))editSelection(result,uid);
+    return;
+  }
   const gesture=objectGesture.current;
   if(gesture&&gesture.pointerId!==event.pointerId)return;
   const position=commit&&gesture?pointerPosition(event):null;
@@ -222,7 +277,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 <article className="workspace-sidebar studio-layers-dock" style={{width:`min(${leftWidth}px, 36vw)`}}>
   <h2>Layers</h2>
   <div className="workspace-segments" role="group" aria-label="Layers">
-    <button aria-pressed={layerTab==='objects'} onClick={()=>setLayerTab('objects')}>Objects</button>
+    <button aria-pressed={layerTab==='objects'} onClick={()=>setLayerTab('objects')}>Objects{objects.length>0?` (${objects.length})`:''}</button>
     <button aria-pressed={layerTab==='threads'} onClick={()=>setLayerTab('threads')}>Threads</button>
   </div>
   {layerTab==='objects' && (objects.length ? <section className="workspace-object-list">
@@ -250,18 +305,39 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
    fillRule={object.fill_rule} stroke={object.fill_rule?'none':'transparent'}
    strokeWidth={object.stroke_width} pointerEvents={object.fill_rule?'fill':'stroke'}/>)}
 </g>}
-{selected?.bounds&&canvasMode==='select'&&<g className="studio-selection" pointerEvents="none" transform={`translate(${objectOffset.join(' ')})`}>
- {objectGesture.current&&<path d={selected.path} fill={selected.fill_rule?'#8d53a333':'none'} fillRule={selected.fill_rule}
+{selected?.bounds&&canvasMode==='select'&&<g className="studio-selection" pointerEvents="none" transform={selectionTransform}>
+ {(objectGesture.current||resizePreview)&&<path d={selected.path} fill={selected.fill_rule?'#8d53a333':'none'} fillRule={selected.fill_rule}
    stroke="#8d53a3" strokeWidth={selected.stroke_width||.3}/>}
  <rect x={selected.bounds[0]-.6} y={selected.bounds[1]-.6} width={selected.bounds[2]+1.2} height={selected.bounds[3]+1.2}
    fill="none" stroke="#8543aa" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeDasharray="4 3"/>
+ {resizeHandles.map((handle,index)=><circle key={index} cx={handle.x} cy={handle.y}
+   r={Math.max(.65,1.2*100/zoom)} fill="#fff" stroke="#6945a2" strokeWidth="1.4" vectorEffect="non-scaling-stroke"
+   data-resize-handle={index} pointerEvents={busy?'none':'all'} style={{cursor:handle.cursor}}>
+   <title>{handle.dx&&handle.dy?'Drag corner to resize':'Drag side to resize'}</title>
+ </circle>)}
 </g>}</svg>{selected&&canvasMode==='select'&&<div className="studio-selection-actions" role="group" aria-label="Selected object actions">
   <span>{selected.label||'Object '+selected.uid}</span>
   <button className="studio-tool-icon" title="Rotate selection 90°" aria-label="Rotate selection 90 degrees" disabled={busy} onClick={()=>editSelection({kind:'rotate'})}><RotateCw size={16}/></button>
   <button className="studio-tool-icon" title="Duplicate selection" aria-label="Duplicate selection" disabled={busy} onClick={()=>editSelection({kind:'duplicate'})}><Copy size={16}/></button>
   <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||objects.length<=1} onClick={()=>editSelection({kind:'delete'})}><Trash2 size={16}/></button>
 </div>}
-<div className="studio-camera" role="group" aria-label="Canvas view">
+<div className={`studio-camera ${cameraTop?'studio-camera-top':''}`} role="group" aria-label="Canvas view">
+  <button className="studio-tool-icon studio-camera-grip" title="Move camera controls to the top or bottom"
+    aria-label={cameraTop?'Move camera controls to bottom':'Move camera controls to top'}
+    onClick={event=>{if(event.detail===0)setCameraTop(value=>!value)}}
+    onPointerDown={event=>{
+      cameraDrag.current=event.clientY;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }}
+    onPointerCancel={()=>{cameraDrag.current=null}}
+    onPointerUp={event=>{
+      if(cameraDrag.current===null)return;
+      const moved=event.clientY-cameraDrag.current;
+      cameraDrag.current=null;
+      const box=event.currentTarget.closest('.workspace-canvas')?.getBoundingClientRect();
+      if(Math.abs(moved)>7&&box)setCameraTop(event.clientY<box.top+box.height/2);
+      else setCameraTop(value=>!value);
+    }}><GripHorizontal size={16}/></button>
   <button className="studio-tool-icon" title="Select editable objects" aria-label="Select objects" aria-pressed={canvasMode==='select'} onClick={()=>setCanvasMode('select')}><MousePointer2 size={17}/></button>
   <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>setCanvasMode('pan')}><Hand size={17}/></button>
   <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>

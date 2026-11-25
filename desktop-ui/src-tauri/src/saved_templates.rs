@@ -59,3 +59,21 @@ pub(crate) async fn open_saved_template(file: String, app: tauri::AppHandle) -> 
         open_project_path(&path, &state)
     }).await.map_err(|error| error.to_string())?
 }
+
+#[tauri::command]
+pub(crate) async fn insert_saved_template(
+    file: String, x_mm: f64, y_mm: f64, app: tauri::AppHandle,
+) -> Result<Preview, String> {
+    if ![x_mm, y_mm].iter().all(|value| value.is_finite() && value.abs() <= 500.0) {
+        return Err("Choose an offset within 500 mm of the hoop center".into());
+    }
+    let path = template_path(&app, &file)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let project = Project::load(&path)?;
+        let source = project.validate()?.ok_or("This template has no editable artwork")?;
+        let svg = source.to_svg().map_err(|error| error.to_string())?;
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|error| error.to_string())?;
+        crate::insert_editable_artwork(&mut workspace, &svg, &project.name, x_mm, y_mm, false)
+    }).await.map_err(|error| error.to_string())?
+}

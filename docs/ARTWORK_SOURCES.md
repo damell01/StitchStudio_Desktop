@@ -1,6 +1,6 @@
 # Artwork sources
 
-The Artwork tab shows built-in classic animation and images from your local collection. The two built-in full-body stills come from the 1928 film *Steamboat Willie*. See the source records for attribution and public-domain information. [Mickey Mouse at the wheel](https://commons.wikimedia.org/wiki/File:Mickey_Mouse_as_he_appears_in_Steamboat_Willie_(1928).jpg) · [Minnie Mouse running](https://commons.wikimedia.org/wiki/File:Minnie_Mouse_from_Steamboat_Willie.png)
+The Artwork tab shows built-in classic animation and images from your local collection. The app includes smaller copies of two original full-body stills from the 1928 film *Steamboat Willie*. See the source records for attribution and public-domain information. [Mickey Mouse at the wheel](https://commons.wikimedia.org/wiki/File:Mickey_Mouse_as_he_appears_in_Steamboat_Willie_(1928).jpg) · [Minnie Mouse running](https://commons.wikimedia.org/wiki/File:Minnie_Mouse_from_Steamboat_Willie.png)
 
 Use **Design Library → Artwork → Add artwork from disk** for local PNG, JPEG or WebP files. Open publisher PDFs through **Digitize an image → Import PDF**, select the page, then crop to the character as needed. To keep images in the searchable library, put them in collection subfolders inside **StitchStudio Artwork** in your Windows user folder.
 

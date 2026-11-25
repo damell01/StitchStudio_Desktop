@@ -851,3 +851,9 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .thread-order-table :is(th,td) { text-align: left; padding: 6px; border-bottom: 1px solid var(--lav-border, var(--studio-line)); }
 .thread-order-table input { width: min(160px, 100%); }
 .thread-order-swatch { display: inline-block; vertical-align: middle; width: 21px; height: 21px; border: 1px solid #867a90; border-radius: 5px; margin-right: 8px; }
+
+.workspace-canvas .studio-camera-top { top: 12px; bottom: auto; }
+.workspace-canvas:has(.studio-camera-top) .studio-selection-actions { top: 62px; }
+.editor-workspace .studio-camera-grip { cursor: grab; touch-action: none; }
+.editor-workspace .studio-camera-grip:active { cursor: grabbing; }
+.object-layer-row small { flex-shrink: 0; white-space: nowrap; }

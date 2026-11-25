@@ -31,6 +31,17 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   await page.mouse.up();
   await selection.getByRole('button',{name:'Duplicate selection'}).click();
   await expect.poll(()=>page.evaluate(()=> (window as unknown as {objectEdits:{uid:number;operation:{kind:string}}[]}).objectEdits.map(edit=>[edit.uid,edit.operation.kind]))).toEqual([[10,'move'],[10,'duplicate']]);
+  const resize=canvas.locator('[data-resize-handle="4"]');
+  await expect(resize).toBeVisible();
+  const handle=(await resize.boundingBox())!;
+  const hx=handle.x+handle.width/2,hy=handle.y+handle.height/2;
+  await page.mouse.move(hx,hy);
+  await page.mouse.down();
+  await page.mouse.move(hx+30,hy+20,{steps:4});
+  await page.mouse.up();
+  await expect.poll(()=>page.evaluate(()=>(window as unknown as {objectEdits:{operation:{kind:string;sx?:number;sy?:number}}[]}).objectEdits.at(-1)?.operation)).toMatchObject({kind:'resize'});
+  await page.getByRole('button',{name:'Move camera controls to top'}).click();
+  await expect(page.getByRole('group',{name:'Canvas view'})).toHaveClass(/studio-camera-top/);
   const points=await canvas.locator('polyline').evaluateAll(lines=>lines.map(line=>line.getAttribute('points')));
   await page.getByRole('button',{name:'Pan canvas',exact:true}).click();
   const view=await canvas.getAttribute('viewBox');
@@ -44,5 +55,5 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
     await page.getByRole('button',{name:'Zoom out',exact:true}).click();
   }
   expect(await canvas.locator('polyline').evaluateAll(lines=>lines.map(line=>line.getAttribute('points')))).toEqual(points);
-  expect(await page.evaluate(()=>(window as unknown as {objectEdits:unknown[]}).objectEdits.length)).toBe(2);
+  expect(await page.evaluate(()=>(window as unknown as {objectEdits:unknown[]}).objectEdits.length)).toBe(3);
 });

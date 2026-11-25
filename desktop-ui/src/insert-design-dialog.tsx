@@ -8,9 +8,10 @@ import { importToLibrary, type LibraryImportSource } from './library-import';
 import './insert-design-dialog.css';
 
 type Artwork = { name: string; mime: string; bytes: number[] };
-type Source = 'templates' | 'personal' | 'artwork';
+type Source = 'templates' | 'personal' | 'artwork' | 'layouts';
 type Selection =
   | { source: 'templates'; template: Template }
+  | { source: 'layouts'; file: string }
   | { source: 'personal'; file: string | null }
   | { source: 'artwork'; art: Artwork };
 
@@ -22,6 +23,7 @@ type StitchPreview = {
 const MM_PER_INCH = 25.4;
 const sources = [
   { id: 'templates', label: 'Templates', icon: LayoutGrid },
+  { id: 'layouts', label: 'Saved layouts', icon: LayoutGrid },
   { id: 'personal', label: 'My designs', icon: FolderOpen },
   { id: 'artwork', label: 'Artwork', icon: Image },
 ] as const;
@@ -89,7 +91,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
   const offsetValid = Math.abs(xMm) <= 500 && Math.abs(yMm) <= 500;
   const name = selection?.source === 'templates' ? selection.template.name :
     selection?.source === 'personal' ? selection.file ?? 'Machine file from disk' :
-    selection?.source === 'artwork' ? selection.art.name : '';
+    selection?.source === 'artwork' ? selection.art.name : selection?.source === 'layouts' ? selection.file.replace(/\.stitchstudio$/,'') : '';
 
   async function run(action: () => Promise<void>) {
     if (lock.current) return;
@@ -110,11 +112,12 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
   }
 
   function chooseSource(next: Source) {
-    if (next !== source) setSelection(null);
+    if (next !== source) {setSelection(null);setFiles([]);setQuery('');}
     setSource(next);
     setError('');
     setMessage('');
     if (next === 'personal') void run(loadFiles);
+    if (next === 'layouts') void run(async()=>setFiles(await invoke<string[]>('saved_templates')));
   }
 
   function importFiles(source: LibraryImportSource) {
@@ -127,13 +130,14 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
   }
 
   function insert(candidate = selection) {
-    if (!candidate || !offsetValid || (candidate.source !== 'personal' && !widthValid)) return;
+    if (!candidate || !offsetValid || ((candidate.source === 'templates' || candidate.source === 'artwork') && !widthValid)) return;
     void run(async () => {
       const position = { xMm, yMm };
       const result = candidate.source === 'templates'
         ? await invoke<Plan>('insert_template', { ...position, id: candidate.template.id, art: candidate.template.art, widthMm })
         : candidate.source === 'artwork'
           ? await invoke<Plan>('insert_character', { ...position, bytes: candidate.art.bytes, name: candidate.art.name, widthMm })
+          : candidate.source === 'layouts' ? await invoke<Plan>('insert_saved_template',{...position,file:candidate.file})
           : await invoke<Plan | null>('insert_embroidery', { ...position, file: candidate.file });
       if (!result) return;
       onInsert(result);
@@ -161,6 +165,16 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
           selectedId={selection?.source === 'templates' ? selection.template.id : undefined}
           onPreview={template => { setSelection({ source, template }); setError(''); }} />}
         {source === 'artwork' && <CharacterGallery onArt={art => { setSelection({ source, art }); setError(''); }} />}
+        {source === 'layouts' && <>
+          <label className="studio-insert-search"><Search size={16}/><input placeholder="Find a saved layout" aria-label="Search saved layouts"
+            value={query} onChange={event=>setQuery(event.target.value)}/></label>
+          {!page.total&&<p>{files.length?'No layouts match your search.':'Import editable .stitchstudio projects under Template Library to use them here.'}</p>}
+          <div className="studio-insert-file-list">
+            {page.items.map(file=><button key={file} aria-pressed={selection?.source==='layouts'&&selection.file===file}
+              onClick={()=>{setSelection({source,file});setError('');}}><LayoutGrid size={16}/>{file.replace(/\.stitchstudio$/,'')}</button>)}
+          </div>
+          <ListNavigation {...page}/>
+        </>}
         {source === 'personal' && <>
           <div className="studio-insert-files">
             <button disabled={!offsetValid} onClick={() => insert({ source, file: null })}>
@@ -191,7 +205,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
         {selection?.source === 'templates' && <TemplateAttribution template={selection.template}/>}
         {selection?.source === 'personal'
           ? <p>Machine files keep their original size.</p>
-          : <label>Width (in)
+          : selection?.source === 'layouts' ? <p>Layouts keep their original size and internal arrangement.</p> : <label>Width (in)
               <input type="number" value={width} min=".2" max="9.84" step="any" disabled={busy}
                 onChange={event => setWidth(event.target.value)} aria-invalid={!widthValid}/>
               {!widthValid && <small>Enter a width from 5 to 250 mm.</small>}
@@ -208,7 +222,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
     <footer className="studio-insert-footer">
       {error ? <p role="alert">{error}</p> : <p role="status">{busy ? 'Working…' : message || (offset ? 'Custom placement' : 'Centered in hoop')}</p>}
       <button className="primary" onClick={() => insert()}
-        disabled={busy || !selection || !offsetValid || (selection.source !== 'personal' && !widthValid)}>
+        disabled={busy || !selection || !offsetValid || ((selection.source === 'templates' || selection.source === 'artwork') && !widthValid)}>
         <Plus size={17}/> Insert design
       </button>
     </footer>

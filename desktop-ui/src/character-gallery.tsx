@@ -2,12 +2,12 @@ import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navig
 import {useEffect,useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 type Entry={group:string;name:string;file:string};
-export type Art={name:string;mime:string;bytes:number[]};
+export type Art={name:string;mime:string;bytes:number[];classic?:boolean};
 function mime(file:string){return /\.webp$/i.test(file)?'image/webp':/\.jpe?g$/i.test(file)?'image/jpeg':'image/png'}
 function Tile({entry,onArt}:{entry:Entry;onArt:(a:Art)=>void}){
  const [url,setUrl]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{let active=true,u='';invoke<number[]>('character_image',{group:entry.group,file:entry.file}).then(bytes=>{if(active){u=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:mime(entry.file)}));setUrl(u)}}).catch(e=>{if(active)setError(String(e))});return()=>{active=false;if(u)URL.revokeObjectURL(u)}},[entry.group,entry.file]);
- async function choose(){setBusy(true);try{const bytes=await invoke<number[]>('character_image',{group:entry.group,file:entry.file});onArt({name:entry.name,mime:mime(entry.file),bytes})}catch(e){setError(String(e))}finally{setBusy(false)}}
+ async function choose(){setBusy(true);try{const bytes=await invoke<number[]>('character_image',{group:entry.group,file:entry.file});onArt({name:entry.name,mime:mime(entry.file),bytes,classic:entry.group==='Classic animation (1928)'})}catch(e){setError(String(e))}finally{setBusy(false)}}
  return <article><div style={{height:108,display:'grid',placeItems:'center'}}>{url?<img src={url} alt={entry.name} loading="lazy" style={{maxWidth:'100%',maxHeight:108,objectFit:'contain'}}/>:<small>{error?'Image unavailable':'Loading artwork…'}</small>}</div><small>{entry.group}</small>{entry.file==='mickey-1928.jpg'&&entry.group==='Classic animation (1928)'&&<div><a href="https://commons.wikimedia.org/wiki/File:Mickey_Mouse_as_he_appears_in_Steamboat_Willie_(1928).jpg" target="_blank" rel="noreferrer">Artwork source</a></div>}{entry.file==='minnie-1928.png'&&entry.group==='Classic animation (1928)'&&<div><a href="https://commons.wikimedia.org/wiki/File:Minnie_Mouse_from_Steamboat_Willie.png" target="_blank" rel="noreferrer">Artwork source</a></div>}<h3>{entry.name}</h3><button disabled={busy||!url} onClick={choose}>{busy?'Opening…':'Digitize'}</button></article>
 }
 export function CharacterGallery({onArt}:{onArt:(a:Art)=>void}){
