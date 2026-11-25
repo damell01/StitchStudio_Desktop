@@ -509,6 +509,18 @@ impl Studio {
         if !self.action_enabled(a) {
             return;
         }
+        if matches!(a, Action::CenterInHoop | Action::FitToHoop | Action::ZoomFit | Action::Duplicate | Action::FlipH | Action::FlipV | Action::RotateLeft | Action::RotateRight | Action::GroupColors | Action::ShowIssues | Action::SimplifyPath | Action::RoundCorners | Action::Kind(_)) {
+            if let Some(ctx) = &self.egui_ctx {
+                ctx.data_mut(|d| {
+                    let id = egui::Id::new("recent-quick-actions");
+                    let mut recent = d.get_temp::<Vec<Action>>(id).unwrap_or_default();
+                    recent.retain(|old| *old != a);
+                    recent.insert(0, a);
+                    recent.truncate(5);
+                    d.insert_temp(id, recent);
+                });
+            }
+        }
         let c = self.selection_bounds().center();
         match a {
             Action::New => {
