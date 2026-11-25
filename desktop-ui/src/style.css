@@ -1586,3 +1586,17 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .inline-lettering-fields>button[aria-expanded]{justify-content:space-between;font-size:12px}
 .inline-lettering>.primary{position:sticky;bottom:0;z-index:2;min-height:34px}
 .inline-lettering small[role=status]{font-size:11px;letter-spacing:normal}
+
+/* Compact palette editing and live lettering controls. */
+.palette-editor{display:grid;gap:7px}
+.palette-edit-row{padding:0!important;border:1px solid var(--workspace-border);border-radius:8px;overflow:hidden}
+.palette-row-toggle{display:flex;align-items:center;gap:9px;width:100%;border:0;background:transparent;text-align:left;padding:8px}
+.palette-row-toggle>i{display:block;width:32px;height:32px;flex:none;border:1px solid #9996;border-radius:6px}
+.palette-row-toggle>span{display:grid;gap:2px;flex:1}
+.palette-row-toggle small{font-size:10px;letter-spacing:normal}
+.palette-row-controls{display:grid;gap:7px;padding:8px;border-top:1px solid var(--workspace-border)}
+.palette-row-controls .primary{justify-content:center}
+.palette-row-controls label,.inline-lettering .live-text-toggle{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.inline-lettering .live-text-toggle{justify-content:flex-start;font-size:11px}
+.alignment-pair{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.alignment-pair button{white-space:normal;font-size:11px;justify-content:center}
