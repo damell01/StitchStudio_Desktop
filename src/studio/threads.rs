@@ -619,7 +619,7 @@ impl Studio {
         caption(ui, format!("{} selected · Shift-click colors to combine", self.sel_indices().len()));
         // Named, in-session colorways; use stable object identities.
         type Colorway = (String, Vec<(u64, [u8; 3])>);
-        let baseline_id = ui.make_persistent_id("named-colorways");
+        let baseline_id = ui.make_persistent_id(("named-colorways", self.active_tab(), &self.doc.path, &self.doc.name));
         let name_id = ui.make_persistent_id("colorway-name");
         let mut saved = ui.ctx().data(|d| d.get_temp::<Vec<Colorway>>(baseline_id).unwrap_or_default());
         let mut name = ui.ctx().data(|d| d.get_temp::<String>(name_id).unwrap_or_else(|| "Original".into()));
@@ -642,8 +642,9 @@ impl Studio {
                 for (index, (label, snapshot)) in saved.iter().enumerate() {
                     ui.horizontal(|ui| {
                         if ui.button(label.as_str()).on_hover_text("Restore this colorway").clicked() {
+                            let colors: std::collections::HashMap<_, _> = snapshot.iter().copied().collect();
                             for s in &mut self.doc.shapes {
-                                if let Some((_, color)) = snapshot.iter().find(|(uid, _)| *uid == s.uid as u64) {
+                                if let Some(color) = colors.get(&(s.uid as u64)) {
                                     s.color = *color;
                                 }
                             }
@@ -667,10 +668,11 @@ impl Studio {
                     for (label, kind) in [("Fill", Kind::Fill), ("Satin", Kind::Satin), ("Run", Kind::Run)] {
                         if ui.add_enabled(!selection.is_empty(), egui::Button::new(label)).clicked() {
                             for &i in &selection {
-                                let p = &mut self.doc.shapes[i].params;
-                                if p.kind != Some(Kind::Skip) {
-                                    p.kind = Some(kind);
-                                    p.spacing = None;
+                                let shape = &mut self.doc.shapes[i];
+                                if shape.params.kind != Some(Kind::Skip)
+                                    && crate::widgets::allowed_kinds(shape).contains(&kind) {
+                                    shape.params.kind = Some(kind);
+                                    shape.params.spacing = None;
                                 }
                             }
                             self.status = format!("Applied {label} stitch type to selection.");
