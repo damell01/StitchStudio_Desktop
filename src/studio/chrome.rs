@@ -78,17 +78,45 @@ impl Studio {
                 let mut query = ui.ctx().data(|d| d.get_temp::<String>(search_id).unwrap_or_default());
                 ui.add(egui::TextEdit::singleline(&mut query).hint_text("Find any command…"));
                 ui.ctx().data_mut(|d| d.insert_temp(search_id, query.clone()));
+                let favorites_id = egui::Id::new("quick-action-favorites");
+                let mut favorites = ui.ctx().data(|d| d.get_temp::<Vec<crate::commands::Action>>(favorites_id).unwrap_or_default());
+                if query.trim().is_empty() && !favorites.is_empty() {
+                    caption(ui, "Favorites");
+                    for (action, label, _) in crate::commands::all_actions() {
+                        if favorites.contains(&action) {
+                            ui.horizontal(|ui| {
+                                if ui.small_button("★").on_hover_text("Unpin action").clicked() {
+                                    favorites.retain(|a| *a != action);
+                                }
+                                if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
+                                    self.run_action(action);
+                                    ui.close();
+                                }
+                            });
+                        }
+                    }
+                    ui.separator();
+                }
+                ui.ctx().data_mut(|d| d.insert_temp(favorites_id, favorites.clone()));
                 if !query.trim().is_empty() {
                     let words = query.to_lowercase();
                     egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                         for (action, label, _) in crate::commands::all_actions() {
                             let name = label.to_lowercase();
                             if words.split_whitespace().all(|word| name.contains(word)) {
-                                if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
-                                    self.run_action(action);
-                                    ui.ctx().data_mut(|d| d.remove::<String>(search_id));
-                                    ui.close();
-                                }
+                                ui.horizontal(|ui| {
+                                    let pinned = favorites.contains(&action);
+                                    if ui.small_button(if pinned { "★" } else { "☆" }).on_hover_text("Pin or unpin favorite").clicked() {
+                                        if pinned { favorites.retain(|a| *a != action); }
+                                        else { favorites.push(action); }
+                                        ui.ctx().data_mut(|d| d.insert_temp(favorites_id, favorites.clone()));
+                                    }
+                                    if ui.add_enabled(self.action_enabled(action), egui::Button::new(label)).clicked() {
+                                        self.run_action(action);
+                                        ui.ctx().data_mut(|d| d.remove::<String>(search_id));
+                                        ui.close();
+                                    }
+                                });
                             }
                         }
                     });
