@@ -39,6 +39,6 @@ Sources:
 ## Release gates
 - [ ] Windows/macOS clean builds, installers, signing, update/rollback, offline usage.
 - [ ] Regression fixtures and physical sew-outs across machine formats and fabrics.
-- [ ] Accessible keyboard navigation, beginner defaults, optional advanced tools, responsive Forest & Sage UI.
+- [ ] Accessible keyboard navigation, beginner defaults, optional advanced tools, responsive lavender UI.
 - [ ] Crash recovery, resource limits, secure file parsing, license/attribution review.
-- [ ] Licensing and billing independent of offline stitch processing.
+- [ ] Verify offline editing and export on a clean installation.

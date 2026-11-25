@@ -1,0 +1,45 @@
+# Stitch Studio Desktop implementation tracker and audit
+
+Baseline `Dev` commit `4075876`. The checkout contains a shared Rust engine, a legacy egui application, and the React/Tauri desktop target. Native and browser tests exercise different boundaries. See [desktop setup and commands](DESKTOP.md), [competitor research](COMPETITORS.md) and [physical testing](SEW_OUT.md).
+
+## Phase and acceptance tracker
+
+| Phase | Working implementation and evidence | Remaining acceptance work |
+| --- | --- | --- |
+| 1.1 Import and automatic generation | Raster/SVG selection and file drop, one-page PDF auto-run and multipage selection, serialized tracing and debounced regeneration. Browser tests cover file selection, drop, debouncing, cancellation by invalidation, and selected failure handling through mocked IPC. | Native drag-and-drop and PDF checks on Windows/macOS, real per-stage progress, cancellation inside Rust, all input types and animated-file semantics. |
+| 1.2–1.4 Analysis, cleanup and tracing | Raster trace pipeline, edge flood fill, texture cleanup override, transparent padding trim and processed preview. Rust tests cover an enclosed light region, exact sample color, foreground touching the frame and existing transparency. | Automatic texture and line detection, gradient/shadow workflows, recognition of ambiguous boundary-touching foreground, expanded fidelity fixtures, restoration with larger TIFF inputs. |
+| 1.5–1.9 Stitch types, density, underlay, sequencing, fabric | Existing engine selects satin for some narrow regions, adapts fill directions, generates underlay and routes around overlaps. Four fabric choices in Tauri. Draft heatmap shows 512 densest 1 mm² DST tiles. | Geometry-aware selection for additional stitch types, fabric-specific density corrections, underlay and compensation policies, overlap-aware routing benchmarks, broader profiles and guidance. |
+| 1.10 Validation | Draft rejects empty, non-finite and out-of-range stitch plans. Review displays size-independent plan counts, DST jumps, sewn path length, planner notes and stitch-length measurements. Export checks selected hoop bounds. | Format-specific jump, trim and stop validation, quality repair with source retention, estimate verification and native/physical validation. |
+| 2.1–2.6 Workspace and beginner UX | Existing lavender theme, menus, workspace, tour and inspector. Streamlined digitizer with inline status, optional advanced settings and comparison modes. | Audit every menu action and placeholder page, true stage updates and realistic digitizer preview, command palette keyboard and focus tests, workspace persistence, dark mode and accessibility review. |
+| 3.1 Camera | Existing editor has cursor-anchored zoom and SVG-coordinate panning. Browser regression checks viewBox changes and unchanged rendered stitch points and confirms camera interaction sends no transform command. | Additional trackpad and pinch checks, physical actual-size calibration, native export byte-for-byte regression. |
+| 3.2–3.6 Editing | Numeric transforms, editable artwork regeneration, centering and mirroring retain source geometry, object settings and undo history where available. | Direct selection, marquee and handles, locking/grouping, booleans/drawing and per-stitch editing. Imported stitch resize and recoloring need source-aware semantics. |
+| 3.7–3.8 Simulation and previews | Existing geometric stitch path playback and thread view, separate digitizer density view. | Canonical per-format simulation, stop and trim indicators, realistic thread and fabric, complex-design performance. |
+| 4.1–4.2 Lettering and fonts | Tauri has system-font lettering and local folder imports. | Native and physical tests, more advanced layouts, mapping of machine alphabet designs, duplicate management and valid BX decoding. |
+| 4.3–4.5 Specialty tools | Engine includes appliqué/fill/contour and other patterns. Tauri offers preset shapes for patches and appliqué. | Cutting exports, stop verification, freeform pieces and border settings, specialty algorithms and physical samples. |
+| 4.6–4.9 Merging and libraries | Templates and local character artwork stay editable in source-backed projects. Existing personal imports, template art and thread swatches. | Mixed machine and artwork project model, editable lettering insertion, licensed library inventory, ZIP limits and in-app UI, metadata/thumb caching and inventory features. |
+| 4.10–4.11 Machines and formats | Configurable profiles/hoops, metric engine, inch labels in setup, hoop-aware export and printable thread list. Engine decodes its own DST/PES/PEC/EXP/JEF benchmark files. | Poolin EOM field/format confirmation, universal compatibility review, VP3/PEN read validation, proprietary formats, command semantics, batch exports and verified transfer. |
+| 5.1–5.2 Projects and recovery | Source SVG, source coordinate offset, stitch paths and hoop/format state. Older v1 files load without an offset. Project files are replaced atomically and recovery can fall back to the previous copy. | Native qualification, original and processed source assets, machine/fabric/library metadata, save-dirty prompts, interrupted-write and cross-version tests. |
+| 5.3–5.5 Performance, input validation, accessibility | Raster generation off the UI thread. Automatic draft jobs serialized. PDF worker loads on demand. SVG engine refuses linked raster files. Input and project size limits checked. | Representative memory and stress tests, mid-job cancellation, generalized native limits, ZIP validation, screen-reader and reduced-motion audit. |
+| 5.6–5.8 Tests, benchmarks and builds | Engine tests, Playwright workflow regressions, three generated benchmark fixtures, lockfiles, Tauri Windows NSIS/macOS bundle CI, local packaging docs. | More native integration coverage, Windows and macOS install/run checks, signing/notarization, release qualification and physical sew-outs. |
+| 6 Research | Vendor documentation and selected user reports reviewed in [competitor comparison](COMPETITORS.md). | More representative forum/tutorial review and controlled competitor comparisons. |
+| 7 Final audit | Source, build scripts, recent history, visible workflow and CI failures inspected. | Screen-by-screen native audit, all acceptance tests, signing and sew-outs. Full release and suite parity remain open. |
+
+## Digital baseline and comparison
+
+Run `cargo run --locked --example digitizing_benchmark` from the root. The runner generates the same 128-pixel original fixtures each time. It records trace and planning time, geometry count, stitch and color counts, DST commands, jump travel and 1 mm² penetration counts. It encodes then reads five formats and checks that each decode yields nonempty stitch blocks.
+
+| Fixture | Trace + plan before → after | Shapes | Points | Colors | Planned trims | DST jumps | DST jump travel | Peak penetrations/mm² |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Flat badge with enclosed light region | 114 → 111 ms | 10 | 12,085 | 4 | 7 | 38 | 407.38 mm | 21 |
+| Thin diagonal touching image edge | 59 → 64 ms | 2 | 6,446 | 2 | 0 | 8 | 89.42 mm | 11 |
+| Textured oval | 147 → 140 ms | 2 | 7,143 | 2 | 2 | 9 | 106.30 mm | 14 |
+
+The stitch metrics stayed the same on these three fixtures. Timings are single debug runs and vary by machine. The background change addresses edge cases checked by direct pixel assertions. The benchmark does not measure visual fidelity, peak process memory, machine-specific stops, or sew-out quality. Expand the fixtures to include transparent artwork, lettering at multiple scales, patch and appliqué samples and more intricate drawings.
+
+## Verification status
+
+- Baseline engine suite passed with 158 tests and one ignored, counting the CLI bridge tests. The updated engine passed 162 tests with one ignored.
+- TypeScript and Vite production build passed. Two Chromium workflow tests passed with mocked Tauri IPC.
+- The baseline macOS CI build failed at Tauri context generation because the PNG app icon was missing. Desktop bundle configuration now references the repository’s existing PNG, ICO and ICNS assets.
+- Local Tauri compilation on the Linux development image is blocked at missing GTK development dependencies. Native workflow logs and artifacts are available through [Desktop production checks](https://github.com/damell01/StitchStudio_Desktop/actions/workflows/desktop-production-checks.yml).
+- There are no physical machine results. Verify the Poolin EOM and fabric settings using the [sew-out worksheet](SEW_OUT.md).

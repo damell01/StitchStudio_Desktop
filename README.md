@@ -1,3 +1,7 @@
+## Stitch Studio Desktop on the Dev branch
+
+The React and Tauri desktop application lives in `desktop-ui`. For Windows PowerShell and macOS terminal commands, see the [desktop build and packaging guide](docs/DESKTOP.md). The [implementation tracker](docs/IMPLEMENTATION_TRACKER.md) records tested workflows and open acceptance work.
+
 <img src="packaging/macos/AppIcon-dark.png" alt="ZigZag dark mode app icon" width="160" height="160">
 
 # ZigZag
