@@ -718,6 +718,60 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
     }
     doc.sync().map_err(|e|e.to_string())
 }
+// Rebuild distressed ink as opaque, smooth shapes. Work on editable fills
+// rather than altering the machine points; large counters remain negative.
+fn rebuild_solid_artwork(source:&zigzag::document::Document,uids:Option<&[usize]>,radius:f64)->Option<zigzag::document::Document>{
+    use zigzag::{boolean,geom::FillRule,params::Kind,svg::Geometry,stitch::satin};
+    let mut doc=source.clone();
+    let mut edits=Vec::new();
+    for (i,s) in source.shapes.iter().enumerate(){
+        if !uids.is_none_or(|ids|ids.contains(&s.uid))||source.records_text(i)
+            ||s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")
+            ||s.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill||s.params.stop==Some(true)||s.params.trim==Some(true)
+            ||source.shapes.iter().filter(|q|q.id==s.id).count()!=1{continue}
+        let Geometry::Fill{rings,rule}=&s.geometry else{continue};
+        let comps=satin::components(rings,*rule);
+        let mut cleaned=Vec::new();let mut changed=false;
+        for comp in comps{
+            let Some(outer)=comp.first() else{continue};
+            let area=boolean::ring_area(outer);
+            if area<80.0{cleaned.extend(comp);continue}
+            cleaned.push(outer.clone());
+            for hole in comp.iter().skip(1){
+                let h=boolean::ring_area(hole);
+                // Keep letter counters, bow openings and other meaningful
+                // voids. Remove pinholes and thin scratches only.
+                let perimeter=hole.iter().zip(hole.iter().cycle().skip(1)).take(hole.len()).map(|(a,b)|a.dist(*b)).sum::<f64>();
+                let thin=perimeter>0.0&&2.0*h/perimeter<radius*0.55;
+                if h<area*0.12&&h<radius*radius*5.0&&thin{changed=true}else{cleaned.push(hole.clone());}
+            }
+        }
+        if cleaned.is_empty(){continue}
+        let grow=boolean::offset(&cleaned,FillRule::EvenOdd,radius);
+        let closed=boolean::offset(&grow,FillRule::EvenOdd,-radius);
+        let prior=satin::components(&cleaned,FillRule::EvenOdd);
+        let next=satin::components(&closed,FillRule::EvenOdd);
+        if next.is_empty()||next.len()!=prior.len(){continue}
+        let holes=|c:&Vec<Vec<zigzag::geom::Polyline>>|c.iter().flat_map(|r|r.iter().skip(1)).filter(|r|boolean::ring_area(r)>radius*radius*5.0).count();
+        if holes(&prior)!=holes(&next){continue}
+        let area=|c:&Vec<Vec<zigzag::geom::Polyline>>|c.iter().map(|r|r.first().map(|p|boolean::ring_area(p)).unwrap_or(0.0)-r.iter().skip(1).map(|p|boolean::ring_area(p)).sum::<f64>()).sum::<f64>();
+        let old=area(&prior);let new=area(&next);
+        if old<=0.0||new<old*0.95||new>old*1.25{continue}
+        if !changed && (new-old).abs()<old*0.015{continue}
+        let path=zigzag::bezier::from_rings(&closed,0.6);
+        if !path.is_empty(){edits.push((i,path));}
+    }
+    if edits.is_empty(){return None}
+    let ids:Vec<_>=edits.iter().map(|(i,_)|source.shapes[*i].uid).collect();
+    doc.set_paths(&edits).ok()?;
+    let fabric=doc.plan_options().fabric;
+    for s in &mut doc.shapes{
+        if !ids.contains(&s.uid){continue}
+        s.params.spacing=Some((s.params.fill_spacing(&fabric)*1.18).min(0.50));
+        s.params.len=Some((s.params.fill_len(&fabric)*1.2).min(4.0));
+    }
+    doc.sync().ok()?;Some(doc)
+}
 fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
@@ -726,13 +780,22 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let mut candidates=Vec::new();
         if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
         if options.solid||options.merge||options.auto_types||options.lighter_underlay{
-            let radii:&[f64]=if options.solid&&strength>=3{&[2.0,4.0,6.0]}else if options.solid&&strength==2{&[2.0,4.0]}else{&[2.0]};
+            let radii:&[f64]=if options.solid&&strength>=3{&[4.0,8.0,12.0]}else if options.solid&&strength==2{&[2.0,4.0]}else{&[2.0]};
             for &radius in radii{
                 let mut geometry=source.clone();
                 if optimize_geometry(&mut geometry,&options,uids,radius).is_ok(){
                     let plan=geometry.plan();
                     if let Some(v)=simplify_design_candidate(&geometry,&plan,strength,uids,false){candidates.push(v);}
                     candidates.push((geometry,plan));
+                }
+            }
+        }
+        if strength==3&&options.solid{
+            for radius in [5.0,8.0,12.0]{
+                if let Some(mut doc)=rebuild_solid_artwork(source,uids,radius){
+                    if optimize_geometry(&mut doc,options,uids,4.0).is_ok(){
+                        let plan=doc.plan();candidates.push((doc,plan));
+                    }
                 }
             }
         }
@@ -791,6 +854,7 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
             let mut mode=options.clone();
             if strength==1{mode.solid=false;mode.lighter_underlay=false;mode.merge=false;mode.auto_types=false;}
             if strength==2{mode.lighter_underlay=false;}
+            if strength==3{mode.solid=true;mode.merge=true;mode.auto_types=true;}
             match choose_simplification(&source,&original,strength,uids.as_deref(),strength>1&&remove_detail.unwrap_or(false),&mode){
                 Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None});stored.push((strength,doc,design));}
                 Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason)})
