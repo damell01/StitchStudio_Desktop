@@ -153,6 +153,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   }
 
   return <>
+    {!insert&&!onPreview&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All','Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>setCategory(item)}>{item}</button>)}</div>}
     <div className="library-filters">
       <label className="library-search"><Search size={16} /><input aria-label="Search templates" placeholder="Search templates" value={query} onChange={event => setQuery(event.target.value)} /></label>
       <label>Category <select value={category} onChange={event => setCategory(event.target.value)}>
