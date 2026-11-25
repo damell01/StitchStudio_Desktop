@@ -42,12 +42,12 @@ impl LetteringSettings {
     }
 }
 
-fn plan_text(document: &mut Document, spec: &TextSpec, center: [f64; 2]) -> Result<zigzag::design::Design, String> {
+fn plan_text(document: &mut Document, spec: &TextSpec, center: [f64; 2], cache: &mut zigzag::design::PlanCache) -> Result<zigzag::design::Design, String> {
     if center.iter().any(|v| !v.is_finite() || v.abs() > 500.0) {
         return Err("Place lettering within 500 mm of the hoop center.".into());
     }
     let index = document.add_lettering(spec, (center[0], center[1])).map_err(|e| e.to_string())?;
-    let design = document.plan();
+    let design = document.plan_cached(cache);
     if design.per_shape.get(index).copied().unwrap_or(0) == 0 {
         return Err("These letters produced no stitches. Try a larger size or a different font.".into());
     }
@@ -63,7 +63,7 @@ pub(super) fn apply(workspace: &mut Workspace, spec: &TextSpec, placement: Optio
         document.name = name.to_owned();
         document
     };
-    let design = plan_text(&mut document, spec, placement.unwrap_or([0.0, 0.0]))?;
+    let design = plan_text(&mut document, spec, placement.unwrap_or([0.0, 0.0]), &mut workspace.plan_cache)?;
     let result = preview(&design);
     workspace.checkpoint();
     workspace.current = Some(design);
@@ -75,7 +75,7 @@ pub(super) fn apply(workspace: &mut Workspace, spec: &TextSpec, placement: Optio
 pub(crate) async fn preview_lettering(settings: LetteringSettings) -> Result<Preview, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let spec = settings.spec()?;
-        let design = plan_text(&mut Document::empty(), &spec, [0.0, 0.0])?;
+        let design = plan_text(&mut Document::empty(), &spec, [0.0, 0.0], &mut zigzag::design::PlanCache::default())?;
         Ok(preview(&design))
     }).await.map_err(|error| error.to_string())?
 }
@@ -99,7 +99,7 @@ pub(crate) async fn update_lettering(uid:usize,settings:LetteringSettings,app:ta
  let mut spec=doc.lettering(index).ok_or("Selected object is not editable text")?;
  spec.text=next.text;spec.font=next.font;spec.size_mm=next.size_mm;spec.spacing_mm=next.spacing_mm;spec.arc_mm=next.arc_mm;spec.bold=next.bold;spec.italic=next.italic;spec.color=next.color;spec.align=next.align;if scale_x{spec.h_scale=next.h_scale}if scale_y{spec.v_scale=next.v_scale}if has_kern{spec.kern=next.kern}
  doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
- let design=doc.plan();
+ let design=doc.plan_cached(&mut w.plan_cache);
  if design.stitch_count()==0{return Err("No stitches generated".into())}
  let result=preview(&design);w.checkpoint();w.current=Some(design);w.source=Some(doc);Ok(result)
  }).await.map_err(|e|e.to_string())?
