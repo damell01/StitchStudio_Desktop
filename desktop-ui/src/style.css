@@ -1195,3 +1195,22 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 [data-palette=lavender] .editor-workspace .workspace-segments button{white-space:normal;font-size:11px}
 [data-palette=lavender] .editor-workspace .workspace-status{padding-inline:12px}
 @media(max-height:760px){.home-workspace .home-hero{padding-block:12px}.home-workspace .home-hero-art,.home-workspace .home-hero-art svg{max-height:100px}.home-workspace .home-actions .tile{min-height:62px}.home-workspace .recent-project-grid article,.home-workspace .recent-project-grid .recent-scan{min-height:100px}.home-workspace .library-thumb{height:65px}.home-workspace .home-resources>button{min-height:56px}}
+
+/* Studio review polish: readable metrics and compact controls. */
+.digitizer-layout .preview-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.digitizer-layout .preview-heading>div{display:grid;gap:3px;min-width:0}
+.digitizer-layout .preview-heading strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.digitizer-layout .preview-heading small{font-size:10px;letter-spacing:.08em;color:var(--brand)}
+.digitizer-preview-state{font-size:12px;padding:5px 9px;border:1px solid var(--lav-border,var(--studio-line));border-radius:6px;background:var(--brand-soft)}
+.digitizer-preview-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 10px}
+.digitizer-preview-metrics>div{display:grid;gap:4px;padding:9px;border-radius:8px;border:1px solid var(--lav-border,var(--studio-line))}
+.digitizer-preview-metrics small{font-size:11px;letter-spacing:normal;opacity:.85}
+.digitizer-preview-metrics strong{font-size:17px;font-variant-numeric:tabular-nums}
+.digitizer-stage-0 .artwork-import-zone>span{font-weight:400;font-size:12px}
+.editor-workspace .workspace-fit-status[data-outside=true]{color:#bd463c;font-weight:600}
+.editor-workspace .studio-camera button{min-width:28px}
+.editor-workspace .workspace-sidebar .workspace-segments{position:sticky;top:0;z-index:2}
+.editor-workspace .workspace-inspector .workspace-segments{background:var(--workspace-surface)}
+.specialty-figure .specialty-real-stitches{width:100%;height:220px;filter:drop-shadow(0 .3px .2px #47344d44)}
+@media(min-width:1050px) and (min-height:650px){.digitizer-stage-3 .review-compare :is(.digitizer-source-image,.digitizer-stitch-image){height:clamp(200px,43vh,600px)}}
+@media(max-width:800px){.digitizer-preview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
