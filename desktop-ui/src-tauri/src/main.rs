@@ -364,6 +364,43 @@ async fn resize_artwork_selection(uids:Vec<usize>,sx:f64,sy:f64,x:f64,y:f64,app:
     }).await.map_err(|e|e.to_string())?
 }
 
+// Fit the sewn design, not its current distance from the hoop origin.
+#[tauri::command]
+async fn maximize_in_hoop(width_mm:f64,height_mm:f64,margin_mm:f64,stretch:bool,app:tauri::AppHandle)->Result<Preview,String>{
+    use tauri::Manager;
+    if ![width_mm,height_mm,margin_mm].iter().all(|v|v.is_finite())||margin_mm<0.0||width_mm<=2.0*margin_mm||height_mm<=2.0*margin_mm||width_mm>1000.0||height_mm>1000.0{return Err("Invalid hoop or margin".into())}
+    tauri::async_runtime::spawn_blocking(move||{
+        let state=app.state::<Mutex<Workspace>>();
+        let mut w=state.lock().map_err(|e|e.to_string())?;
+        let original=w.current.as_ref().ok_or("Open a design first")?;
+        let b=original.bounds();
+        if b.is_empty()||b.width()<=0.01||b.height()<=0.01{return Err("Design needs nonzero width and height".into())}
+        let tw=(width_mm-2.0*margin_mm)*10.0;let th=(height_mm-2.0*margin_mm)*10.0;
+        let mut sx=tw/b.width();let mut sy=th/b.height();
+        if !stretch{let scale=sx.min(sy);sx=scale;sy=scale;}
+        if ![sx,sy].iter().all(|v|(0.1..=10.0).contains(v)){return Err("Fit requires a resize outside the supported 10–1000% range.".into())}
+        let c=b.center();
+        let mut doc=editable_base(&w,"Hoop fit")?;
+        let ids:Vec<_>=(0..doc.shapes.len()).collect();let uids:Vec<_>=doc.shapes.iter().map(|s|s.uid).collect();
+        doc.transform(&ids,[sx,0.0,0.0,sy,-c.x*sx,-c.y*sy]).map_err(|e|e.to_string())?;
+        correct_resized_manual_paths(&mut doc,&uids,sx,sy)?;
+        let mut design=doc.plan_cached(&mut w.plan_cache);
+        // Regeneration can change the sewn extents. Center again and shrink
+        // if necessary, preserving density by replanning rather than scaling stitches.
+        for _ in 0..3{
+            let b=design.bounds();if b.is_empty()||design.stitch_count()>2_000_000{return Err("Invalid regenerated design".into())}
+            let c=b.center();let correction=(tw/b.width().max(0.01)).min(th/b.height().max(0.01)).min(1.0);
+            if correction>=0.99999&&c.len()<0.05{break}
+            doc.transform(&ids,[correction,0.0,0.0,correction,-c.x*correction,-c.y*correction]).map_err(|e|e.to_string())?;
+            if correction<0.99999{correct_resized_manual_paths(&mut doc,&uids,correction,correction)?;}
+            design=doc.plan_cached(&mut w.plan_cache);
+        }
+        let b=design.bounds();
+        if b.is_empty()||design.stitch_count()==0||design.stitch_count()>2_000_000||b.min.x < -tw/2.0-0.1||b.max.x>tw/2.0+0.1||b.min.y < -th/2.0-0.1||b.max.y>th/2.0+0.1{return Err("Regenerated stitches could not fit the requested margin. Original retained.".into())}
+        let result=preview(&design);w.checkpoint_named(if stretch{"Stretch to hoop"}else{"Maximize in hoop"});w.source=Some(doc);w.current=Some(design);Ok(result)
+    }).await.map_err(|e|e.to_string())?
+}
+
 #[derive(serde::Serialize)]
 struct StitchAudit {
     short: usize,
@@ -1950,7 +1987,7 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
 async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![history_labels,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
