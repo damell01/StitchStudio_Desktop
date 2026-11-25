@@ -419,6 +419,18 @@ impl Params {
     pub fn satin_pull(&self, f: &Fabric) -> f64 {
         self.pull.unwrap_or(f.satin_pull)
     }
+    /// Width-aware automatic compensation; preserve explicit user settings.
+    /// Very narrow columns need less expansion to avoid swallowing details.
+    pub fn satin_pull_for(&self, f: &Fabric, width_mm: f64) -> f64 {
+        if let Some(pull) = self.pull {
+            return pull;
+        }
+        if !width_mm.is_finite() || width_mm <= 0.0 {
+            return f.satin_pull;
+        }
+        let scale = (width_mm / 2.5).clamp(0.45, 1.0);
+        (f.satin_pull * scale).min(width_mm * 0.2)
+    }
     pub fn run_len(&self, f: &Fabric) -> f64 {
         self.len_set().unwrap_or(f.run_len)
     }
@@ -806,5 +818,18 @@ mod tests {
             ..Params::default()
         };
         assert_eq!(off.satin_underlay_for(6.0), 0);
+    }
+}
+
+#[cfg(test)]
+mod adaptive_pull_tests {
+    use super::*;
+    #[test]
+    fn narrow_satin_preserves_details_and_explicit_override() {
+        let mut p = Params::default();
+        assert!(p.satin_pull_for(&KNIT, 0.8) < p.satin_pull_for(&KNIT, 4.0));
+        assert_eq!(p.satin_pull_for(&KNIT, 4.0), KNIT.satin_pull);
+        p.pull = Some(0.25);
+        assert_eq!(p.satin_pull_for(&KNIT, 0.8), 0.25);
     }
 }
