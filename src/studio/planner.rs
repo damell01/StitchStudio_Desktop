@@ -171,6 +171,11 @@ impl Studio {
         let (design, issues) = match d.result {
             Ok(x) => x,
             Err(e) => {
+                self.issues = vec![zigzag::checks::Issue {
+                    shape: None,
+                    level: zigzag::checks::Level::Error,
+                    message: "Stitch planning failed. The displayed stitches are stale; edit or regenerate the design before export.".into(),
+                }];
                 self.status = format!("Couldn't update the stitches ({e}); showing the last plan.");
                 return;
             }
