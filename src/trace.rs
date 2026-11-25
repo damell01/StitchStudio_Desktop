@@ -432,11 +432,11 @@ pub fn trace(img: &Image, o: &TraceOptions) -> Result<Traced> {
     // Flat Logo first (it has no centre lines); anything that isn't flat art
     // is posterized instead.
     let (result, method) = if o.lines {
-        (run(r, &color_params(colors))?, "posterized")
+        (run(r, &color_params(colors.or(Some(8))))?, "posterized")
     } else {
         match vectorcraft_trace::trace_within(r, &logo_params, MAX_ANCHORS) {
             Ok(t) => (t, "flat logo"),
-            Err(TraceError::NotFlat { .. }) | Err(TraceError::TooComplex { .. }) => (run(r, &color_params(colors))?, "posterized"),
+            Err(TraceError::NotFlat { .. }) | Err(TraceError::TooComplex { .. }) => (run(r, &color_params(colors.or(Some(8))))?, "posterized"),
             Err(e) => return Err(explain(e)),
         }
     };
