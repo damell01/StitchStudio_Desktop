@@ -1138,6 +1138,7 @@ impl Studio {
         let top = ui.cursor().top();
 
         let a = &mut self.agent;
+        caption(ui, "Native commands are free and offline. External agents use your own account.");
         if ui.checkbox(&mut a.inference_enabled, "Enable AI inference").on_hover_text("Off: only instant native commands; no external AI process is started.").changed() {
             if !a.inference_enabled { a.stop(); }
             a.save();
