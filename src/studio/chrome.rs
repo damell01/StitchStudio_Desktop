@@ -84,7 +84,7 @@ impl Studio {
                         }).response.on_hover_text("Select the hoop matching your machine. This does not resize your design.");
                     let export = ui.add_enabled(
                         !self.design.blocks.is_empty(),
-                        egui::Button::new(egui::RichText::new("Export design ▾").strong().color(
+                        egui::Button::new(egui::RichText::new("Export design").strong().color(
                             if p.dark { Color32::from_rgb(23, 30, 26) } else { Color32::WHITE }
                         )).fill(p.accent)
                     );
