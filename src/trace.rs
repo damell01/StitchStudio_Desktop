@@ -301,13 +301,14 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
     let mut failures = Vec::new();
     // Try the requested fidelity first, then progressively simplify.
     // Empty successful traces are also retried, rather than ending import.
-    for attempt in 0..3 {
+    for attempt in 0..4 {
         let mut candidate = options.clone();
-        if prefer_lines && attempt == 0 { candidate.lines = true; }
-        if attempt == 1 {
+        // Prefer continuous filled contours for flat art; mixed centerlines are a fallback.
+        if prefer_lines && attempt == 1 { candidate.lines = true; }
+        if attempt == 2 {
             candidate.detail = candidate.detail.min(50.0);
             candidate.speckle_mm = candidate.speckle_mm.max(0.8);
-        } else if attempt == 2 {
+        } else if attempt == 3 {
             candidate.detail = candidate.detail.min(35.0);
             candidate.speckle_mm = candidate.speckle_mm.max(1.5);
             if candidate.colors == 0 { candidate.colors = 6; }
@@ -318,7 +319,7 @@ pub fn trace_prepared_bytes(bytes:&[u8],o:&TraceOptions,tolerance:u8,cleanup:boo
             Err(e) => failures.push(e.to_string()),
         }
     }
-    Err(anyhow!("Automatic digitizing failed after three tracing attempts: {}. Try a larger finished width or disable background removal.", failures.join("; ")))
+    Err(anyhow!("Automatic digitizing failed after four tracing attempts: {}. Try a larger finished width or disable background removal.", failures.join("; ")))
 }
 
 /// Trace raster artwork into editable geometry with automatic stitch parameters.
