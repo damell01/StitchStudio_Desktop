@@ -3,12 +3,13 @@ import {useEffect,useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {Upload} from 'lucide-react';
 import {bundledArtwork} from './bundled-artwork/catalog';
+import {sportsArtwork} from './bundled-artwork/sports';
 type Entry={group:string;name:string;file:string;svg?:string};
 export type Art={name:string;mime:string;bytes:number[];classic?:boolean;bundled?:boolean};
 const groups:Record<string,string>={
  '01_Bows':'Boutique & bows','02_Sports':'Sports','03_Animals':'Animals & characters','04_Faith':'Faith','05_Floral':'Floral & botanical','06_Blank_Name_Templates':'Blank name templates','07_Seasonal':'Seasonal motifs','08_Western_Farm':'Western & farm motifs','09_Baby':'Baby & children','10_Applique':'Appliqué shapes','11_Boutique_Nameplates':'Boutique nameplates','12_Team_Nameplates':'Sports & team nameplates','13_Faith_Frames':'Faith frames','14_Nursery_Nameplates':'Nursery nameplates','15_Seasonal_Nameplates':'Seasonal nameplates','16_Western_Farm':'Western & farm templates','17_Botanical_Frames':'Botanical frames','18_Ocean_Adventure':'Beach & ocean','19_School_Hobbies':'School & hobbies','20_Applique_Badges':'Appliqué badges'
 };
-const builtins:Entry[]=bundledArtwork.map(a=>({group:groups[a.category]??a.category,name:a.id.replace(/^\d+_/,'').replace(/[-_]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),file:a.id+'.svg',svg:a.svg}));
+const builtins:Entry[]=[...bundledArtwork,...sportsArtwork].map(a=>({group:groups[a.category]??a.category,name:a.id.replace(/^\d+_/,'').replace(/[-_]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),file:a.id+'.svg',svg:a.svg}));
 function mime(file:string){return /\.svg$/i.test(file)?'image/svg+xml':/\.webp$/i.test(file)?'image/webp':/\.jpe?g$/i.test(file)?'image/jpeg':'image/png'}
 // Retain the original vector paths and palette. Use a sensible 80 mm starting viewport
 // for the single-artwork digitizer; the editor's insertion command sizes the actual artwork.
