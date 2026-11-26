@@ -24,7 +24,19 @@ const patchSequence = [
   ['Finish', 'Finish or cut the patch using a suitable method.'],
 ] as const;
 
+export function AppliqueLettering({onDone}:{onDone:()=>void}){
+ const [text,setText]=useState('ABC'),[style,setStyle]=useState('block'),[height,setHeight]=useState('2'),[color,setColor]=useState('#754bb0'),[plan,setPlan]=useState<StitchPlan|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const mm=Number(height)*25.4,valid=/^[A-Za-z ]{1,16}$/.test(text)&&!!text.trim()&&mm>=20&&mm<=100;
+ const settings={text,style,height:mm,color:[1,3,5].map(i=>parseInt(color.slice(i,i+2),16))};
+ useEffect(()=>{let active=true;setPlan(null);setError('');if(!valid)return;const timer=setTimeout(()=>{invoke<StitchPlan>('preview_applique_letters',settings).then(p=>{if(active)setPlan(p)}).catch(e=>{if(active)setError(String(e))})},200);return()=>{active=false;clearTimeout(timer)}},[text,style,height,color,valid]);
+ let l=Infinity,t=Infinity,r=-Infinity,b=-Infinity;for(const block of plan?.blocks??[])for(const run of block.runs)for(const [x,y] of run){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);b=Math.max(b,y)}
+ const box=Number.isFinite(l)?[l-3,t-3,r-l+6,b-t+6].join(' '):'0 0 100 100';
+ async function insert(){if(busy||!valid||!plan)return;setBusy(true);setError('');try{await invoke('insert_applique_letters',settings);onDone()}catch(e){setError(String(e))}finally{setBusy(false)}}
+ return <div className="specialty-workspace"><article className="specialty-preview"><h2>Live appliqué lettering preview</h2><div className="specialty-figure">{plan?<svg viewBox={box} role="img" aria-label="Appliqué stitch paths">{plan.blocks.map((block,i)=><g key={i} fill="none" stroke={'rgb('+block.color.join(',')+')'} strokeWidth=".35">{block.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg>:<p>{valid?'Generating stitch preview…':'Enter letters and a valid height.'}</p>}</div>{plan&&<p>{plan.stitches.toLocaleString()} stitches · {plan.blocks.length} sewing blocks</p>}<small>Follow the placement, fabric tack-down and finishing stages for each letter. Verify machine stops and test sew before production.</small></article><article className="specialty-controls"><h2>Appliqué alphabet</h2><label>Text<input value={text} maxLength={16} onChange={e=>setText(e.target.value.toUpperCase())}/></label><label>Alphabet<select value={style} onChange={e=>setStyle(e.target.value)}><option value="block">Classic Block</option><option value="collegiate">Collegiate Narrow</option><option value="wide">Wide Block</option></select></label><label>Letter height (inches)<input type="number" min=".79" max="3.93" step=".1" value={height} onChange={e=>setHeight(e.target.value)}/></label><label>Finishing thread<input type="color" value={color} onChange={e=>setColor(e.target.value)}/></label><button className="primary" disabled={busy||!valid||!plan} onClick={()=>void insert()}>{busy?'Adding…':'Add to current design'}</button>{error&&<p role="alert">{error}</p>}</article></div>
+}
+
 export function Specialty({ applique, onDone }: { applique: boolean; onDone: () => void }) {
+  const [alphabet,setAlphabet]=useState(false);
   const [previewStage,setPreviewStage]=useState(2);
   const [shape, setShape] = useState<(typeof shapes)[number]>(shapes[0]);
   const [inches, setInches] = useState(String(Number((65 / 25.4).toFixed(3))));
@@ -78,7 +90,8 @@ export function Specialty({ applique, onDone }: { applique: boolean; onDone: () 
     }
   }
 
-  return <div className="specialty-workspace">
+  if(applique&&alphabet)return <><div className="studio-tools"><button onClick={()=>setAlphabet(false)}>Shapes</button><button aria-pressed="true">Appliqué lettering</button></div><AppliqueLettering onDone={onDone}/></>;
+  return <><div className="studio-tools" hidden={!applique}>{applique&&<><button aria-pressed="true">Shapes</button><button onClick={()=>setAlphabet(true)}>Appliqué lettering</button></>}</div><div className="specialty-workspace">
     <article className="specialty-preview">
       <div className="specialty-preview-heading"><h2>Design preview</h2><span>{actual?'Generated stitch preview':'Illustrative stitch finish'}</span></div><div className="specialty-stage-tabs" role="group" aria-label="Preview sewing stage">{(applique?appliqueSequence:patchSequence).map(([label],i)=><button key={label} aria-pressed={previewStage===i} onClick={()=>setPreviewStage(i)}>{i+1}. {label}</button>)}</div><div className="specialty-figure">
         {actual&&blocks.length>0?<svg className="specialty-real-stitches" viewBox={bounds} role="img" aria-label="Generated stitch paths">{blocks.map((block,i)=><g key={i} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth=".35" strokeLinecap="round">{block.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg>:<svg viewBox="0 0 120 120" role="img" aria-label={shape[1] + ' artwork outline'}>
@@ -133,5 +146,5 @@ export function Specialty({ applique, onDone }: { applique: boolean; onDone: () 
       </div>
       {error && <p role="alert">{error}</p>}
     </article>
-  </div>;
+  </div></>;
 }
