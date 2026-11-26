@@ -120,6 +120,8 @@ pub struct TextSpec {
     pub color: [u8; 3],
     /// Stitch type for the letters.
     pub kind: Kind,
+    /// Triple-pass running outline.
+    pub bean: bool,
     /// Line spacing as a multiple of the cap height (1.5 ≈ normal).
     pub leading: f64,
     pub align: Align,
@@ -152,6 +154,7 @@ impl Default for TextSpec {
             italic: false,
             color: [30, 30, 30],
             kind: Kind::Satin,
+            bean: false,
             leading: 1.5,
             align: Align::Center,
             h_scale: 100.0,
@@ -392,6 +395,7 @@ impl TextSpec {
             self.bold as u8,
             self.italic as u8
         );
+        if self.bean { s.push_str(";bean=1"); }
         if self.leading != 1.5 {
             s.push_str(&format!(";leading={}", n(self.leading)));
         }
@@ -447,6 +451,7 @@ impl TextSpec {
                 "arc" => s.arc_mm = num.unwrap_or(0.0),
                 "bold" => s.bold = v == "1",
                 "italic" => s.italic = v == "1",
+                "bean" => s.bean = v == "1",
                 "leading" => s.leading = num.unwrap_or(1.5).clamp(0.5, 5.0),
                 "align" => s.align = Align::parse(v).unwrap_or_default(),
                 "hscale" => s.h_scale = num.unwrap_or(100.0).clamp(20.0, 400.0),
@@ -680,6 +685,7 @@ impl Document {
             .position(|s| s.id == id)
             .ok_or_else(|| anyhow!("the font produced no outlines for that text"))?;
         self.shapes[i].params.kind = Some(spec.kind);
+        if spec.kind == Kind::Run && spec.bean { self.shapes[i].params.repeats = Some(3); }
         // Arcs hang off their baseline: center the letters themselves on the
         // point asked for. Text on a path stays put: the point is the
         // path's center, which the baseline is relative to.
@@ -800,6 +806,7 @@ impl Document {
         self.import(&map)?;
         if let Some(s) = self.shapes.iter_mut().find(|s| s.uid == uid) {
             s.params.kind = Some(spec.kind);
+            if spec.kind == Kind::Run { s.params.repeats = Some(if spec.bean { 3 } else { 1 }); }
             s.color = spec.color;
             s.paint = spec.color;
         }
