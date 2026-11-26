@@ -240,6 +240,21 @@ async function applySimplify(){if(!simplifyReview||busy||editLock.current)return
 
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
 async function prepareAssistant(input: string): Promise<string | AssistantProposal> {
+  // Contextual commands are resolved against the live selection, not a stale chat transcript.
+  const follow=input.trim().match(/^(?:make (?:that|it|the selection) (smaller|larger|bigger)|(?:try|use|make it) (?:another color|a different color))$/i);
+  if(follow){
+    if(!movementIds.length)return 'Select the artwork you want to refine first.';
+    if(!follow[1])return 'Which thread color would you like to try on the selection?';
+    input='Scale selected objects to '+(follow[1].toLowerCase()==='smaller'?'90':'110')+'%';
+  }
+  if(/^(?:describe|identify|inspect) (?:the |my )?(?:design|selection)$/i.test(input.trim())){
+    const items=objects.filter(o=>!o.hidden&&(!movementIds.length||movementIds.includes(o.uid)));
+    const descriptions=await Promise.all(items.slice(0,24).map(async o=>{
+      const t=await invoke<{text:string}|null>('lettering_settings',{uid:o.uid});
+      return (t?'Lettering: '+t.text:o.label)+' · '+o.kind+(o.locked?' · locked':'');
+    }));
+    return ['Hoop: '+width+' × '+height+' mm', 'Fabric: '+fabric, 'Selected objects: '+movementIds.length,...descriptions, ...(items.length>24?['Additional objects are listed in Layers.']:[])].join('\n');
+  }
   let interpreted = input;
   let intent = assistantIntent(interpreted);
   if(!intent&&localModelEnabled()&&input.trim().length<=240){
