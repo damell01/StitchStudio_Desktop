@@ -3298,6 +3298,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn production_estimate_includes_inter_color_travel_and_empty_runs() {
+        use zigzag::{design::{Block, Run}, geom::P};
+        let run = |x| Run { pts: vec![P::new(x, 0.0)], trim_before: false };
+        let design = Design {
+            blocks: vec![
+                Block { color: [0, 0, 0], runs: vec![run(0.0), Run { pts: vec![], trim_before: false }] },
+                Block { color: [255, 0, 0], runs: vec![run(1000.0)] },
+            ],
+            ..Default::default()
+        };
+        // Two penetrations at 600 spm, one color change, 100 mm travel.
+        assert!((optimization_seconds(&design, 600.0, 3.0) - 9.2).abs() < 1e-9);
+    }
+
+    #[test]
     fn export_rejects_rounding_outside_hoop_and_excess_color_blocks() {
         let run = zigzag::design::Run { pts: vec![zigzag::geom::P::new(100.6, 0.0)], trim_before: false };
         let block = zigzag::design::Block { color: [20, 40, 60], runs: vec![run] };
