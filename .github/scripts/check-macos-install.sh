@@ -59,4 +59,8 @@ test -r "$app/Contents/Resources/licenses/NOTICE"
 test -r "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.md"
 lipo -info "$app/Contents/MacOS/$binary"
 lipo -verify_arch "$expected_arch" "$app/Contents/MacOS/$binary"
+# Validate the copied bundle's property list and signature integrity. This
+# checks ad-hoc signatures too; notarization is a separate release requirement.
+plutil -lint "$plist"
+codesign --verify --deep --strict --verbose=2 "$app"
 echo 'macOS disk image mount and application copy passed.'
