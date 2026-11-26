@@ -239,7 +239,7 @@ const HARD_CAP: Fabric = Fabric {
 
 /// Additional materials use starting values for sample sew-outs. Construction,
 /// fabric weight, thread and machine can all change the final settings.
-pub const FABRICS: [Fabric; 17] = [
+pub const FABRICS: [Fabric; 21] = [
     WOVEN, SOFT_CAP, HARD_CAP, KNIT,
     Fabric {
         id: "cotton", name: "Quilting cotton",
@@ -325,6 +325,34 @@ pub const FABRICS: [Fabric; 17] = [
         about: "For a soft, woven hat panel. Select the cap-specific profile when using a cap frame.",
         fill_spacing: 0.38, fill_pull: 0.18, fill_underlay_spacing: 1.9,
         ..SOFT_CAP
+    },
+    Fabric {
+        id: "polo", name: "Polo shirt",
+        about: "Open coverage and supportive underlay for textured pique knit.",
+        stabilizer: "Try cut-away backing and test topping on textured pique.",
+        fill_spacing: 0.39, fill_pull: 0.28, satin_spacing: 0.42,
+        ..KNIT
+    },
+    Fabric {
+        id: "blanket", name: "Blanket", group: "Fleece and pile",
+        about: "Open coverage with a supporting foundation for soft blanket fabrics.",
+        stabilizer: "Choose backing for stretch and water-soluble topping for pile.",
+        fill_spacing: 0.39, fill_len: 3.0, fill_pull: 0.3, fill_underlay_spacing: 1.3,
+        ..KNIT
+    },
+    Fabric {
+        id: "performance", name: "Performance wear",
+        about: "Open coverage for lightweight athletic knits.",
+        stabilizer: "Try soft cut-away and hoop without stretching.",
+        fill_spacing: 0.45, fill_pull: 0.35, fill_underlay_spacing: 1.8, satin_spacing: 0.45,
+        ..KNIT
+    },
+    Fabric {
+        id: "patch", name: "Patch", group: "Specialty",
+        about: "Stable patch backing with moderate coverage and an edge walk.",
+        stabilizer: "Test patch backing, border coverage and edge finishing.",
+        fill_spacing: 0.32, fill_pull: 0.1, fill_edge_walk: true,
+        ..WOVEN
     },
     Fabric {
         id: "leather", name: "Smooth leather", group: "Specialty",
