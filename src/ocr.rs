@@ -122,13 +122,33 @@ fn source_mask(rect:[f64;4],w:u32,h:u32,rgb:&[u8])->Vec<f64>{
     if ceiling-floor>0.05 {for v in &mut mask{*v=((*v-floor)/(ceiling-floor)).clamp(0.0,1.0);}}
     mask
 }
+// Count enclosed background regions in a normalized glyph silhouette.
+fn enclosed_openings(mask:&[f64])->usize {
+    let mut visited=vec![false;MASK_W*MASK_H];
+    let mut count=0;
+    for start in 0..visited.len() {
+        if visited[start]||mask[start]>=0.5 {continue;}
+        let mut stack=vec![start];visited[start]=true;
+        let mut edge=false;let mut area=0;
+        while let Some(i)=stack.pop(){
+            area+=1;
+            let x=i%MASK_W;let y=i/MASK_W;
+            edge|=x==0||y==0||x+1==MASK_W||y+1==MASK_H;
+            for j in [if x>0{Some(i-1)}else{None},if x+1<MASK_W{Some(i+1)}else{None},if y>0{Some(i-MASK_W)}else{None},if y+1<MASK_H{Some(i+MASK_W)}else{None}].into_iter().flatten(){
+                if !visited[j]&&mask[j]<0.5 {visited[j]=true;stack.push(j);}
+            }
+        }
+        if !edge&&area>=4 {count+=1;}
+    }
+    count
+}
 fn mask_distance(a:&[f64],b:&[f64])->f64{
     let sum_a=a.iter().sum::<f64>().max(1.0);
     let sum_b=b.iter().sum::<f64>().max(1.0);
     let pixel=a.iter().zip(b).map(|(x,y)|(x/sum_a-y/sum_b).abs()).sum::<f64>();
     let rows=(0..MASK_H).map(|y|{let start=y*MASK_W;let end=start+MASK_W;(a[start..end].iter().sum::<f64>()/sum_a-b[start..end].iter().sum::<f64>()/sum_b).abs()}).sum::<f64>();
     let cols=(0..MASK_W).map(|x|{let p=(0..MASK_H).map(|y|a[y*MASK_W+x]).sum::<f64>();let q=(0..MASK_H).map(|y|b[y*MASK_W+x]).sum::<f64>();(p/sum_a-q/sum_b).abs()}).sum::<f64>();
-    pixel*0.35+rows*0.4+cols*0.25
+    pixel*0.35+rows*0.4+cols*0.25 + 0.08*enclosed_openings(a).abs_diff(enclosed_openings(b)).min(5) as f64
 }
 
 fn recommend_font(line: &RecognizedLine, fonts: &[String], w:u32,h:u32,rgb:&[u8]) -> String {
@@ -254,6 +274,16 @@ mod tests {
     use super::*;
     fn line(text:&str,x:f64,y:f64,w:f64,h:f64)->RecognizedLine {
         RecognizedLine{text:text.into(),confidence:-1.0,rect:[x,y,x+w,y+h],font:String::new(),enabled:false}
+    }
+    #[test]
+    fn enclosed_letter_openings_are_distinguished_from_open_gaps(){
+        let mut mask=vec![0.0;MASK_W*MASK_H];
+        for y in 5..19 {for x in 20..40 {
+            if y==5||y==18||x==20||x==39 {mask[y*MASK_W+x]=1.0;}
+        }}
+        assert_eq!(enclosed_openings(&mask),1);
+        mask[5*MASK_W+30]=0.0;
+        assert_eq!(enclosed_openings(&mask),0);
     }
     #[test]
     fn font_mask_handles_reversed_text_polarity() {
