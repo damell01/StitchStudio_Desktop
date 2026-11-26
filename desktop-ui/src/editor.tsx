@@ -255,6 +255,34 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
     }));
     return ['Hoop: '+width+' × '+height+' mm', 'Fabric: '+fabric, 'Selected objects: '+movementIds.length,...descriptions, ...(items.length>24?['Additional objects are listed in Layers.']:[])].join('\n');
   }
+  // Explicit compound edits are parsed independently, then previewed as a single transaction.
+  const clauses=input.trim().split(/\s*;\s*|\s+and then\s+/i);
+  if(clauses.length>1){
+    if(clauses.length>8)return 'Use up to eight edits in one request.';
+    if(invalidField||incompatibleHoop||machineExceeded)return 'Choose a compatible hoop first.';
+    const edits:Record<string,unknown>[]=[];
+    for(const clause of clauses){
+      const action=assistantIntent(clause);
+      if(action?.kind==='moveSelected'&&movementIds.length){
+        for(const uid of movementIds)edits.push({type:'move',uid,delta:[action.dx??0,action.dy??0]});
+      }else if(action?.kind==='recolor'&&action.previous&&action.color){
+        const targets=objects.filter(o=>!o.hidden&&!o.locked&&o.color.join(',')===action.previous?.join(','));
+        if(!targets.length)return 'No matching editable color for: '+clause;
+        for(const o of targets)edits.push({type:'recolor',uid:o.uid,color:action.color});
+      }else{return 'This combined request contains an unsupported edit: '+clause+'. Try it separately.';}
+    }
+    if(edits.length>24)return 'Select fewer objects for this combined edit.';
+    const composition={name:'Combined assistant edits',field:[width,height],motifs:[],lettering:[],edits};
+    const after=await invoke<Plan>('compose_assistant_design',{composition,apply:false});
+    const before=plan??{name:'Blank design',stitches:0,trims:0,blocks:[]};
+    const minutes=(p:Plan)=>p.stitches/sewingSpm+p.trims*trimSeconds/60+Math.max(0,p.blocks.length-1)*changeSeconds/60;
+    return {title:'Combined design edits',detail:clauses.join(' · '),comparison:{before,after,beforeMinutes:minutes(before),afterMinutes:minutes(after)},async apply(){
+      const current=assistantContext.current;
+      if(current.plan!==plan||current.width!==width||current.height!==height||current.machine!==machine||current.hoop!==hoop)return 'The design changed. Preview the request again.';
+      const result=await edit('compose_assistant_design',{composition,apply:true});
+      return result.plan?'Combined edits applied. Undo reverses all changes.':result.error;
+    }};
+  }
   let interpreted = input;
   let intent = assistantIntent(interpreted);
   if(!intent&&localModelEnabled()&&input.trim().length<=240){
