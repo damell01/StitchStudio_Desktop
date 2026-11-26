@@ -662,6 +662,34 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
         }
         doc.set_paths(&edits).map_err(|e|e.to_string())?;
     }
+    // Eliminate duplicate sewing in overlapping adjacent identical fills
+    // without expanding their union or crossing intervening color layers.
+    if options.merge {
+        let mut i=0;let mut budget=128;
+        while i+1<doc.shapes.len() && budget>0{
+            budget-=1;
+            let a=&doc.shapes[i];let b=&doc.shapes[i+1];
+            let compatible=eligible(doc,i)&&eligible(doc,i+1)&&a.color==b.color&&a.params==b.params
+                &&a.groups==b.groups&&a.params.kind.unwrap_or(Kind::Fill)==Kind::Fill
+                &&a.params.start.is_none()&&a.params.end.is_none()&&a.params.stop!=Some(true)&&a.params.trim!=Some(true);
+            let joined=if compatible{match (&a.geometry,&b.geometry){
+                (Geometry::Fill{rings:r,rule:f},Geometry::Fill{rings:s,rule:g})=>{
+                    let overlap=boolean::pathfinder(&[(r.clone(),*f),(s.clone(),*g)],PathOp::Intersect);
+                    if overlap.is_empty(){None}else{
+                        let union=boolean::pathfinder(&[(r.clone(),*f),(s.clone(),*g)],PathOp::Unite);
+                        let path=zigzag::bezier::from_rings(&union,0.2);
+                        if path.is_empty(){None}else{Some(path)}
+                    }
+                },_=>None
+            }}else{None};
+            if let Some(path)=joined {
+                let uid=doc.shapes[i+1].uid;
+                doc.set_path(i,&path).map_err(|e|e.to_string())?;
+                let j=doc.shapes.iter().position(|s|s.uid==uid).ok_or("Fill identity changed")?;
+                doc.delete_many(&[j]).map_err(|e|e.to_string())?;
+            }else{i+=1;}
+        }
+    }
     // Collect consecutive small same-color hatch fragments as a region.
     // A collective closing can join a group that pairwise closing cannot.
     // Restrict to unbranched narrow marks, identical settings, and explicit
@@ -736,22 +764,6 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
                 doc.delete_many(&[j]).map_err(|e|e.to_string())?;
                 attempts+=1;
             }else{i+=1;}
-        }
-    }
-    if options.merge{
-        // Only adjacent sewing-order entries with identical paint and stitch
-        // settings may merge. No intervening layers or gaps are bridged.
-        let mut i=0;let mut merged=0;
-        while i+1<doc.shapes.len()&&merged<128{
-            let a=&doc.shapes[i];let b=&doc.shapes[i+1];
-            let compatible=eligible(doc,i)&&eligible(doc,i+1)&&a.color==b.color&&a.params==b.params
-                &&a.groups==b.groups&&a.params.kind.unwrap_or(Kind::Fill)==Kind::Fill
-                &&a.params.trim!=Some(true)&&a.params.stop!=Some(true);
-            let overlap=if compatible{match (&a.geometry,&b.geometry){
-                (Geometry::Fill{rings:r,rule:f},Geometry::Fill{rings:s,rule:g})=>!boolean::pathfinder(&[(r.clone(),*f),(s.clone(),*g)],PathOp::Intersect).is_empty(),
-                _=>false
-            }}else{false};
-            if overlap{doc.pathfinder(&[i,i+1],PathOp::Unite).map_err(|e|e.to_string())?;merged+=1;}else{i+=1;}
         }
     }
     for i in 0..doc.shapes.len(){
@@ -1629,7 +1641,8 @@ fn insert_vector_artwork(workspace:&mut Workspace,svg:&str,name:&str,width_mm:f6
  let mut doc=editable_base(workspace,name)?;
  let added=doc.add_svg(svg,zigzag::document::Placement{width_mm:Some(width_mm),center_mm:Some((x_mm,y_mm)),..Default::default()}).map_err(|e|e.to_string())?;
  if added.is_empty(){return Err("Artwork contains no editable objects".into())}
- for i in added{zigzag::design::auto_stitch_types(std::slice::from_mut(&mut doc.shapes[i]));}
+ for i in added{if doc.shapes[i].params.kind.is_none(){zigzag::design::auto_stitch_types(std::slice::from_mut(&mut doc.shapes[i]));}}
+ doc.sync().map_err(|e|e.to_string())?;
  let design=doc.plan();
  if !(1..=2_000_000).contains(&design.stitch_count()) {return Err("Artwork produced no stitches or exceeds the design size limit".into())}
  let result=preview(&design);
