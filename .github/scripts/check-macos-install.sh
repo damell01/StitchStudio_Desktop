@@ -9,7 +9,12 @@ mount="$work/mounted"
 mkdir "$mount"
 mounted=false
 cleanup() {
-  if [[ "$mounted" == true ]]; then hdiutil detach "$mount" -quiet || true; fi
+  if [[ "$mounted" == true ]] || /sbin/mount | grep -Fq " on $mount ("; then
+    if ! hdiutil detach "$mount" -quiet; then
+      echo "Could not detach test image; preserving temporary mount directory" >&2
+      return
+    fi
+  fi
   rm -rf "$work"
 }
 trap cleanup EXIT
@@ -26,7 +31,7 @@ hdiutil verify "$image"
 for attempt in 1 2 3; do
   echo "Mount attempt $attempt"
   # Accept the embedded license for this unattended CI smoke test only.
-  if hdiutil attach "$image" -mountpoint "$mount" -readonly -nobrowse -noautoopen -verbose <<< 'Y'; then
+  if hdiutil attach "$image" -mountpoint "$mount" -readonly -nobrowse -noautoopen -verbose <<< 'Y' && [[ -d "$mount/Stitch Studio.app" ]]; then
     mounted=true
     break
   fi
@@ -50,6 +55,8 @@ plist="$app/Contents/Info.plist"
 binary=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")
 test -x "$app/Contents/MacOS/$binary"
 test -r "$app/Contents/Resources/licenses/LICENSE"
+test -r "$app/Contents/Resources/licenses/NOTICE"
+test -r "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.md"
 lipo -info "$app/Contents/MacOS/$binary"
 lipo -verify_arch "$expected_arch" "$app/Contents/MacOS/$binary"
 echo 'macOS disk image mount and application copy passed.'
