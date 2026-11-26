@@ -198,6 +198,7 @@ fn reconstruct(r: &Traced, lines: &[RecognizedLine], mm_per_px: f64) -> anyhow::
         // Refuse to guess when the trace merged letters with surrounding artwork.
         anyhow::ensure!(!indices.is_empty(), "No isolated traced shapes found for '{}'; leave it unchecked or adjust trace detail.", line.text);
         let color = doc.shapes[indices[0]].color;
+        anyhow::ensure!(indices.iter().all(|&i| doc.shapes[i].color == color), "Multiple thread colors overlap '{}'; keep the original artwork or narrow the selection.", line.text);
         let center = ((x0+x1)/20.0,(y0+y1)/20.0);
         let mut spec = TextSpec {
             text: line.text.clone(), font: line.font.clone(), color,
@@ -207,6 +208,7 @@ fn reconstruct(r: &Traced, lines: &[RecognizedLine], mm_per_px: f64) -> anyhow::
         doc.delete_many(&indices)?;
         let i = doc.add_lettering(&spec, center)?;
         let b = shapes_bounds(std::slice::from_ref(&doc.shapes[i]));
+        anyhow::ensure!(!b.is_empty() && b.width() > 0.0 && b.height() > 0.0, "Font could not produce visible lettering for '{}'. Choose another font.", line.text);
         if b.width() > 0.0 && b.height() > 0.0 {
             spec.h_scale = (100.0*(x1-x0)/b.width()).clamp(25.0,400.0);
             spec.v_scale = (100.0*(y1-y0)/b.height()).clamp(25.0,400.0);
@@ -215,8 +217,12 @@ fn reconstruct(r: &Traced, lines: &[RecognizedLine], mm_per_px: f64) -> anyhow::
     }
     let mut result = r.clone();
     result.svg = doc.to_svg()?;
-    result.shapes = doc.shapes.len();
-    result.lines = 0;
+    result.lines = doc.shapes.iter().filter(|s| matches!(&s.geometry, zigzag::svg::Geometry::Stroke { .. })).count();
+    result.shapes = doc.shapes.len().saturating_sub(result.lines);
+    result.colors.retain(|c| doc.shapes.iter().any(|s| s.color == *c));
+    for shape in &doc.shapes {
+        if !result.colors.contains(&shape.color) { result.colors.push(shape.color); }
+    }
     Ok(result)
 }
 
@@ -601,6 +607,10 @@ impl Studio {
                             ui.horizontal(|ui| {
                                 changed |= ui.checkbox(&mut line.enabled, format!("{:.0}%", line.confidence)).changed();
                                 changed |= ui.text_edit_singleline(&mut line.text).changed();
+                                let height_mm = (line.rect[3] - line.rect[1]) * t.opts.width_mm / f64::from(t.image.size().0.max(1));
+                                if height_mm < 5.0 {
+                                    ui.label(format!("{height_mm:.1} mm")).on_hover_text("Small lettering: consider enlarging or using an embroidery-specific font before sewing.");
+                                }
                                 egui::ComboBox::from_id_salt(("ocr-font", i)).selected_text(&line.font).show_ui(ui, |ui| {
                                     for font in zigzag::document::font_families() {
                                         changed |= ui.selectable_value(&mut line.font, font.clone(), font).changed();
