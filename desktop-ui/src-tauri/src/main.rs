@@ -3106,14 +3106,17 @@ async fn digitize_artwork(
         if optimization_strength>0 && design.stitch_count() <= 100_000 {
             let before=design.stitch_count();
             let original=design.clone();
+            let score=|p:&Design|optimization_seconds(p,800.,3.);
+            let baseline=measure_stitches(&original);
+            let baseline_seconds=score(&original);
             let budget=SimplifyBudget::new(std::time::Duration::from_secs(10));
             let opts=SimplifyOptions{quick:true,merge:true,auto_types:true,
                 target_stitches:Some(10_000),budget:Some(budget),..Default::default()};
             let mut best:Option<(zigzag::document::Document,Design)>=None;
             let eligible=|p:&Design|{
                 let a=original.bounds();let b=p.bounds();
-                let audit=measure_stitches(p);let baseline=measure_stitches(&original);
-                p.stitch_count()>0&&p.stitch_count()<before
+                let audit=measure_stitches(p);
+                p.stitch_count()>0&&p.stitch_count()<=before&&score(p)<baseline_seconds
                     &&p.trim_count()<=original.trim_count()
                     &&audit.long<=baseline.long&&audit.zero<=baseline.zero
                     &&a.min.dist(b.min)<=5.&&a.max.dist(b.max)<=5.
@@ -3126,15 +3129,15 @@ async fn digitize_artwork(
             for &level in levels{
                 if opts.exhausted(){break}
                 if let Ok((d,p))=choose_simplification(&document,&original,level,None,false,&opts){
-                    if eligible(&p)&&best.as_ref().is_none_or(|(_,old)|p.stitch_count()<old.stitch_count()){
+                    if eligible(&p)&&best.as_ref().is_none_or(|(_,old)|score(&p)<score(old)){
                         best=Some((d,p));
                     }
                 }
-                if best.as_ref().is_some_and(|(_,p)|p.stitch_count()<=10_000){break}
+                if optimization_strength<3&&best.as_ref().is_some_and(|(_,p)|p.stitch_count()<=10_000){break}
             }
-            if optimization_strength>=2&&(before>15_000||optimization_strength==3)&&!opts.exhausted()&&best.as_ref().is_none_or(|(_,p)|p.stitch_count()>10_000){
+            if optimization_strength>=2&&(before>15_000||optimization_strength==3)&&!opts.exhausted()&&(optimization_strength==3||best.as_ref().is_none_or(|(_,p)|p.stitch_count()>10_000)){
                 if let Ok((d,p))=choose_fast_stitch(&document,&original,None,&opts){
-                    if eligible(&p)&&best.as_ref().is_none_or(|(_,old)|p.stitch_count()<old.stitch_count()){
+                    if eligible(&p)&&best.as_ref().is_none_or(|(_,old)|score(&p)<score(old)){
                         best=Some((d,p));
                     }
                 }
