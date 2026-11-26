@@ -22,7 +22,7 @@ function FontPicker({fonts,selected,choose}:{fonts:string[];selected:string;choo
     </dialog>
   </>;
 }
-const letteringEffects = [["satin","Standard satin"],["fill","Tatami fill"],["applique","Fabric appliqué"],["run","Running outline"],["ripple","Lightweight ripple"],["contour","Contour fill"],["cross","Cross stitch"],["meander","Quilted meander"],["blanket","Blanket edge"]] as const;
+const letteringEffects = [["satin","Standard satin"],["fill","Tatami fill"],["applique","Fabric appliqué"],["run","Running outline"],["bean","Bean stitch (triple pass)"],["ripple","Lightweight ripple"],["contour","Contour fill"],["cross","Cross stitch"],["meander","Quilted meander"],["blanket","Blanket edge"]] as const;
 type Settings = {
   kind?:string;
   leading?:number;
