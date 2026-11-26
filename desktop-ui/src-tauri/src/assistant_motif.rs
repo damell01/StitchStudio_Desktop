@@ -276,6 +276,7 @@ pub(super) struct Composition {
     motifs: Vec<Motif>,
     lettering: Vec<CompositionText>,
     #[serde(default)] edits: Vec<CompositionEdit>,
+    #[serde(default)] optimize: bool,
 }
 #[derive(serde::Deserialize)]
 #[serde(tag="type", rename_all="camelCase")]
@@ -293,7 +294,7 @@ fn prepare_composition(workspace: &Workspace, composition: Composition) -> Resul
     if composition.name.trim().is_empty() || composition.name.len()>160
         || !composition.field.iter().all(|v| (10.0..=1200.0).contains(v))
         || composition.motifs.len()+composition.lettering.len()+composition.edits.len()>24
-        || composition.motifs.is_empty() && composition.lettering.is_empty() && composition.edits.is_empty() {
+        || composition.motifs.is_empty() && composition.lettering.is_empty() && composition.edits.is_empty() && !composition.optimize {
         return Err("Choose a valid composition with up to 24 elements.".into());
     }
     let mut doc=editable_base(workspace,&composition.name)?;
@@ -319,16 +320,27 @@ fn prepare_composition(workspace: &Workspace, composition: Composition) -> Resul
             }
         }
     }
-    for mut motif in composition.motifs {
-        motif.field=composition.field;
-        motif.add_to(&mut doc)?;
-    }
     for text in composition.lettering {
         if !text.center.iter().all(|v| v.is_finite() && v.abs()<=500.0) {
             return Err("Invalid lettering position.".into());
         }
         let spec=text.settings.spec()?;
         doc.add_lettering(&spec,(text.center[0],text.center[1])).map_err(|e|e.to_string())?;
+    }
+    for mut motif in composition.motifs {
+        motif.field=composition.field;
+        if motif.anchor == [0.0;4] && !doc.shapes.is_empty() && !matches!(motif.position,Position::Center) {
+            let bounds=shapes_bounds(&doc.shapes);
+            if !bounds.is_empty() {
+                motif.anchor=[bounds.min.x/10.0,bounds.min.y/10.0,(bounds.max.x-bounds.min.x)/10.0,(bounds.max.y-bounds.min.y)/10.0];
+            }
+        }
+        motif.validate()?;
+        motif.add_to(&mut doc)?;
+    }
+    if composition.optimize {
+        let original=doc.plan();
+        if let Some((optimized,_))=super::optimized_density(&doc,&original) {doc=optimized;}
     }
     Ok((doc,composition.field))
 }
