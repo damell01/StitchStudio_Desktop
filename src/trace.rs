@@ -394,7 +394,7 @@ fn trace_prepared_image(prepared: &Image, o: &TraceOptions, monochrome: bool, cl
     let mut failures = Vec::new();
     // Try the requested fidelity first, then progressively simplify.
     // Empty successful traces are also retried, rather than ending import.
-    for attempt in 0..4 {
+    for attempt in 0..5 {
         let mut candidate = options.clone();
         // Prefer continuous filled contours for flat art; mixed centerlines are a fallback.
         if prefer_lines && attempt == 1 { candidate.lines = true; }
@@ -405,6 +405,12 @@ fn trace_prepared_image(prepared: &Image, o: &TraceOptions, monochrome: bool, cl
             candidate.detail = candidate.detail.min(35.0);
             candidate.speckle_mm = candidate.speckle_mm.max(1.5);
             if candidate.colors == 0 { candidate.colors = 6; }
+        } else if attempt == 4 {
+            // Tiny uploaded marks can all fall below the normal noise cutoff.
+            // Retry the prepared pixels as fine artwork before giving up.
+            candidate.detail = candidate.detail.max(85.0);
+            candidate.speckle_mm = candidate.speckle_mm.min(0.08);
+            candidate.lines = true;
         }
         match trace(prepared, &candidate) {
             Ok(t) if t.shapes + t.lines > 0 => {
@@ -435,8 +441,27 @@ fn trace_prepared_image(prepared: &Image, o: &TraceOptions, monochrome: bool, cl
             Err(e) => failures.push(e.to_string()),
         }
     }
-    Err(anyhow!("Automatic digitizing failed after four tracing attempts: {}. Try a larger finished width or disable background removal.", failures.join("; ")))
+    Err(anyhow!("Automatic digitizing found no usable regions: {}. Try a larger finished width or keep the background.", failures.join("; ")))
 }
+
+#[test]
+fn automatic_trace_retries_tiny_detached_marks() {
+    let raster = Raster::from_fn(128, 128, |x,y| {
+        if (10..14).contains(&x) && (10..14).contains(&y)
+            || (112..116).contains(&x) && (108..112).contains(&y)
+        {
+            [18, 25, 40, 255]
+        } else {
+            [0, 0, 0, 0]
+        }
+    });
+    let image = Image { raster };
+    let options = TraceOptions { width_mm: 5., speckle_mm: 0.35, detail: 85., ..Default::default() };
+    assert!(trace(&image, &options).map_or(true, |t| t.shapes+t.lines==0));
+    let traced = trace_prepared_image(&image, &options, false, true).unwrap();
+    assert!(traced.shapes + traced.lines > 0);
+}
+
 
 /// Trace raster artwork into editable geometry with automatic stitch parameters.
 pub fn digitize_raster(

@@ -381,6 +381,8 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       {(error || generationError) && <p role="alert">{error || generationError}</p>}
       {generationError && !vector && settings.removeBackground && generationError.includes('No foreground') &&
         <button onClick={() => update('removeBackground', false)}>Retry with background</button>}
+      {generationError && !vector && generationError.includes('no usable regions') && settings.widthMm < 300 &&
+        <button onClick={() => update('widthMm', Math.min(300, Math.ceil(settings.widthMm * 1.25)))}>Retry at a larger finished width</button>}
       {review && <>
         <div hidden={inspector!=='quality'} className="digitizer-inspector-content">
         <h3>Stitch quality</h3>
