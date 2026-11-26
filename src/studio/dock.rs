@@ -1986,7 +1986,6 @@ impl Studio {
         let p = pal_ui(ui);
         if self.issues.is_empty() {
             caption(ui, "No problems found.");
-            return;
         }
         let repairs: Vec<_> = self.doc.shapes.iter().enumerate().filter_map(|(i, s)| {
             use zigzag::params::Kind;
@@ -1999,6 +1998,29 @@ impl Studio {
             (spacing || pull || split).then_some((i, spacing, pull, split))
         }).collect();
         if !repairs.is_empty() {
+            let preview_id = egui::Id::new("repair-comparison");
+            if ui.button("Compare repair savings").clicked() {
+                let mut candidate = self.doc.clone();
+                for &(i, spacing, pull, split) in &repairs {
+                    let p = &mut candidate.shapes[i].params;
+                    if spacing { p.spacing = None; }
+                    if pull { p.pull = None; }
+                    if split { p.split = None; }
+                }
+                let before = self.doc.plan();
+                let after = candidate.plan();
+                let speed = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(
+                    egui::Id::new("production_spm"), || crate::app::SPM));
+                let summary = format!("Stitches: {} → {}\nTrims: {} → {}\nEstimated minutes: {:.1} → {:.1}\nPeak density: {:.1} → {:.1} penetrations/mm²",
+                    before.stitch_count(), after.stitch_count(), before.trim_count(), after.trim_count(),
+                    before.estimated_seconds(speed,3.0,15.0).unwrap_or(0.0)/60.0,
+                    after.estimated_seconds(speed,3.0,15.0).unwrap_or(0.0)/60.0,
+                    crate::density::DensityMap::of(&before).peak(), crate::density::DensityMap::of(&after).peak());
+                ui.ctx().data_mut(|d| d.insert_temp(preview_id, (self.doc.rev(), summary)));
+            }
+            if let Some((rev, summary)) = ui.ctx().data(|d| d.get_temp::<(u64,String)>(preview_id)) {
+                if rev == self.doc.rev() { ui.label(summary); }
+            }
             caption(ui, format!("{} objects have repairable stitch settings. Restore automatic fabric settings; artwork stays unchanged.", repairs.len()));
             if ui.button("Repair stitch settings").on_hover_text("Reset risky density, pull and satin split overrides. Undo restores the previous settings.").clicked() {
                 let count = repairs.len();
