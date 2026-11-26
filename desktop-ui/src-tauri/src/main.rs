@@ -3308,6 +3308,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn invalid_placement_leaves_design_unchanged() {
+        use zigzag::{design::{Block, Run}, geom::P};
+        let design = Design {
+            blocks: vec![Block { color: [0, 0, 0], runs: vec![Run {
+                pts: vec![P::new(10.0, 20.0), P::new(30.0, 40.0)], trim_before: false
+            }] }],
+            ..Default::default()
+        };
+        let mut workspace = Workspace { current: Some(design), ..Default::default() };
+        let before = formats::write_format(workspace.current.as_ref().unwrap(), "dst").unwrap();
+        assert!(place_design(&mut workspace, [1.0, 0.0, 0.0, 1.0, f64::NAN, 0.0]).is_err());
+        assert!(place_design(&mut workspace, [f64::MAX, 0.0, 0.0, 1.0, 0.0, 0.0]).is_err());
+        assert_eq!(formats::write_format(workspace.current.as_ref().unwrap(), "dst").unwrap(), before);
+        assert!(workspace.undo.is_empty());
+    }
+
+    #[test]
     fn optimization_preserves_isolated_contrasting_detail() {
         use zigzag::{design::{Block, Run}, geom::P};
         let original = Design {
