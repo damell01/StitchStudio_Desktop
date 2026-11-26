@@ -21,6 +21,7 @@ export type AssistantProposal = {
   detail: string;
   comparison?: Comparison;
   apply: () => Promise<string>;
+  alternatives?: AssistantProposal[];
 };
 
 type Entry = {
@@ -79,11 +80,20 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
   const input = useRef<HTMLInputElement>(null);
   const skip = useRef<HTMLButtonElement>(null);
   const feed = useRef<HTMLDivElement>(null);
-  const sequence = useRef(0);
+  const sequence = useRef(Date.now());
   const processing = useRef(false);
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const [entries, setEntries] = useState<Entry[]>(()=>{
+    try {
+      const saved:unknown=JSON.parse(localStorage.getItem('stitch-assistant-history-v1')??'[]');
+      return Array.isArray(saved)?saved.filter((e):e is Entry=>e&&typeof e.id==='number'&&['You','Assistant'].includes(e.speaker)&&typeof e.text==='string').slice(-30):[];
+    } catch {return [];}
+  });
+  useEffect(()=>{try{localStorage.setItem('stitch-assistant-history-v1',JSON.stringify(entries));}catch{}},[entries]);
   const [inputValue, setInput] = useState('');
   const [proposal, setProposal] = useState<AssistantProposal | null>(null);
+  const [choice,setChoice]=useState(0);
+  const options=proposal?[proposal,...(proposal.alternatives??[])]:[];
+  const selectedProposal=options[choice]??proposal;
   const [external,setExternal]=useState<string|null>(null);
   const [operation, setOperation] = useState<'thinking' | 'applying' | null>(null);
 
@@ -137,7 +147,7 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
     try {
       const result = await onRequest(text);
       if (typeof result === 'string') append('Assistant', result);
-      else setProposal(result);
+      else {setChoice(0);setProposal(result);}
     } catch (error) {
       append('Assistant', error instanceof Error ? error.message : String(error));
     } finally {
@@ -151,7 +161,7 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
     processing.current = true;
     setOperation('applying');
     try {
-      append('Assistant', await proposal.apply());
+      append('Assistant', await (selectedProposal??proposal).apply());
     } catch (error) {
       append('Assistant', error instanceof Error ? error.message : String(error));
     } finally {
@@ -187,6 +197,7 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
     <header className="assistant-chat-heading">
       <span className="assistant-icon"><Sparkles size={21} aria-hidden="true"/></span>
       <div><h2 id="assistant-chat-title">Design assistant</h2><p><span/> Runs offline</p></div>
+      <button type="button" disabled={!!operation||!!proposal} onClick={()=>setEntries([])}>Clear history</button>
       <button className="studio-tool-icon" aria-label="Close design assistant" onClick={close} disabled={!!operation}>
         <X size={18} aria-hidden="true"/>
       </button>
@@ -200,9 +211,10 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
         <span>{entry.speaker}</span><p>{entry.text}</p>
       </div>)}
       {proposal && <section className="assistant-proposal" aria-label="Proposed change">
-        <div className="assistant-proposal-heading"><Sparkles size={17} aria-hidden="true"/><strong>{proposal.title}</strong></div>
-        <p>{proposal.detail}</p>
-        {proposal.comparison && <PlanComparison {...proposal.comparison}/>}
+        <div className="assistant-proposal-heading"><Sparkles size={17} aria-hidden="true"/><strong>{selectedProposal?.title}</strong></div>
+        {options.length>1&&<label>Layout option <select value={choice} disabled={disabled} onChange={e=>setChoice(Number(e.target.value))}>{options.map((option,i)=><option key={i} value={i}>{option.title}</option>)}</select></label>}
+        <p>{selectedProposal?.detail}</p>
+        {selectedProposal?.comparison && <PlanComparison {...selectedProposal.comparison}/>}
         <div className="assistant-proposal-actions">
           <button ref={skip} type="button" disabled={disabled} onClick={() => {
             setProposal(null);
