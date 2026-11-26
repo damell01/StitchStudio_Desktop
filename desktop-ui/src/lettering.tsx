@@ -121,6 +121,15 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
         ? <label>Initials<input value={text} maxLength={3} onChange={e=>setText(e.target.value.toUpperCase())}/></label>
         : <><label>Text<textarea rows={3} value={text} maxLength={120} onChange={e=>setText(e.target.value)}/></label><div className="lettering-size-presets"><button onClick={()=>setText(text.toUpperCase())}>UPPERCASE</button><button onClick={()=>setText(text.toLowerCase())}>lowercase</button><button onClick={()=>setText(text.replace(/\p{L}[\p{L}\p{M}]*/gu,w=>w[0].toUpperCase()+w.slice(1).toLowerCase()))}>Title Case</button></div><small>{text.length}/120 characters · {text.split('\n').length} lines</small></>}
       <FontPicker fonts={fonts} selected={font} choose={setFont}/>
+      <div className="lettering-size-presets" role="group" aria-label="Lettering layout presets">
+        <button onClick={()=>{setBold(true);setItalic(false);setHScale(100);setVScale(100);setSpacing(.4);setArc(0)}}>Classic</button>
+        <button onClick={()=>{setBold(true);setItalic(false);setHScale(85);setVScale(110);setSpacing(.6);setArc(0)}}>Tall block</button>
+        <button onClick={()=>{setBold(true);setItalic(false);setHScale(120);setVScale(90);setSpacing(.8);setArc(0)}}>Wide block</button>
+        <button onClick={()=>{setBold(false);setItalic(true);setHScale(100);setVScale(100);setSpacing(.3);setArc(0)}}>Slanted</button>
+        <button onClick={()=>{setArc(65);setSpacing(.6)}}>Upper arch</button>
+        <button onClick={()=>{setArc(-65);setSpacing(.6)}}>Lower arch</button>
+      </div>
+
       <div className="lettering-size-presets" role="group" aria-label="Letter height presets">{[8,12,20,30,50].map(n=><button key={n} aria-pressed={size===n} onClick={()=>setSize(n)}>{n} mm</button>)}</div><label>Capital height (mm)<input type="number" min="3" max="80" value={size} onChange={e=>setSize(Number(e.target.value))}/></label>
       <div className="lettering-style">
         <label><input type="checkbox" checked={bold} onChange={e=>setBold(e.target.checked)}/> Bold</label>
@@ -188,6 +197,14 @@ export function InlineLettering({uid,disabled,onBusy,onDone,baseline,pickingBase
  useEffect(()=>{if(!autoApply||target===null||loading||disabled||saving||!valid||!dirty||failedFingerprint===fingerprint)return;const timer=window.setTimeout(()=>{void apply()},350);return()=>window.clearTimeout(timer)},[autoApply,target,loading,disabled,saving,valid,dirty,fingerprint,failedFingerprint]);
  return <section className="inline-lettering workspace-inspector-group"><h3><Type size={18}/>{target===null?'Add lettering':'Edit lettering'}</h3><p className="muted">Changes update the canvas automatically after typing.</p>{loading?<p role="status">Loading fonts…</p>:<>
  <fieldset disabled={disabled||saving} className="inline-lettering-fields"><label>Text<textarea rows={2} maxLength={120} value={settings.text} onChange={e=>{const text=e.target.value;setSettings(old=>({...old,text,kern:old.kern?.filter(([i])=>i<Array.from(text).length)}));setCharacter(0)}}/></label>
+ <div className="lettering-size-presets" role="group" aria-label="Quick lettering styles">
+ {[
+ {name:'Classic',values:{bold:true,italic:false,h_scale:100,v_scale:100,spacing:.4}},
+ {name:'Tall block',values:{bold:true,italic:false,h_scale:85,v_scale:110,spacing:.6}},
+ {name:'Wide block',values:{bold:true,italic:false,h_scale:120,v_scale:90,spacing:.8}},
+ {name:'Slanted',values:{bold:false,italic:true,h_scale:100,v_scale:100,spacing:.3}},
+ ].map(p=><button type="button" key={p.name} onClick={()=>setSettings(old=>({...old,...p.values}))}>{p.name}</button>)}
+ </div>
  <label>Find font<input type="search" placeholder="Search installed fonts…" value={fontQuery} onChange={e=>setFontQuery(e.target.value)}/></label><label>Font<select value={settings.font} onChange={e=>change('font',e.target.value)}>{filteredFonts.map(f=><option key={f}>{f}</option>)}</select></label>
  <div className="inline-text-sample" style={{fontFamily:settings.font,fontWeight:settings.bold?'bold':'normal',fontStyle:settings.italic?'italic':'normal',color:hex}}>{preview&&previewBox?<svg viewBox={previewBox.join(' ')} role="img" aria-label="Actual planned stitches">{preview.blocks.map((b,i)=><g key={i} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".24" strokeLinecap="round" strokeLinejoin="round">{b.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg>:settings.text}</div><small role="status">{previewPending?'Planning stitches…':preview?preview.stitches.toLocaleString()+' stitch points · '+(previewBox![2]-4).toFixed(1)+' × '+(previewBox![3]-4).toFixed(1)+' mm':'Font sample'}</small>
  <div className="lettering-size-presets" role="group" aria-label="Quick sizes">{[8,12,20,30].map(n=><button key={n} aria-pressed={settings.size===n} onClick={()=>change('size',n)}>{n} mm</button>)}</div><div className="inline-lettering-grid"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.1" value={settings.size} onChange={e=>change('size',Number(e.target.value))}/></label><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={settings.spacing} onChange={e=>change('spacing',Number(e.target.value))}/></label></div>
