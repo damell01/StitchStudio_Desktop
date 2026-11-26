@@ -1,0 +1,48 @@
+name: Package Intel Mac installer
+
+on:
+  push:
+    branches: [Dev]
+    paths: [.github/workflows/package-intel-mac.yml]
+    tags: ['stitch-intel-test-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    if: github.ref == 'refs/heads/Dev' || startsWith(github.ref, 'refs/tags/stitch-intel-test-')
+    runs-on: macos-15-intel
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: desktop-ui
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify source is on Dev
+        run: git merge-base --is-ancestor HEAD origin/Dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop-ui/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-ui/src-tauri -> target
+      - run: npm ci
+      - name: Build the Intel DMG
+        run: |
+          test "$(uname -m)" = x86_64
+          npm run tauri build -- --bundles app dmg -- --locked
+      - name: Check the installer and Intel app executable
+        run: bash ../.github/scripts/check-macos-install.sh src-tauri/target/release/bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Stitch-Studio-Mac-Intel
+          path: desktop-ui/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          compression-level: 0

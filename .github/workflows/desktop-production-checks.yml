@@ -3,6 +3,9 @@ on:
   push:
     branches: [Dev]
     tags: ['stitch-update-v*']
+    paths-ignore:
+      - .github/workflows/desktop-production-checks.yml
+      - .github/workflows/package-intel-mac.yml
   pull_request:
     branches: [Dev]
   workflow_dispatch:
