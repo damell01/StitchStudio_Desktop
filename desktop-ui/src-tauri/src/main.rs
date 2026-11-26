@@ -1001,7 +1001,15 @@ struct OptimizationQuality{coverage:f64,density_peak:usize,seconds:f64}
 fn optimization_seconds(d:&Design,speed:f64,trim:f64)->f64{
     let speed=if speed.is_finite(){speed.clamp(100.,1500.)}else{800.};
     let trim=if trim.is_finite(){trim.clamp(0.,30.)}else{3.};
-    let travel:f64=d.blocks.iter().flat_map(|b|b.runs.windows(2)).filter_map(|r|Some(r[0].pts.last()?.dist(*r[1].pts.first()?))).sum();
+    // Include travel between color blocks and skip empty runs.
+    let mut previous: Option<zigzag::geom::P> = None;
+    let mut travel = 0.0;
+    for run in d.blocks.iter().flat_map(|b| &b.runs) {
+        if let (Some(first), Some(last)) = (run.pts.first(), run.pts.last()) {
+            if let Some(end) = previous { travel += end.dist(*first); }
+            previous = Some(*last);
+        }
+    }
     // Needle penetrations, trim overhead, color changes and estimated jump travel.
     d.stitch_count() as f64/speed*60.+d.trim_count() as f64*trim+d.blocks.len().saturating_sub(1) as f64*8.+travel/10./100.
 }
