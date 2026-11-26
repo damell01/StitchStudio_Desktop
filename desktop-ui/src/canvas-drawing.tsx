@@ -1,11 +1,11 @@
-import {Circle, PenLine, Ruler, Spline, Square, X} from 'lucide-react';
+import {Circle, PenLine, Ruler, Spline, Square, Star, Hexagon, Triangle, X} from 'lucide-react';
 import {useRef,useState,type PointerEvent} from 'react';
 
-export type DrawingTool = 'pen'|'manual'|'satinBrush'|'satinColumn'|'rectangle'|'ellipse'|'measure';
+export type DrawingTool = 'pen'|'freehand'|'star'|'hexagon'|'triangle'|'manual'|'satinBrush'|'satinColumn'|'rectangle'|'ellipse'|'measure';
 type Point = [number,number];
 
 export const drawingTools = [
-  {tool:'pen',label:'Pen path',icon:PenLine,shortcut:'P'}, {tool:'manual',label:'Manual stitches',icon:Spline},
+  {tool:'pen',label:'Pen path',icon:PenLine,shortcut:'P'}, {tool:'freehand',label:'Freehand running stitch',icon:PenLine}, {tool:'star',label:'Star',icon:Star}, {tool:'hexagon',label:'Hexagon',icon:Hexagon}, {tool:'triangle',label:'Triangle',icon:Triangle}, {tool:'manual',label:'Manual stitches',icon:Spline},
   {tool:'satinBrush',label:'Satin brush',icon:Spline}, {tool:'satinColumn',label:'Satin column',icon:Spline}, {tool:'rectangle',label:'Rectangle',icon:Square},
   {tool:'ellipse',label:'Ellipse',icon:Circle}, {tool:'measure',label:'Measure',icon:Ruler,shortcut:'M'},
 ] satisfies {tool:DrawingTool;label:string;icon:typeof PenLine;shortcut?:string}[];
@@ -37,7 +37,7 @@ export function useCanvasDrawing(commit:(tool:Exclude<DrawingTool,'measure'>,poi
       if(live.current.length<2048)update([...live.current,point]);
     }else{
       pointer.current=event.pointerId;
-      update(tool==='satinBrush'||tool==='satinColumn'&&column.length<2?[point]:[point,point]);
+      update(tool==='freehand'||tool==='satinBrush'||tool==='satinColumn'&&column.length<2?[point]:[point,point]);
       event.currentTarget.setPointerCapture(event.pointerId);
     }
     return true;
@@ -46,7 +46,7 @@ export function useCanvasDrawing(commit:(tool:Exclude<DrawingTool,'measure'>,poi
     if(!tool)return false;
     if(clickTool){setHover(point);return pointer.current===event.pointerId||event.buttons===0;}
     if(pointer.current!==event.pointerId)return false;
-    if(tool==='satinBrush'||tool==='satinColumn'&&column.length<2){
+    if(tool==='freehand'||tool==='satinBrush'||tool==='satinColumn'&&column.length<2){
       const last=live.current.at(-1)!;
       if(live.current.length<2048&&Math.hypot(last[0]-point[0],last[1]-point[1])>=.4)update([...live.current,point]);
     }else update([live.current[0],point]);
@@ -103,6 +103,7 @@ export function DrawingOverlay({drawing}:{drawing:Drawing}){
       strokeDasharray={index>1?'3 2':undefined} vectorEffect="non-scaling-stroke"/>)}
     {drawing.tool==='rectangle' ? <rect x={x} y={y} width={w} height={h} vectorEffect="non-scaling-stroke"/> :
      drawing.tool==='ellipse' ? <ellipse cx={x+w/2} cy={y+h/2} rx={w/2} ry={h/2} vectorEffect="non-scaling-stroke"/> :
+     drawing.tool==='star'||drawing.tool==='hexagon'||drawing.tool==='triangle' ? <polygon points={Array.from({length:drawing.tool==='star'?10:drawing.tool==='triangle'?3:6},(_,i)=>{const n=drawing.tool==='star'?10:drawing.tool==='triangle'?3:6;const angle=2*Math.PI*i/n-Math.PI/2;const r=drawing.tool==='star'&&i%2===1?.45:1;return [x+w/2+w/2*r*Math.cos(angle),y+h/2+h/2*r*Math.sin(angle)].join(',')}).join(' ')} vectorEffect="non-scaling-stroke"/> :
      <polyline points={line.map(point=>point.join(',')).join(' ')} vectorEffect="non-scaling-stroke"/>}
     {drawing.tool==='measure'&&<text fill={color} stroke="none" x={b[0]} y={b[1]-2} fontSize="4">
       {(Math.hypot(w,h)/25.4).toFixed(3)} in · {Math.hypot(w,h).toFixed(2)} mm
