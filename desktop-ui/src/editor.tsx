@@ -1579,6 +1579,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
       {[{label:'Satin width (mm)',key:'width',min:.2,max:20,step:.1},{label:'Satin split length (0 = off)',key:'split',min:0,max:12,step:.5},{label:'Cross-stitch cell (mm)',key:'cell',min:.5,max:10,step:.1},{label:'Start along outline (0–1)',key:'start',min:0,max:1,step:.05},{label:'End along outline (0–1)',key:'end',min:0,max:1,step:.05}].map(field=><form key={field.key} onSubmit={e=>{e.preventDefault();const value=Number(new FormData(e.currentTarget).get('value'));void edit('set_specialty_settings',{uids:movementIds,settings:{[field.key]:value}})}}><label>{field.label}<input name="value" type="number" required min={field.min} max={field.max} step={field.step}/></label><button disabled={busy}>Apply</button></form>)}
       {[{label:'Running passes',key:'repeats',options:[['Single',1],['Triple / bean',3]]},{label:'Contour pattern',key:'spiral',options:[['Rings',false],['Spiral',true]]},{label:'Satin mode',key:'border',options:[['Column',false],['Border',true]]},{label:'Short stitches',key:'short_stitches',options:[['Off',false],['On',true]]}].map(field=><div key={field.key}><strong>{field.label}</strong><div className="workspace-stack">{field.options.map(([label,value])=><button key={String(label)} disabled={busy} onClick={()=>void edit('set_specialty_settings',{uids:movementIds,settings:{[field.key]:value}})}>{String(label)}</button>)}</div></div>)}
     </InspectorDialog>
+    <InspectorDialog label="Sewing order and travel" title="Routing settings" disabled={busy||!objects.length}><RoutingSettings plan={plan} busy={busy} apply={settings=>void edit('set_routing_settings',settings)}/></InspectorDialog>
     <h3>Quality</h3><div className="workspace-stack"><button disabled={busy||!plan?.stitches||!objects.some(o=>o.kind!=='manual'&&o.kind!=='skip')} onClick={openSimplify}>Simplify design</button><small>Compares a conservative alternative and preserves the original if checks fail.</small><button disabled={!plan?.stitches||busy} title={objects.length?"Try conservative source-preserving repair.":"Split long fixed stitches without removing tie stitches."} onClick={async()=>{if(await confirmAction(objects.length?"Try conservative editable artwork repair? You can undo this change.":"Split fixed stitches longer than 10 mm? Original tie stitches are retained. You can undo this change."))void edit("repair_stitches",{})}}>{objects.length?"Repair editable artwork":"Repair fixed stitches"}</button><button disabled={!plan||busy} onClick={audit}>Check stitch quality</button></div>
     <DesignIssuesDialog width={width} height={height} disabled={!plan||busy} onLocate={locateIssue}/>
     <TestSwatchesDialog width={width} height={height} format={format} object={movementIds.length===1?selected??null:null}
@@ -1648,4 +1649,19 @@ function CurrentStitchOverrides({uid,plan}:{uid:number;plan:Plan|null}){
  useEffect(()=>{let live=true;setValues(null);setError('');void invoke<Record<string,unknown>>('get_specialty_settings',{uid}).then(v=>{if(live)setValues(v)}).catch(e=>{if(live)setError(String(e))});return()=>{live=false}},[uid,plan]);
  const labels:Record<string,string>={width:'Satin width',split:'Split length',repeats:'Running passes',cell:'Cross-stitch cell',spiral:'Spiral',border:'Border',short_stitches:'Short stitches',start:'Start',end:'End',satin_underlay:'Underlay mask',colors:'Satin colors',sett:'Tartan stripes',spacing:'Spacing',length:'Length',angle:'Angle',pull:'Pull compensation',underlay:'Underlay'};
  return <details className="studio-inspector-section"><summary>Current object settings</summary>{error?<p role="alert">{error}</p>:!values?<p>Loading settings…</p>:<dl>{Object.entries(labels).map(([key,label])=><div key={key}><dt>{label}</dt><dd>{values[key]==null?'Automatic':typeof values[key]==='boolean'?(values[key]?'On':'Off'):typeof values[key]==='object'?JSON.stringify(values[key]):String(values[key])}</dd></div>)}</dl>}</details>
+}
+
+function RoutingSettings({plan,busy,apply}:{plan:Plan|null;busy:boolean;apply:(settings:{hatOrder:boolean;connectMm:number;removeOverlaps:boolean})=>void}){
+ const [settings,setSettings]=useState<{hatOrder:boolean;connectMm:number;removeOverlaps:boolean}|null>(null);
+ const [error,setError]=useState('');
+ useEffect(()=>{let live=true;setSettings(null);setError('');void invoke<{hatOrder:boolean;connectMm:number;removeOverlaps:boolean}>('get_routing_settings').then(v=>{if(live)setSettings(v)}).catch(e=>{if(live)setError(String(e))});return()=>{live=false}},[plan]);
+ if(!settings)return <p>{error||'Loading routing settings…'}</p>;
+ return <form onSubmit={e=>{e.preventDefault();apply(settings)}}>
+ <label><input type="checkbox" checked={settings.hatOrder} onChange={e=>setSettings({...settings,hatOrder:e.target.checked})}/>Cap sewing order</label>
+ <small>Use the engine's cap-specific sewing sequence. Verify on a sample cap.</small>
+ <label>Connect gaps up to (mm)<input type="number" min="0" max="5" step=".1" required value={settings.connectMm} onChange={e=>setSettings({...settings,connectMm:Number(e.target.value)})}/></label>
+ <small>Zero disables sewn connections. Larger values can leave visible travel stitches.</small>
+ <label><input type="checkbox" checked={settings.removeOverlaps} onChange={e=>setSettings({...settings,removeOverlaps:e.target.checked})}/>Remove covered overlapping stitches</label>
+ <button disabled={busy}>Apply and regenerate</button>
+ </form>
 }
