@@ -685,6 +685,24 @@ fn satin_pieces(
 /// [`satin_pieces`] for the strip of the column between fractions `t0`
 /// and `t1` of its width (rail a at 0, rail b at 1): a multicolor satin
 /// is several of these.
+/// Close the exposed foam at both ends of an open satin column. Keep the cap
+/// stitches near the original rails; no decorative long stitches are introduced.
+fn foam_satin_column(rails: &Rails, settings: &SatinParams, caps: bool) -> Polyline {
+    let mut out = satin::column(rails, settings);
+    if !caps || rails.closed { return out; }
+    let pairs = satin::pairs(rails, 5.0);
+    if pairs.len() < 2 { return out; }
+    let cap = |(a, b): (P, P)| -> Polyline {
+        let width = a.dist(b);
+        if !(4.0..=65.0).contains(&width) { return Vec::new(); }
+        vec![a, b, a, b, a.lerp(b, 0.25), a.lerp(b, 0.75)]
+    };
+    let mut beginning = cap(pairs[0]);
+    beginning.append(&mut out);
+    beginning.extend(cap(*pairs.last().unwrap()));
+    beginning
+}
+
 fn satin_pieces_strip(
     shape: &Shape,
     opt: &PlanOptions,
@@ -742,7 +760,7 @@ fn satin_pieces_strip(
                     split: p.satin_split().map(mm),
                     style: p.satin_style(),
                 };
-                let fwd = satin::column(&rails, &sp);
+                let fwd = foam_satin_column(&rails, &sp, p.foam_caps == Some(true));
                 let alt = (!rails.closed).then(|| {
                     let rev = Rails {
                         a: rails.a.iter().rev().copied().collect(),
@@ -761,7 +779,7 @@ fn satin_pieces_strip(
                                 .collect()
                         },
                     };
-                    satin::column(&rev, &sp)
+                    foam_satin_column(&rev, &sp, p.foam_caps == Some(true))
                 });
                 pieces.push(Piece {
                     pts: fwd,
@@ -1193,9 +1211,22 @@ fn shape_runs(
                 // thread, each its own color group.
                 let mut sr = ShapeRuns::new(Vec::new(), area);
                 let n = colors.len();
+                // Two partially overlapping satin strips give actual mixed
+                // thread coverage instead of a purely visual color gradient.
+                // Open their stitch spacing to avoid doubling the transition density.
+                let blended = p.blend == Some(true) && n == 2;
+                let mut blend_shape = shape.clone();
+                if blended {
+                    blend_shape.params.spacing = Some((p.satin_spacing(&opt.fabric) * 1.5).max(0.4));
+                }
                 for (k, &color) in colors.iter().enumerate() {
-                    let (t0, t1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
-                    let (pieces, fallback) = satin_pieces_strip(shape, opt, notes, t0, t1);
+                    let (t0, t1) = if blended {
+                        if k == 0 { (0.0, 0.62) } else { (0.38, 1.0) }
+                    } else {
+                        (k as f64 / n as f64, (k + 1) as f64 / n as f64)
+                    };
+                    let source = if blended { &blend_shape } else { shape };
+                    let (pieces, fallback) = satin_pieces_strip(source, opt, notes, t0, t1);
                     let mut groups = fallback;
                     if !pieces.is_empty() {
                         groups.push(pieces);
