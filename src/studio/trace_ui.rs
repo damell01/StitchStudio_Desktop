@@ -94,7 +94,10 @@ fn recognize(image: &Image) -> Result<Vec<RecognizedLine>, String> {
 }
 
 fn parse_ocr(tsv: &str, font: String) -> Vec<RecognizedLine> {
-    let mut lines = std::collections::BTreeMap::<(u32,u32,u32,u32), (String, f64, usize, [f64;4])>::new();
+    // Preserve word boxes until layout analysis: sparse OCR can assign
+    // unrelated words to a single line, or split a spaced word into tokens.
+    type Word = (String, f64, [f64; 4]);
+    let mut lines = std::collections::BTreeMap::<(u32,u32,u32,u32), Vec<Word>>::new();
     for row in tsv.lines().skip(1) {
         let p: Vec<_> = row.splitn(12, '\t').collect();
         if p.len() != 12 || p[0] != "5" || p[11].trim().is_empty() { continue; }
@@ -103,18 +106,53 @@ fn parse_ocr(tsv: &str, font: String) -> Vec<RecognizedLine> {
         let coords = (|| Some([p[6].parse::<f64>().ok()?, p[7].parse().ok()?,
             p[8].parse().ok()?, p[9].parse().ok()?]))();
         let (Some(key), Some([x,y,w,h]), Ok(conf)) = (key, coords, p[10].parse::<f64>()) else { continue; };
-        if ![x,y,w,h,conf].iter().all(|n| n.is_finite()) || w <= 0.0 || h <= 0.0 || conf < 0.0 { continue; }
-        let entry = lines.entry(key).or_insert((String::new(),0.0,0,[x,y,x+w,y+h]));
-        if !entry.0.is_empty() { entry.0.push(' '); }
-        entry.0.push_str(p[11].trim());
-        entry.1 += conf;
-        entry.2 += 1;
-        entry.3 = [entry.3[0].min(x), entry.3[1].min(y), entry.3[2].max(x+w), entry.3[3].max(y+h)];
+        if ![x,y,w,h,conf,x+w,y+h].iter().all(|n| n.is_finite())
+            || w <= 0.0 || h <= 0.0 || x < 0.0 || y < 0.0 || !(0.0..=100.0).contains(&conf) { continue; }
+        lines.entry(key).or_default().push((p[11].trim().to_owned(), conf, [x,y,x+w,y+h]));
     }
-    let mut result: Vec<_> = lines.into_values().map(|(text,sum,n,rect)| {
-        let confidence = sum/n as f64;
-        RecognizedLine { text, confidence, rect, font: font.clone(), enabled: false }
-    }).collect();
+    let mut result = Vec::new();
+    for mut words in lines.into_values() {
+        words.sort_by(|a,b| a.2[0].total_cmp(&b.2[0]));
+        let mut group: Vec<Word> = Vec::new();
+        let flush = |group: &mut Vec<Word>, result: &mut Vec<RecognizedLine>| {
+            if group.is_empty() { return; }
+            let mut text = String::new();
+            let mut rect = group[0].2;
+            let mut confidence = 0.0;
+            for (i, (word, conf, r)) in group.iter().enumerate() {
+                if i > 0 {
+                    let prev = &group[i-1];
+                    let gap = r[0] - prev.2[2];
+                    let height = (r[3]-r[1]).min(prev.2[3]-prev.2[1]);
+                    // Only join adjacent single-character OCR fragments
+                    // without a space when their geometric gap is small.
+                    if !(prev.0.chars().count() == 1 && word.chars().count() == 1
+                        && gap <= height * 0.25) { text.push(' '); }
+                }
+                text.push_str(word);
+                confidence += conf;
+                rect = [rect[0].min(r[0]), rect[1].min(r[1]), rect[2].max(r[2]), rect[3].max(r[3])];
+            }
+            result.push(RecognizedLine { text, confidence: confidence/group.len() as f64,
+                rect, font: font.clone(), enabled: false });
+            group.clear();
+        };
+        for word in words {
+            if let Some(prev) = group.last() {
+                let a = prev.2;
+                let b = word.2;
+                let height = (a[3]-a[1]).min(b[3]-b[1]);
+                let overlap = a[3].min(b[3]) - a[1].max(b[1]);
+                // A distant or vertically unrelated token is a separate
+                // editable object, not a rectangle covering the artwork.
+                if b[0]-a[2] > height * 1.5 || overlap < height * 0.4 {
+                    flush(&mut group, &mut result);
+                }
+            }
+            group.push(word);
+        }
+        flush(&mut group, &mut result);
+    }
     result.sort_by(|a,b| a.rect[1].total_cmp(&b.rect[1]).then(a.rect[0].total_cmp(&b.rect[0])));
     result
 }
@@ -639,6 +677,17 @@ mod tests {
         assert_eq!(lines[0].text, "MATTHEW 17:20");
         assert_eq!(lines[0].rect, [10.0,20.0,65.0,30.0]);
         assert_eq!(lines[0].confidence, 85.0);
+        assert!(lines.iter().all(|l| !l.enabled));
+    }
+
+    #[test]
+    fn ocr_joins_close_letters_but_splits_distant_artwork() {
+        let tsv = "header\n5\t1\t1\t1\t1\t3\t30\t20\t8\t10\t90\tT\n5\t1\t1\t1\t1\t1\t10\t20\t8\t10\t90\tC\n5\t1\t1\t1\t1\t2\t20\t20\t8\t10\t90\tA\n5\t1\t1\t1\t1\t4\t100\t20\t30\t10\t85\tLOGO";
+        let lines = parse_ocr(tsv, "Test".into());
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].text, "CAT");
+        assert_eq!(lines[0].rect, [10.0,20.0,38.0,30.0]);
+        assert_eq!(lines[1].text, "LOGO");
         assert!(lines.iter().all(|l| !l.enabled));
     }
 
