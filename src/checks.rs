@@ -149,6 +149,28 @@ pub fn check(
         if kind == Kind::Skip {
             continue;
         }
+        // Explicit overrides can defeat the fabric-aware defaults. Flag
+        // them without silently changing an artist's intended settings.
+        if matches!(kind, Kind::Fill | Kind::Satin) {
+            if let Some(spacing) = s.params.spacing {
+                if !spacing.is_finite() || spacing <= 0.0 {
+                    add(Some(i), Level::Error, "Invalid stitch spacing; reset to the fabric default.".into());
+                } else if spacing < 0.20 {
+                    add(Some(i), Level::Warning, format!(
+                        "Explicit spacing of {spacing:.2} mm is very dense; increase spacing or restore automatic fabric settings."
+                    ));
+                }
+            }
+            if let Some(pull) = s.params.pull {
+                if !pull.is_finite() || pull < 0.0 {
+                    add(Some(i), Level::Error, "Invalid pull compensation; reset to the fabric default.".into());
+                } else if pull > 0.8 {
+                    add(Some(i), Level::Warning, format!(
+                        "Pull compensation of {pull:.2} mm is unusually large; inspect outlines and lettering gaps."
+                    ));
+                }
+            }
+        }
         // Planner notes say what it did instead (e.g. filled part of a satin): informational.
         for (si, note) in &design.notes {
             if *si == i {
@@ -334,6 +356,19 @@ mod tests {
         assert!(issues.iter().any(|i| i.message.contains("1 sewn stitches exceed 12 mm")));
         d.blocks[0].runs[0].pts[1] = P::new(20.0,0.0);
         assert!(!check(&[], &d, &PlanOptions::default(), None).iter().any(|i| i.message.contains("exceed 12 mm")));
+    }
+
+    #[test]
+    fn flags_dense_explicit_spacing_and_excessive_pull() {
+        let mut s = shape(Geometry::Fill {
+            rings: vec![rect(0.0, 0.0, 100.0, 100.0)],
+            rule: FillRule::NonZero,
+        }, Kind::Fill);
+        s.params.spacing = Some(0.15);
+        s.params.pull = Some(1.0);
+        let i = issues(&[s], None);
+        assert!(i.iter().any(|x| x.shape == Some(0) && x.message.contains("very dense")));
+        assert!(i.iter().any(|x| x.shape == Some(0) && x.message.contains("unusually large")));
     }
 
     #[test]
