@@ -1049,6 +1049,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let score=|d:&Design|optimization_seconds(d,speed,trim);
     let mut choices=Vec::new();
+    if let Some(v)=remove_covered_fill_candidate(source,uids,options){choices.push(v);}
     if let Some(v)=narrow_artwork_candidate(source,original,uids,options){choices.push(v);}
     if let Some(v)=combined_economy_candidate(source,original,uids,options){choices.push(v);}
     if !options.exhausted(){if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){choices.push(v);}}choices.push((doc,plan));}}
@@ -1263,6 +1264,62 @@ fn narrow_artwork_candidate(source:&zigzag::document::Document,base:&Design,uids
     let plan=doc.plan();
     Some((doc,plan))
 }
+// Remove hidden duplicate stitching without changing the visible artwork.
+// Only subtract portions covered by a later ordinary fill of the same
+// thread. Keep the upper layer intact and avoid crossing protected layers.
+fn remove_covered_fill_candidate(source:&zigzag::document::Document,uids:Option<&[usize]>,options:&SimplifyOptions)->Option<(zigzag::document::Document,Design)>{
+    use zigzag::{params::Kind,svg::Geometry,boolean::{self,PathOp},geom::FillRule};
+    let mut doc=source.clone();let mut edits=Vec::new();let mut remove=Vec::new();
+    let eligible=|i:usize|{
+        let s=&source.shapes[i];
+        uids.is_none_or(|ids|ids.contains(&s.uid))&&!source.records_text(i)
+        &&!source.layer_properties(&s.id).is_some_and(|l|l.hidden||l.locked)
+        &&!s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")
+        &&source.shapes.iter().filter(|q|q.id==s.id).count()==1
+        &&s.params.kind.unwrap_or(Kind::Fill)==Kind::Fill
+        &&s.params.start.is_none()&&s.params.end.is_none()&&s.params.colors.is_none()
+        &&s.params.stop!=Some(true)&&s.params.trim!=Some(true)
+    };
+    // Use an inset cover so neighboring edges retain a small overlap.
+    let mut attempts=0;
+    for i in 0..source.shapes.len(){
+        if options.exhausted()||attempts>=64{break}
+        if !eligible(i){continue}
+        let a=&source.shapes[i];
+        let Geometry::Fill{rings:ar,rule:af}=&a.geometry else{continue};
+        let ab=zigzag::svg::shapes_bounds(std::slice::from_ref(a));
+        let mut covers=Vec::new();
+        for j in i+1..(i+12).min(source.shapes.len()){
+            let b=&source.shapes[j];
+            if !eligible(j)||a.color!=b.color||a.groups!=b.groups{break}
+            let bb=zigzag::svg::shapes_bounds(std::slice::from_ref(b));
+            if ab.min.x>bb.max.x||ab.max.x<bb.min.x||ab.min.y>bb.max.y||ab.max.y<bb.min.y{continue}
+            if let Geometry::Fill{rings,rule}=&b.geometry{covers.push((rings.clone(),*rule));}
+        }
+        if covers.is_empty(){continue}
+        attempts+=1;
+        let union=boolean::pathfinder(&covers,PathOp::Unite);
+        let inset=boolean::offset(&union,FillRule::EvenOdd,-3.0);
+        if inset.is_empty(){continue}
+        let parts=[(ar.clone(),*af),(inset,FillRule::EvenOdd)];
+        let overlap=boolean::pathfinder(&parts,PathOp::Intersect);
+        if overlap.is_empty(){continue}
+        let area=|rings:&[zigzag::geom::Polyline],rule|zigzag::stitch::satin::components(rings,rule).iter().map(|c|boolean::ring_area(&c[0]).abs()-c.iter().skip(1).map(|h|boolean::ring_area(h).abs()).sum::<f64>()).sum::<f64>();
+        let old=area(ar,*af);
+        if old<=0.||area(&overlap,FillRule::EvenOdd)<old*0.20{continue}
+        let remaining=boolean::pathfinder(&parts,PathOp::Difference);
+        if remaining.is_empty(){remove.push(a.uid);continue}
+        if area(&remaining,FillRule::EvenOdd)>=old*0.80{continue}
+        let path=zigzag::bezier::from_rings(&remaining,0.2);
+        if !path.is_empty(){edits.push((i,path));}
+    }
+    if edits.is_empty()&&remove.is_empty(){return None}
+    // Simultaneous subtraction could leave gaps if the later cover were
+    // also edited. Process only one lower layer per candidate.
+    if let Some((i,path))=edits.into_iter().next(){doc.set_path(i,&path).ok()?;}
+    else if let Some(uid)=remove.first(){let i=doc.shapes.iter().position(|s|s.uid==*uid)?;doc.delete_many(&[i]).ok()?;}
+    doc.sync().ok()?;let plan=doc.plan();Some((doc,plan))
+}
 fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
@@ -1271,7 +1328,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let stitch_goal=options.target_stitches.or_else(||(original.stitch_count()>15_000).then_some(10_000));
         let mut candidates=Vec::new();
         if options.quick {
-            if strength==3&&!options.exhausted(){if let Some(v)=narrow_artwork_candidate(source,original,uids,options){candidates.push(v);}}
+            if strength==3&&!options.exhausted(){if let Some(v)=remove_covered_fill_candidate(source,uids,options){candidates.push(v);}if !options.exhausted(){if let Some(v)=narrow_artwork_candidate(source,original,uids,options){candidates.push(v);}}}
             if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}
             if strength==3 && original.stitch_count()>=12_000 {
                 if let Some(v)=combined_economy_candidate(source,original,uids,options){candidates.push(v);}
@@ -1286,6 +1343,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             }
         }else{
         if !options.exhausted(){
+            if strength==3{if let Some(v)=remove_covered_fill_candidate(source,uids,options){candidates.push(v);}}
             if strength>=2{if let Some(v)=narrow_artwork_candidate(source,original,uids,options){candidates.push(v);}}
             if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
             if strength==3{if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){candidates.push(v);}}candidates.push((doc,plan));}}
