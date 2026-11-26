@@ -18,5 +18,7 @@ tempfile = "3"
 zip = { version = "9.8", default-features = false, features = ["deflate-flate2"] }
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native", "windows-native"] }
+reqwest = { version = "0.13", default-features = false }
 tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls"] }
 
