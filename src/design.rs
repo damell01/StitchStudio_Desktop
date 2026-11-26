@@ -602,12 +602,16 @@ fn fill_runs_connected(
         comp.iter().flatten().for_each(|&point| bounds.add(point));
         bounds.width().max(bounds.height()) <= mm(4.0)
     });
-    let light_underlay = opt.hat_order && f.id == "standard"
-        && p.underlay.is_none() && small_detail && compact_detail && f.fill_edge_walk;
+    // Stable woven materials may use a compact edge foundation instead
+    // of a full cross-hatch. Knit, fleece, caps and user-authored underlay
+    // continue to use their specified support.
+    let stable_woven = matches!(f.id, "standard" | "cotton" | "twill");
+    let light_underlay = opt.hat_order && stable_woven
+        && p.underlay.is_none() && small_detail && compact_detail && !narrow;
     // Omit cross-hatch only when an actual edge-support path survives inset.
     if p.underlay_on() {
         let mut has_edge_support = false;
-        if f.fill_edge_walk {
+        if f.fill_edge_walk || light_underlay {
             let inset = boolean::offset(rings, rule, -5.0);
             let walk: Vec<Piece> = inset
                 .iter()
@@ -621,7 +625,7 @@ fn fill_runs_connected(
         }
         let under = FillParams {
             angle: angle + std::f64::consts::FRAC_PI_2,
-            spacing: mm(f.fill_underlay_spacing),
+            spacing: mm(if opt.hat_order && stable_woven && p.underlay.is_none() && !narrow && !small_detail { f.fill_underlay_spacing.max(2.0) } else { f.fill_underlay_spacing }),
             len: mm(3.0),
             inset: mm(0.4),
             pull: 0.0,
@@ -2826,6 +2830,17 @@ mod tests {
             .count();
         assert_eq!(edge_hits, 80, "40 rows × 2 ends");
         assert_eq!(d.per_shape, vec![pts.len()]);
+    }
+
+    #[test]
+    fn automatic_woven_fill_uses_fewer_stitches_without_changing_extent() {
+        let s = shape(fill(sq(0.0, 0.0, 300.0)), Kind::Fill, [0, 0, 0]);
+        let original = plan("baseline", &[s.clone()], &PlanOptions { hat_order: false, ..PlanOptions::default() });
+        let optimized = plan("automatic", &[s], &PlanOptions { hat_order: true, ..PlanOptions::default() });
+        assert!(optimized.stitch_count() > 0);
+        assert!(optimized.stitch_count() < original.stitch_count(), "automatic woven fill should save stitches");
+        let a=original.bounds();let b=optimized.bounds();
+        assert!(a.min.dist(b.min)<=5.0 && a.max.dist(b.max)<=5.0);
     }
 
     #[test]
