@@ -62,9 +62,11 @@ fn add(
     tool: Drawing,
     points: Vec<[f64; 2]>,
     field: [f64; 2],
+    color: [u8;3],
+    satin_width: f64,
 ) -> Result<usize, String> {
     let pts = drawing_points(points, field)?;
-    let color = [105, 69, 162];
+    if !(0.5..=10.0).contains(&satin_width){return Err("Satin width must be 0.5–10 mm".into())}
     match tool {
         Drawing::SatinColumn => return Err("Draw two rails for the satin column.".into()),
         Drawing::Pen => document.add_drawing(&pts, false, color, Kind::Run),
@@ -75,7 +77,7 @@ fn add(
                 anchors: pts.iter().map(|&p| bezier::Anchor::corner(p)).collect(),
                 closed: false,
             }];
-            document.add_drawing_stroke(&path, color, Kind::Satin, 2.5)
+            document.add_drawing_stroke(&path, color, Kind::Satin, satin_width)
         }
         Drawing::Rectangle | Drawing::Ellipse | Drawing::Star | Drawing::Hexagon | Drawing::Triangle => {
             let a = pts[0];
@@ -120,6 +122,7 @@ fn add_column(
     doc: &mut Document,
     subpaths: Vec<Vec<[f64; 2]>>,
     field: [f64; 2],
+    color: [u8;3],
 ) -> Result<usize, String> {
     if !(2..=10).contains(&subpaths.len()) {
         return Err("Draw two rails and up to eight connecting rungs.".into());
@@ -139,7 +142,7 @@ fn add_column(
             closed,
         })
         .collect();
-    doc.add_drawing_path(&path, [105, 69, 162], Kind::Satin)
+    doc.add_drawing_path(&path, color, Kind::Satin)
         .map_err(|error| error.to_string())
 }
 
@@ -149,16 +152,19 @@ pub(super) async fn draw_canvas_shape(
     points: Vec<[f64; 2]>,
     field: [f64; 2],
     subpaths: Option<Vec<Vec<[f64; 2]>>>,
+    color: Option<[u8;3]>,
+    satin_width: Option<f64>,
     app: tauri::AppHandle,
 ) -> Result<Preview, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<Mutex<Workspace>>();
         let mut workspace = state.lock().map_err(|error| error.to_string())?;
         let mut document = editable_base(&workspace, "Canvas drawing")?;
+        let color=color.unwrap_or([105,69,162]);
         let index = if matches!(tool, Drawing::SatinColumn) {
-            add_column(&mut document, subpaths.unwrap_or_default(), field)?
+            add_column(&mut document, subpaths.unwrap_or_default(), field,color)?
         } else {
-            add(&mut document, tool, points, field)?
+            add(&mut document, tool, points, field,color,satin_width.unwrap_or(2.5))?
         };
         let design = document.plan_cached(&mut workspace.plan_cache);
         if design.per_shape.get(index).copied().unwrap_or_default() == 0 {
@@ -196,7 +202,7 @@ mod tests {
             vec![[0., 4.], [20., 4.]],
             vec![[9., -1.], [9., 5.]],
         ];
-        let index = add_column(&mut doc, paths, [130., 180.]).unwrap();
+        let index = add_column(&mut doc, paths, [130., 180.],[105,69,162]).unwrap();
         let rails = zigzag::design::satin_rails(&doc.shapes[index])
             .remove(0)
             .unwrap();
@@ -223,6 +229,7 @@ mod tests {
                 tool,
                 vec![[0.0, 0.0], [12.0, 8.0], [22.0, 5.0]],
                 [130.0, 180.0],
+                [20,40,60],2.5,
             )
             .unwrap();
             assert_eq!(document.shapes[index].params.kind, Some(kind));
