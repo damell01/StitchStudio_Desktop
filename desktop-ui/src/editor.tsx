@@ -1562,6 +1562,18 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
         </section>
       </div>
     </InspectorDialog>
+    <InspectorDialog label="Embroidery effects" title="Quick stitch effects" disabled={busy||!movementIds.length}>
+      <small>Apply a preset to selected compatible objects. Choose the appropriate stitch type first; review the stitch preview before sewing.</small>
+      {[
+        {name:'Bean outline',description:'Triple-pass running stitch',settings:{repeats:3}},
+        {name:'Light outline',description:'Single running pass',settings:{repeats:1}},
+        {name:'Spiral contour',description:'Continuous contour pattern',settings:{spiral:true}},
+        {name:'Contour rings',description:'Concentric contour pattern',settings:{spiral:false}},
+        {name:'Classic satin',description:'Plain satin top stitching',settings:{style:'satin',short_stitches:true}},
+        {name:'Decorative S-stitch',description:'Patterned satin surface',settings:{style:'s'}},
+        {name:'Open zigzag',description:'Open decorative satin pattern',settings:{style:'zigzag'}},
+      ].map(effect=><button key={effect.name} disabled={busy} onClick={()=>void edit('set_specialty_settings',{uids:movementIds,settings:effect.settings})}><strong>{effect.name}</strong><small>{effect.description}</small></button>)}
+    </InspectorDialog>
     <InspectorDialog label="Advanced stitch controls" title="Specialty stitch settings" disabled={busy||!movementIds.length}>
       <p className="workspace-helper">Apply individual settings to selected artwork. Only compatible stitch types use each parameter.</p>
       {movementIds.length===1&&<CurrentStitchOverrides uid={movementIds[0]} plan={plan}/>}
