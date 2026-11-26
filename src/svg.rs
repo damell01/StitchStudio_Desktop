@@ -428,6 +428,43 @@ fn import_text(text: &usvg::Text, inherited: &Inherit, out: &mut Vec<Shape>) {
             params,
         );
     }
+    // Outlined editable text must produce actual stitchable stroke objects,
+    // not disappear when it has no fill (double-outline lettering).
+    let mut strokes = Vec::new();
+    collect_glyph_strokes(text.flattened(), text.abs_transform(), &mut strokes);
+    for (lines, width, color) in strokes {
+        if lines.is_empty() { continue; }
+        let params = Params {
+            kind: Some(ctx.base.kind.unwrap_or(Kind::Satin)),
+            ..ctx.base.clone()
+        };
+        push(out, text.id(), Part::Stroke, &ctx, color,
+             Geometry::Stroke { lines, width }, params);
+    }
+}
+
+fn collect_glyph_strokes(
+    group: &usvg::Group,
+    base: usvg::Transform,
+    out: &mut Vec<(Vec<(Polyline, bool)>, f64, [u8; 3])>,
+) {
+    for node in group.children() {
+        match node {
+            usvg::Node::Group(g) => collect_glyph_strokes(g, base, out),
+            usvg::Node::Path(p) => {
+                if let Some(stroke) = p.stroke().filter(|s| s.opacity().get() > 0.0) {
+                    let transform = base.pre_concat(p.abs_transform());
+                    let lines = flatten_path(p.data(), transform);
+                    let scale = ((transform.sx * transform.sy - transform.kx * transform.ky).abs() as f64).sqrt();
+                    let width = stroke.width().get() as f64 * scale * PX_TO_UNITS;
+                    if width > 0.0 && !lines.is_empty() {
+                        out.push((lines, width, paint_color(stroke.paint())));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 fn collect_glyphs(
