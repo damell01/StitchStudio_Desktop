@@ -1410,6 +1410,14 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
         </button>
       </div>
     </InspectorDialog>
+    <InspectorDialog label="Reuse stitch settings" title="Copy stitch settings from artwork" disabled={busy||!movementIds.length}>
+      <p className="workspace-helper">Choose a source object to copy spacing, length, angle, pull compensation and underlay to the current selection. Thread colors and sewing commands stay unchanged.</p>
+      <select aria-label="Source stitch settings" defaultValue="" disabled={busy} onChange={e=>{const uid=Number(e.target.value);if(e.target.value!==''&&Number.isFinite(uid))void edit('copy_stitch_properties',{sourceUid:uid,uids:movementIds});e.target.value=''}}>
+        <option value="">Choose source artwork…</option>
+        {objects.filter(o=>!o.hidden&&o.kind!=='manual'&&o.kind!=='skip'&&!movementIds.includes(o.uid)).map(o=><option key={o.uid} value={o.uid}>{o.label} · {o.kind}</option>)}
+      </select>
+    </InspectorDialog>
+    <button disabled={busy||!selected} onClick={()=>{if(!selected)return;const ids=objects.filter(o=>!o.hidden&&!o.locked&&o.kind===selected.kind).map(o=>o.uid);setCanvasMode('select');setMulti(ids);setSelectedObject(null);setActiveGroup(null);showLayers(true);setLayerTab('objects')}}>Select same stitch type</button>
     <InspectorDialog label="Sewing commands" title="Trim and stop after objects" disabled={busy||!movementIds.length}>
       <p className="workspace-helper">Apply explicit sewing commands to selected artwork. Automatic restores planner defaults. Verify stops in the exported machine format.</p>
       <div className="workspace-stack">
