@@ -51,7 +51,7 @@ impl LetteringSettings {
         if !(0.0..=1.0).contains(&path_offset){return Err("Baseline start must be between 0 and 100 percent.".into())}
         let kind = match self.kind.as_deref() {
             None => zigzag::params::Kind::Satin,
-            Some(k) => zigzag::params::Kind::parse(k).filter(|k| matches!(k, zigzag::params::Kind::Satin | zigzag::params::Kind::Fill | zigzag::params::Kind::Applique | zigzag::params::Kind::Run | zigzag::params::Kind::Ripple | zigzag::params::Kind::Contour)).ok_or("Unsupported lettering effect")?,
+            Some(k) => zigzag::params::Kind::parse(k).filter(|k| matches!(k, zigzag::params::Kind::Satin | zigzag::params::Kind::Fill | zigzag::params::Kind::Applique | zigzag::params::Kind::Run | zigzag::params::Kind::Ripple | zigzag::params::Kind::Contour | zigzag::params::Kind::Cross | zigzag::params::Kind::Meander | zigzag::params::Kind::Blanket)).ok_or("Unsupported lettering effect")?,
         };
         Ok(TextSpec {
             kind,
