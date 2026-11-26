@@ -1713,6 +1713,7 @@ fn validate_export(design: &Design, format: &str, width: f64, height: f64) -> Re
         return Err("Choose a supported embroidery format".into());
     }
     if design.stitch_count() == 0 { return Err("There are no stitches to export".into()); }
+    if design.stitch_count() > 2_000_000 { return Err("Design exceeds the two million stitch export safety limit. Split the design before exporting.".into()); }
     if matches!(format, "pec" | "pes") && design.blocks.len() > 256 {
         return Err("PES and PEC can store up to 256 color blocks".into());
     }
@@ -1736,7 +1737,7 @@ fn validate_export(design: &Design, format: &str, width: f64, height: f64) -> Re
         return Err("Generated machine movements exceed the selected hoop. Move the design away from the edge.".into());
     }
     if format == "dst" {
-        let trim_outside = formats::dst::stream(design).into_iter()
+        let trim_outside = encoded_stream.iter().flatten()
             .filter(|command| command.op == formats::Op::Trim)
             .any(|command| !fits(command.x + 2.0, command.y + 2.0)
                 || !fits(command.x - 2.0, command.y - 2.0));
