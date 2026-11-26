@@ -3125,6 +3125,37 @@ async fn digitize_artwork(
                 }
             }
         }
+        // Try one reduced palette only in explicit maximum-efficiency mode.
+        // Keep owned thread palettes, approved text and manual color counts intact.
+        if optimization_strength==3 && colors==0 && !has_lettering && options.threads.is_empty()
+            && design.stitch_count()<=100_000 {
+            if let Some(raster)=&prepared {
+                let palette:std::collections::HashSet<_>=design.blocks.iter().map(|b|b.color).collect();
+                if (3..=10).contains(&palette.len()) {
+                    let mut trial=options.clone();
+                    trial.colors=(palette.len()-1) as u32;
+                    if let Ok(mut next)=raster.digitize(&name,&trial) {
+                        next.settings.fabric=fabric.clone();
+                        let plan=next.plan();
+                        let next_palette:std::collections::HashSet<_>=plan.blocks.iter().map(|b|b.color).collect();
+                        let a=design.bounds();let b=plan.bounds();
+                        let before=measure_stitches(&design);let after=measure_stitches(&plan);
+                        // Every original shade must have a close replacement.
+                        let close=palette.iter().all(|old|next_palette.iter().any(|new|
+                            old.iter().zip(new.iter()).map(|(&x,&y)|(f64::from(x)-f64::from(y)).powi(2)).sum::<f64>()<=24.0_f64.powi(2)));
+                        if close && next_palette.len()<palette.len() && plan.stitch_count()>0
+                            && plan.stitch_count()<=design.stitch_count() && plan.trim_count()<=design.trim_count()
+                            && plan.blocks.len()<design.blocks.len()
+                            && after.long<=before.long && after.zero<=before.zero && after.short<=before.short.saturating_add(5)
+                            && a.min.dist(b.min)<=5.0 && a.max.dist(b.max)<=5.0
+                            && optimization_seconds(&plan,speed,trim)<optimization_seconds(&design,speed,trim)
+                            && raster.preserves_fidelity(&document,&next) {
+                            document=next;design=plan;
+                        }
+                    }
+                }
+            }
+        }
         let mut optimization = if design.stitch_count()<initial_count{Some([initial_count,design.stitch_count()])}else{None};
         // Prefer a production-efficient plan at the original requested size.
         // 10k is a soft goal, 15k a review threshold, never a destructive cap.
