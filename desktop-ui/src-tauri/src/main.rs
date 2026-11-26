@@ -2944,6 +2944,9 @@ struct DigitizerReview {
     dst_stitches: usize,
     color_changes: usize,
     optimization: Option<[usize;2]>,
+    estimated_seconds: f64,
+    original_estimated_seconds: f64,
+    original_trims: usize,
 }
 
 
@@ -3085,10 +3088,12 @@ async fn digitize_artwork(
             }
         }
         let initial_count=design.stitch_count();
+        let original_estimated_seconds=optimization_seconds(&design,800.,3.);
+        let original_trims=design.trim_count();
         // Test a simpler tracing strategy at the same physical dimensions
         // before spending time tuning an unnecessarily complicated plan.
         // Never retrace approved lettering or discard an explicit palette.
-        if initial_count>15_000 && !has_lettering && cleanup && colors==0 && !thin_lines {
+        if optimization_strength>=2 && initial_count>15_000 && !has_lettering && cleanup && colors==0 && !thin_lines {
             if let Some(raster)=&prepared {
                 let mut trial=options.clone();
                 trial.lines=true;
@@ -3210,6 +3215,9 @@ async fn digitize_artwork(
             dst_stitches,
             color_changes,
             optimization,
+            estimated_seconds: optimization_seconds(&design,800.,3.),
+            original_estimated_seconds,
+            original_trims,
         };
         Ok((document, design, review))
     }).await.map_err(|err| err.to_string())??;
