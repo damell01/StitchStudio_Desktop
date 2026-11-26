@@ -142,6 +142,7 @@ const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,ob
 const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(false);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [targetReduction,setTargetReduction]=useState(50);const [targetMetric,setTargetMetric]=useState<'both'|'time'|'stitches'>('both');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
 const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>localStorage.getItem('studio-default-machine')||''),[hoop,setHoop]=useState(()=>localStorage.getItem('studio-default-hoop')||'');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 const assistantContext = useRef({plan, width, height, machine, hoop, objects});
+const assistantLastTarget=useRef<{plan:Plan;uids:number[]}|null>(null);
 assistantContext.current = {plan, width, height, machine, hoop, objects};
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 const editLock=useRef(false);const [inlineWork,setInlineWork]=useState('');
@@ -243,7 +244,18 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
   // Contextual commands are resolved against the live selection, not a stale chat transcript.
   const follow=input.trim().match(/^(?:make (?:that|it|the selection) (smaller|larger|bigger)|(?:try|use|make it) (?:another color|a different color))$/i);
   if(follow){
-    if(!movementIds.length)return 'Select the artwork you want to refine first.';
+    const remembered=assistantLastTarget.current;
+    const targets=movementIds.length?movementIds:remembered?.plan===plan?remembered.uids.filter(uid=>objects.some(o=>o.uid===uid&&!o.locked&&!o.hidden)):[];
+    if(!targets.length)return 'Select the artwork you want to refine first.';
+    if(!movementIds.length&&follow[1]){
+      const scale=follow[1].toLowerCase()==='smaller'?.9:1.1;
+      return {title:'Refine last edited artwork',detail:'Resize the last edited objects to '+Math.round(scale*100)+'%.',async apply(){
+        if(assistantContext.current.plan!==plan)return 'The design changed. Select the artwork again.';
+        const result=await edit('transform_artwork_group',{uids:targets,scale,rotation:0});
+        if(result.plan)assistantLastTarget.current={plan:result.plan,uids:targets};
+        return result.plan?'Artwork resized.':result.error;
+      }};
+    }
     if(!follow[1])return 'Which thread color would you like to try on the selection?';
     input='Scale selected objects to '+(follow[1].toLowerCase()==='smaller'?'90':'110')+'%';
   }
@@ -375,6 +387,8 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
       if (stale) return 'The design or sewing field changed while this request was open. Ask again to review the current design.';
       const result = await edit(command, args);
       if (!result.plan) return result.error;
+      const affected=Array.isArray(args.uids)?args.uids.filter((uid):uid is number=>typeof uid==='number'):command==='compose_assistant_design'?(args.composition as {edits?:{uid:number}[]})?.edits?.map(e=>e.uid)??[]:[];
+      assistantLastTarget.current=affected.length?{plan:result.plan,uids:[...new Set(affected)]}:null;
       afterApply?.();
       return title + ' applied. ' + result.plan.stitches.toLocaleString() + ' stitch points · ' +
         result.plan.trims + ' trims. Use Undo to reverse this edit.';
