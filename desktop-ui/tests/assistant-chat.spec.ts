@@ -139,3 +139,60 @@ test('bundled model and MCP advice still need approval before editing', async ({
   await dialog.getByRole('button',{name:'Apply change'}).click();
   await expect.poll(async ()=>(await calls()).filter(name=>name==='center_design')).toEqual(['center_design']);
 });
+
+test('reviews motif placement around lettering and resolves imported characters by name', async ({page}) => {
+  await page.setViewportSize({width:1440,height:900});
+  await page.addInitScript(() => {
+    localStorage.setItem('studio-tour-seen','1');
+    const plan = {name:'Lettering',stitches:450,trims:1,blocks:[
+      {color:[0,0,0],runs:[[[-11,-6],[11,-6],[11,6],[-11,6],[-11,-6]]]},
+    ]};
+    const proposal = {...plan,stitches:900,blocks:[
+      ...plan.blocks,{color:[145,119,184],runs:[[[-32,-12],[-19,-10]],[[19,-10],[32,-12]]]},
+    ]};
+    const calls: {command:string; args:Record<string,unknown>}[] = [];
+    Object.assign(window,{motifCalls:calls,__TAURI_INTERNALS__:{
+      async invoke(command:string,args:Record<string,unknown>) {
+        calls.push({command,args});
+        if (command==='current_preview') return plan;
+        if (command==='preview_assistant_motif'||command==='insert_assistant_motif') return proposal;
+        if (command==='editable_objects') return [
+          {uid:3,label:'Lettering',kind:'satin',groups:['tl-lettering-1'],color:[0,0,0],bounds:[-11,-6,22,12]},
+        ];
+        if (command==='character_list') return [{group:'My imported artwork',name:'Bluey',file:'Bluey.png'}];
+        if (command==='trace_assistant_motif') return '<svg/>';
+        if (command==='history_labels') return [[],[]];
+        return null;
+      },
+    }});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await expect(page.locator('.design-canvas polyline').first()).toBeVisible();
+  await page.getByRole('button',{name:'Offline design assistant'}).click();
+  const dialog = page.getByRole('dialog',{name:'Design assistant'});
+  const prompt = dialog.getByRole('textbox',{name:'Ask the design assistant'});
+  const review = dialog.getByRole('region',{name:'Proposed change'});
+  const calls = () => page.evaluate(()=>(window as unknown as {
+    motifCalls:{command:string; args:Record<string,unknown>}[],
+  }).motifCalls);
+  await prompt.fill('Add lavender bows on both top corners of the lettering');
+  await prompt.press('Enter');
+  await expect(review).toContainText('2 copies');
+  await expect(review.getByRole('img',{name:'Proposed stitch paths'})).toBeVisible();
+  expect((await calls()).filter(call=>call.command==='insert_assistant_motif')).toHaveLength(0);
+  const preview = (await calls()).find(call=>call.command==='preview_assistant_motif')!;
+  expect(preview.args.motif).toMatchObject({position:'topCorners',anchor:[-11,-6,22,12],color:[145,119,184],applique:false});
+  expect((await calls()).some(call=>call.command==='interpret_with_local_model')).toBe(false);
+  await review.getByRole('button',{name:'Apply change'}).click();
+  await expect(dialog.getByRole('log')).toContainText('Add design motif applied');
+  expect((await calls()).find(call=>call.command==='insert_assistant_motif')?.args).toEqual(preview.args);
+
+  await prompt.fill('Add Bluey above the design as appliqué');
+  await prompt.press('Enter');
+  await expect(review).toContainText('Add appliqué motif');
+  const trace = (await calls()).find(call=>call.command==='trace_assistant_motif');
+  expect(trace?.args).toMatchObject({group:'My imported artwork',file:'Bluey.png',width:30});
+  await review.getByRole('button',{name:'Skip',exact:true}).click();
+  expect((await calls()).filter(call=>call.command==='insert_assistant_motif')).toHaveLength(1);
+});

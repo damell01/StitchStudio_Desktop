@@ -76,3 +76,17 @@ test('understands conversational requests, thread names, and physical goals offl
     expect(assistantIntent(prompt),prompt).toBeNull();
   }
 });
+
+test('recognizes paired motifs, physical units, and named artwork',()=>{
+  expect(assistantIntent('Add lavender bows on both sides of the lettering')).toMatchObject({
+    kind:'motif',text:'lavender bows',position:'sides',relative:'lettering',width:24,applique:false,
+  });
+  expect(assistantIntent('Add a 1-inch heart below the design as appliqué')).toMatchObject({
+    kind:'motif',text:'heart',position:'below',relative:'design',width:25.4,applique:true,
+  });
+  expect(assistantIntent('Add a Bluey-looking character here')).toMatchObject({
+    kind:'motif',text:'bluey',position:'center',
+  });
+  expect(assistantIntent('Add a 4 mm heart as applique')).toBeNull();
+  expect(assistantIntent('Add a bow then change it to red')).toBeNull();
+});

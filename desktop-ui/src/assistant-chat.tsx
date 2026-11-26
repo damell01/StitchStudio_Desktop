@@ -34,6 +34,7 @@ const actions = [
   {label: 'Center in hoop', prompt: 'Center design', Icon: Scan},
   {label: 'Compare simpler stitches', prompt: 'Simplify design', Icon: Sparkles},
   {label: 'Recommend a hoop', prompt: 'Recommend a hoop', Icon: ArrowDownUp},
+  {label: 'Add a bow', prompt: 'Add a small bow at the hoop center', Icon: Sparkles},
   {label: 'Explain underlay', prompt: 'Explain underlay', Icon: CircleHelp},
 ];
 
@@ -193,7 +194,7 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
     <div className="assistant-chat-feed" role="log" aria-label="Assistant conversation" ref={feed}>
       {!entries.length && <div className="assistant-intro">
         <p>Describe an edit or choose a quick action. Review changes before applying them.</p>
-        <small>Try “Rotate 90 degrees” or “Replace black with navy blue.”</small>
+        <small>Try “Add lavender bows on both sides of the lettering” or “Replace black with navy blue.”</small>
       </div>}
       {entries.map(entry => <div key={entry.id} className="assistant-msg" data-speaker={entry.speaker}>
         <span>{entry.speaker}</span><p>{entry.text}</p>

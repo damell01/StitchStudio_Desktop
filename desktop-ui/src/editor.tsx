@@ -1,3 +1,4 @@
+import {resolveMotif} from './assistant-motif';
 import {localModelEnabled} from './agent-settings';
 import {DesignIssuesDialog,PathToolsDialog,TestSwatchesDialog} from './stitch-tools';
 import {PricingCalculator} from './pricing-calculator';
@@ -302,6 +303,51 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
         result.plan.trims + ' trims. Use Undo to reverse this edit.';
     },
   });
+
+  if (intent.kind === 'motif' && intent.text && intent.position && intent.width) {
+    const position = intent.position;
+    const anchorObjects = movementIds.length && intent.relative !== 'hoop' && intent.relative !== 'design' ? objects.filter(object=>movementIds.includes(object.uid)) : [];
+    const lettering = objects.filter(object=>!object.hidden && object.groups?.some(group=>group.startsWith('tl-lettering-')));
+    if (intent.relative === 'selection' && !movementBounds) return 'Select the objects to place this motif around.';
+    if (intent.relative === 'lettering' && !anchorObjects.length) {
+      const sets = new Set(lettering.flatMap(object=>object.groups?.filter(group=>group.startsWith('tl-lettering-')) ?? []));
+      if (sets.size !== 1) return 'Select the lettering you want to decorate on the canvas first.';
+      anchorObjects.push(...lettering);
+    }
+    const visibleBounds = anchorObjects.flatMap(object=>object.bounds ? [object.bounds] : []);
+    const bounds = designBounds;
+    const anchor: [number,number,number,number] = visibleBounds.length ? [
+      Math.min(...visibleBounds.map(b=>b[0])), Math.min(...visibleBounds.map(b=>b[1])), 0, 0,
+    ] : bounds && (position !== 'center' || intent.relative === 'design') ? [bounds.left,bounds.top,bounds.width,bounds.height] : [0,0,0,0];
+    if (visibleBounds.length) {
+      anchor[2] = Math.max(...visibleBounds.map(b=>b[0]+b[2])) - anchor[0];
+      anchor[3] = Math.max(...visibleBounds.map(b=>b[1]+b[3])) - anchor[1];
+    }
+    if (position !== 'center' && !visibleBounds.length && !bounds) return 'Add a design or lettering first, or ask for the motif at the hoop center.';
+    if (invalidField || incompatibleHoop || machineExceeded) return 'Choose a compatible hoop and sewing field before inserting artwork.';
+    const artwork = await resolveMotif(intent.text, intent.width);
+    if ('message' in artwork) return artwork.message;
+    const paired = position === 'sides' || position === 'topCorners' || position === 'bottomCorners';
+    const places = {
+      center:visibleBounds.length ? 'center of the selected artwork' : intent.relative === 'design' && bounds ? 'design center' : 'hoop center',
+      above:'above', below:'below', left:'left', right:'right',
+      topLeft:'top left', topRight:'top right', bottomLeft:'bottom left', bottomRight:'bottom right',
+      sides:'both sides', topCorners:'both top corners', bottomCorners:'both bottom corners',
+    };
+    const motif = {name:artwork.name,svg:artwork.svg,color:artwork.color ?? null,
+      width:intent.width,position,applique:!!intent.applique,anchor,field:[width,height]};
+    const after = await invoke<Plan>('preview_assistant_motif',{motif});
+    const before = plan ?? {name:'Blank design', stitches:0, trims:0, blocks:[]};
+    const minutes = (candidate:Plan) => candidate.stitches / sewingSpm + candidate.trims * trimSeconds / 60;
+    const count = paired ? '2 copies' : '1 copy';
+    const detail = artwork.name+' · '+count+' · '+intent.width.toLocaleString(undefined,{maximumFractionDigits:2})+
+      ' mm wide each · '+places[position]+'. '+(motif.applique ?
+      'Includes fabric placement, tack-down and finishing stitches. Check pauses on your machine.' :
+      'Adds editable artwork to the current design.');
+    const title = motif.applique ? 'Add appliqué motif' : 'Add design motif';
+    return {...native(title,detail,'insert_assistant_motif',{motif}),
+      comparison:{before,after,beforeMinutes:minutes(before),afterMinutes:minutes(after)}};
+  }
 
   if (intent.kind === 'lettering') {
     const fonts = await invoke<string[]>('lettering_fonts');

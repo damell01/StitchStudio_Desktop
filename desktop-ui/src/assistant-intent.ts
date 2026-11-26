@@ -1,3 +1,5 @@
+import {parseMotifRequest, type MotifPosition} from './assistant-motif-intent';
+
 export type AssistantIntent = {
   kind: string;
   value?: number;
@@ -11,6 +13,9 @@ export type AssistantIntent = {
   selected?: boolean;
   width?: number;
   height?: number;
+  position?: MotifPosition;
+  applique?: boolean;
+  relative?: string;
 };
 
 const namedColors: ReadonlyMap<string, string> = new Map([
@@ -110,5 +115,5 @@ export function assistantIntent(input: string): AssistantIntent | null {
  if(resize){const n=Number(resize[1]);if(n>=10&&n<=300)return {kind:'scale',value:n/100};}
  if(/^(?:please )?(?:flip|mirror)(?: (?:the |this )?design)? horizontally$/.test(s))return {kind:'flipH'};
  if(/^(?:please )?(?:flip|mirror)(?: (?:the |this )?design)? vertically$/.test(s))return {kind:'flipV'};
- return null;
+ return parseMotifRequest(normalized);
 }
