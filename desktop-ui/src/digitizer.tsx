@@ -28,7 +28,7 @@ type Review = {
 
 const defaults = {
   widthMm: 80, colors: 0, useOwnedThreads: localStorage.getItem('studio-use-owned-threads') === 'true', detail: 60, fabric: 'standard',
-  removeBackground: true, cleanup: true, tolerance: 32, thinLines: false, speckleMm: 1,
+  removeBackground: true, cleanup: true, tolerance: 32, thinLines: false, speckleMm: 1, optimizationStrength: 2,
 };
 // All imports use the same automatic pipeline; gallery metadata must not force a palette.
 const artworkMimes: Record<string, string> = {
@@ -332,6 +332,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         {!vector && <details className="digitizer-options">
           <summary>Advanced artwork options</summary>
           <fieldset disabled={busy}>
+            <label>Stitch optimization<select value={settings.optimizationStrength} onChange={e=>setSettings(old=>({...old,optimizationStrength:Number(e.target.value)}))}><option value={0}>Trace only (skip final optimization)</option><option value={1}>Gentle</option><option value={2}>Balanced</option><option value={3}>Maximum efficiency</option></select></label><small>Maximum efficiency tests more stitch spacing and routing candidates while checking coverage and design size.</small>
             <label>Minimum detail size <strong>{settings.speckleMm.toFixed(1)} mm</strong><input type="range" min="0" max="3" step=".1" value={settings.speckleMm} onChange={e=>setSettings(old=>({...old,speckleMm:Number(e.target.value)}))}/></label>
             <small>Lower values retain tiny artwork details. Higher values remove small isolated specks; inspect lettering before exporting.</small>
             <div className="digitizer-thread-picker" role="group" aria-label="Thread colors">
