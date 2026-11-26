@@ -58,7 +58,7 @@ test -r "$app/Contents/Resources/licenses/LICENSE"
 test -r "$app/Contents/Resources/licenses/NOTICE"
 test -r "$app/Contents/Resources/licenses/THIRD-PARTY-NOTICES.md"
 lipo -info "$app/Contents/MacOS/$binary"
-lipo -verify_arch "$expected_arch" "$app/Contents/MacOS/$binary"
+lipo "$app/Contents/MacOS/$binary" -verify_arch "$expected_arch"
 # Validate the copied bundle's property list and signature integrity. This
 # checks ad-hoc signatures too; notarization is a separate release requirement.
 plutil -lint "$plist"
