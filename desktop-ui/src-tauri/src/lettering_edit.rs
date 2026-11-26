@@ -78,7 +78,9 @@ pub(super) fn apply(workspace: &mut Workspace, spec: &TextSpec, placement: Optio
         document
     };
     let design = plan_text(&mut document, spec, placement.unwrap_or([0.0, 0.0]), &mut workspace.plan_cache)?;
+    super::validate_resized_design(&design)?;
     let result = preview(&design);
+    if workspace.current.is_none(){workspace.current=Some(Document::empty().plan());}
     workspace.checkpoint_named("Insert lettering");
     workspace.current = Some(design);
     workspace.source = Some(document);
@@ -109,12 +111,13 @@ pub(crate) async fn update_lettering(uid:usize,settings:LetteringSettings,app:ta
  let state=app.state::<std::sync::Mutex<Workspace>>();
  let mut w=state.lock().map_err(|e|e.to_string())?;
  let mut doc=w.source.clone().ok_or("No editable design")?;
- let index=doc.shapes.iter().position(|s|s.uid==uid).ok_or("Text object not found")?;
+ let index=super::editor_parity::editable_index(&doc,uid)?;
  let mut spec=doc.lettering(index).ok_or("Selected object is not editable text")?;
  spec.text=next.text;spec.font=next.font;spec.size_mm=next.size_mm;spec.spacing_mm=next.spacing_mm;spec.arc_mm=next.arc_mm;spec.bold=next.bold;spec.italic=next.italic;spec.color=next.color;spec.align=next.align;if scale_x{spec.h_scale=next.h_scale}if scale_y{spec.v_scale=next.v_scale}if has_kern{spec.kern=next.kern}if has_path{spec.path=next.path}if has_offset{spec.path_offset=next.path_offset}if has_flip{spec.path_flip=next.path_flip}
  doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
  let design=doc.plan_cached(&mut w.plan_cache);
- if design.stitch_count()==0{return Err("No stitches generated".into())}
+ super::validate_resized_design(&design)?;
+ if design.per_shape.get(index).copied().unwrap_or_default()==0{return Err("Updated lettering produced no stitches".into())}
  let result=preview(&design);w.checkpoint_named("Update lettering");w.current=Some(design);w.source=Some(doc);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
