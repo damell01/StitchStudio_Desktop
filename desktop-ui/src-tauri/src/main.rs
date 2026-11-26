@@ -3313,6 +3313,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn resize_validation_rejects_nonfinite_and_empty_plans() {
+        use zigzag::{design::{Block, Run}, geom::P};
+        let mut design = Design::default();
+        assert!(validate_resized_design(&design).is_err());
+        design.blocks.push(Block { color: [0, 0, 0], runs: vec![Run {
+            pts: vec![P::new(0.0, 0.0), P::new(20.0, 10.0)], trim_before: false
+        }] });
+        assert!(validate_resized_design(&design).is_ok());
+        design.blocks[0].runs[0].pts[1].x = f64::INFINITY;
+        assert!(validate_resized_design(&design).is_err());
+    }
+
+    #[test]
     fn invalid_placement_leaves_design_unchanged() {
         use zigzag::{design::{Block, Run}, geom::P};
         let design = Design {
