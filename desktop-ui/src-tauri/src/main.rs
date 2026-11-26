@@ -3053,10 +3053,13 @@ async fn digitize_artwork(
             return Err("Artwork is larger than 1 meter. Reduce the artwork dimensions before digitizing.".into());
         }
         let mut design = document.plan();
+        let initial_count=design.stitch_count();
+        let original_estimated_seconds=optimization_seconds(&design,speed,trim);
+        let original_trims=design.trim_count();
         // Compare a second automatic trace only for raster imports with
         // automatic colors. Keep the original unless the alternate retains
         // the palette and approximate extent while reducing sewing complexity.
-        if !has_lettering && colors == 0 && !thin_lines && design.stitch_count() <= 100_000
+        if optimization_strength>=2 && !has_lettering && colors == 0 && !thin_lines && design.stitch_count() <= 100_000
             && let Some(raster) = &prepared
         {
             let mut alternate_options = options.clone();
@@ -3082,6 +3085,9 @@ async fn digitize_artwork(
                     if n > 0 && n <= 100_000 && n >= base / 2
                         && palette(&candidate) == palette(&design)
                         && score(&candidate) < score(&design) * 0.90
+                        && optimization_seconds(&candidate,speed,trim)<optimization_seconds(&design,speed,trim)
+                        && candidate.trim_count()<=design.trim_count()
+                        && optimization_quality(&design,&candidate,speed,trim).coverage>=90.0
                         && raster.preserves_fidelity(&document, &alternate)
                     {
                         document = alternate;
@@ -3090,9 +3096,7 @@ async fn digitize_artwork(
                 }
             }
         }
-        let initial_count=design.stitch_count();
-        let original_estimated_seconds=optimization_seconds(&design,speed,trim);
-        let original_trims=design.trim_count();
+
         // Test a simpler tracing strategy at the same physical dimensions
         // before spending time tuning an unnecessarily complicated plan.
         // Never retrace approved lettering or discard an explicit palette.
@@ -3111,6 +3115,8 @@ async fn digitize_artwork(
                     if plan.stitch_count()>0&&plan.stitch_count()<design.stitch_count()*9/10
                         &&plan.trim_count()<=design.trim_count()
                         &&candidate_audit.long<=audit.long&&candidate_audit.zero<=audit.zero
+                        &&candidate_audit.short<=audit.short.saturating_add(5)
+                        &&optimization_seconds(&plan,speed,trim)<optimization_seconds(&design,speed,trim)
                         &&old.min.dist(new.min)<=10.&&old.max.dist(new.max)<=10.
                         &&palette(&plan)==palette(&design)
                         &&raster.preserves_fidelity(&document,&next)
