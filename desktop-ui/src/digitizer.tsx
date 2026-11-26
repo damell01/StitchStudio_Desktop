@@ -336,6 +336,16 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
           <summary>Advanced artwork options</summary>
           <fieldset disabled={busy}>
             <label>Stitch optimization<select value={settings.optimizationStrength} onChange={e=>setSettings(old=>({...old,optimizationStrength:Number(e.target.value)}))}><option value={0}>Trace only (skip final optimization)</option><option value={1}>Gentle</option><option value={2}>Balanced</option><option value={3}>Maximum efficiency</option></select></label><small>Maximum efficiency tests more stitch spacing and routing candidates while checking coverage and design size.</small><label>Machine speed (stitches/min)<select value={settings.productionSpeed} onChange={e=>setSettings(old=>({...old,productionSpeed:Number(e.target.value)}))}>{[300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500].map(n=><option key={n} value={n}>{n}</option>)}</select></label><label>Trim duration (seconds)<select value={settings.productionTrimSeconds} onChange={e=>setSettings(old=>({...old,productionTrimSeconds:Number(e.target.value)}))}>{[0,1,2,3,4,5,6,8,10,15,20,30].map(n=><option key={n} value={n}>{n}</option>)}</select></label>
+            <div role="group" aria-label="Artwork cleanup presets">
+              <strong>Quick artwork preparation</strong>
+              <div className="workspace-stack">
+                <button type="button" onClick={()=>setSettings(old=>({...old,removeBackground:true,cleanup:true,tolerance:32,speckleMm:1,thinLines:false}))}>Clean logo</button>
+                <button type="button" onClick={()=>setSettings(old=>({...old,removeBackground:true,cleanup:false,tolerance:18,speckleMm:.2,thinLines:false}))}>Preserve fine details</button>
+                <button type="button" onClick={()=>setSettings(old=>({...old,removeBackground:true,cleanup:true,tolerance:32,speckleMm:.3,thinLines:true}))}>Line artwork</button>
+                <button type="button" onClick={()=>setSettings(old=>({...old,removeBackground:false,cleanup:false,speckleMm:0,thinLines:false}))}>Keep original background</button>
+              </div>
+              <small>Presets change preparation settings only. Generate a new stitch preview to compare results.</small>
+            </div>
             <label>Minimum detail size <strong>{settings.speckleMm.toFixed(1)} mm</strong><input type="range" min="0" max="3" step=".1" value={settings.speckleMm} onChange={e=>setSettings(old=>({...old,speckleMm:Number(e.target.value)}))}/></label>
             <small>Lower values retain tiny artwork details. Higher values remove small isolated specks; inspect lettering before exporting.</small>
             <div className="digitizer-thread-picker" role="group" aria-label="Thread colors">
