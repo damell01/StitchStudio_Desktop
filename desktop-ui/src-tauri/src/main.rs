@@ -1049,6 +1049,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let score=|d:&Design|optimization_seconds(d,speed,trim);
     let mut choices=Vec::new();
+    if let Some(v)=narrow_artwork_candidate(source,original,uids,options){choices.push(v);}
     if let Some(v)=combined_economy_candidate(source,original,uids,options){choices.push(v);}
     if !options.exhausted(){if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){choices.push(v);}}choices.push((doc,plan));}}
     for angle in [0.,45.,90.] {
@@ -1238,13 +1239,39 @@ fn union_redundant_fills(source:&zigzag::document::Document,uids:Option<&[usize]
     if !changed{return None}
     doc.sync().ok()?;Some(doc)
 }
+// Reclassify expensive narrow traced fills as centerline runs when the
+// existing geometry admits a continuous centerline. This is a production
+// reconstruction, not a reduction in row density.
+fn narrow_artwork_candidate(source:&zigzag::document::Document,base:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Option<(zigzag::document::Document,Design)>{
+    use zigzag::{params::Kind,svg::Geometry};
+    let mut doc=source.clone();let mut changed=false;
+    for i in 0..doc.shapes.len(){
+        if options.exhausted(){return None}
+        if doc.records_text(i)||doc.layer_properties(&doc.shapes[i].id).is_some_and(|l|l.hidden||l.locked){continue}
+        let s=&mut doc.shapes[i];
+        if !uids.is_none_or(|ids|ids.contains(&s.uid))||s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")
+            ||s.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill||s.params.trim==Some(true)||s.params.stop==Some(true)
+            ||s.params.start.is_some()||s.params.end.is_some()||s.params.colors.is_some()
+            ||base.per_shape.get(i).copied().unwrap_or(0)<24 {continue}
+        let Geometry::Fill{rings,rule}=&s.geometry else{continue};
+        if zigzag::design::thin_centerline(rings,*rule).is_none(){continue}
+        s.params.kind=Some(Kind::Run);s.params.border=Some(false);s.params.repeats=Some(1);s.params.len=Some(2.0);
+        changed=true;
+    }
+    if !changed{return None}
+    doc.sync().ok()?;
+    let plan=doc.plan();
+    Some((doc,plan))
+}
 fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
         let seconds=|d:&Design|optimization_seconds(d,speed,trim);
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
+        let stitch_goal=options.target_stitches.or_else(||(original.stitch_count()>15_000).then_some(10_000));
         let mut candidates=Vec::new();
         if options.quick {
+            if strength==3&&!options.exhausted(){if let Some(v)=narrow_artwork_candidate(source,original,uids,options){candidates.push(v);}}
             if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}
             if strength==3 && original.stitch_count()>=12_000 {
                 if let Some(v)=combined_economy_candidate(source,original,uids,options){candidates.push(v);}
@@ -1259,6 +1286,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             }
         }else{
         if !options.exhausted(){
+            if strength>=2{if let Some(v)=narrow_artwork_candidate(source,original,uids,options){candidates.push(v);}}
             if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
             if strength==3{if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){candidates.push(v);}}candidates.push((doc,plan));}}
         }
@@ -1310,7 +1338,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         candidates.sort_by(|(_,a),(_,b)|{
             let rank=|d:&Design|{
                 let time_gap=target.map(|t|(seconds(d)/t-1.).max(0.)).unwrap_or(0.);
-                let stitch_gap=options.target_stitches.filter(|n|*n>0).map(|n|(d.stitch_count() as f64/n as f64-1.).max(0.)).unwrap_or(0.);
+                let stitch_gap=stitch_goal.filter(|n|*n>0).map(|n|(d.stitch_count() as f64/n as f64-1.).max(0.)).unwrap_or(0.);
                 (time_gap+stitch_gap,seconds(d))
             };
             let a=rank(a);let b=rank(b);a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1))
@@ -1381,7 +1409,7 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
         let mut options=options.unwrap_or_default();
         options.budget = Some(budget.clone());
         let mut variants=Vec::new();let mut stored=Vec::new();
-        let strengths: &[u8] = if options.solid_only { &[4] } else if options.quick { &[2,3] } else if previous_id.is_some() { &[5,4] } else { &[2,3,5,4,1] };
+        let strengths: &[u8] = if options.solid_only { &[4] } else if options.quick && original.stitch_count()>15_000 { &[3,2] } else if options.quick { &[2,3] } else if previous_id.is_some() { &[5,4] } else { &[2,3,5,4,1] };
         for &strength in strengths{
             if options.exhausted(){break}
             if strength>=4{
