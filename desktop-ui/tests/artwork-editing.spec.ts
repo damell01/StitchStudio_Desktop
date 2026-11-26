@@ -1,5 +1,38 @@
 import { expect, test } from '@playwright/test';
 
+test('solid fill previews only the selected artwork until the user applies it', async ({page}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('studio-tour-seen','1');
+    const plan = {name:'Bow logo', stitches:120, trims:8, blocks:[{color:[88,52,108],runs:[[[-16,-5],[-5,4]]]}]};
+    const objects = [
+      {uid:10,label:'Bow',kind:'fill',color:[88,52,108],bounds:[-16,-5,11,9],path:'M-16 -5H-5V4H-16Z',fill_rule:'nonzero'},
+      {uid:11,label:'Lettering',kind:'fill',color:[88,52,108],bounds:[8,-3,10,11],path:'M8 -3H18V8H8Z',fill_rule:'nonzero'},
+    ];
+    const calls: unknown[]=[];
+    const solid={...plan,stitches:65,trims:2};
+    Object.assign(window,{solidCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:unknown) {
+      if(command==='current_preview')return plan;
+      if(command==='editable_objects')return objects;
+      if(command==='preview_simplification'){
+        calls.push([command,args]);return {id:71,variants:[{strength:4,plan:solid,reason:null,quality:{coverage:93,density_peak:12}}]};
+      }
+      if(command==='apply_simplification'){calls.push([command,args]);return solid;}
+      return null;
+    }}});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await page.locator('.design-canvas [data-artwork-uid="10"]').click();
+  await page.getByRole('button',{name:'Make selection solid'}).click();
+  const dialog=page.getByRole('dialog',{name:'Simplify design'});
+  await expect(dialog.getByText('65 stitches')).toBeVisible();
+  const calls=()=>page.evaluate(()=>(window as unknown as {solidCalls:unknown[]}).solidCalls);
+  expect(await calls()).toEqual([['preview_simplification',expect.objectContaining({uids:[10],options:expect.objectContaining({solidOnly:true})})]]);
+  await dialog.getByRole('button',{name:'Apply selected design'}).click();
+  await expect(dialog).toBeHidden();
+  expect((await calls()).at(-1)).toEqual(['apply_simplification',{id:71,strength:4}]);
+});
+
 test('canvas selection edits the chosen vector and the pan tool only changes the camera', async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('studio-tour-seen','1');

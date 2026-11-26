@@ -29,6 +29,7 @@ Run the resulting setup executable to install the app. Use Windows **Installed a
 
 - **Maximize in hoop** and **Fill hoop** regenerate stitches when size changes. When only placement needs to change, they move the existing stitch plan as a unit.
 - For a dense logo, compare **Balanced** and **Maximum** first. Choose **Deep optimization** in the digitizer or Simplify dialog to inspect **Fast Stitch** and **Solid silhouette** when available. Fast Stitch can use longer penetrations and wider spacing in broad fills. Solid silhouette can change decorative shading. Review stitch count, trims, and footprint before applying an option.
+- To simplify just a bow or other ornament, select its artwork on the canvas or in Layers and choose **Make selection solid**. Shift-click to include neighboring shading pieces. The preview can join compatible pieces of the same color while preserving large openings. Check the estimated sewing time before applying it.
 - Choose **Insert design** or press Ctrl+I on Windows or Cmd+I on macOS to add to the current workspace. Machine import accepts DST, PES, PEC, EXP, JEF and VP3. Save as `.stitchstudio` to keep editable geometry and layer properties.
 - Open **Layers** or **Inspector** from the editor toolbar. Smaller windows open one panel at a time. Press F11 for focus view. Drag the camera toolbar grip up or down to dock it above or below the canvas.
 - Select an object. Choose **Edit artwork nodes** or **Edit stitch points** to move, add, or erase individual points. Applying changes creates one undo step.
