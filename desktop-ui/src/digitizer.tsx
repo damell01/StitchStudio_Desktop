@@ -24,6 +24,9 @@ type Review = {
   dst_stitches: number;
   color_changes: number;
   optimization?: [number,number] | null;
+  estimated_seconds?: number;
+  original_estimated_seconds?: number;
+  original_trims?: number;
 };
 
 const defaults = {
@@ -390,6 +393,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
         <div hidden={inspector!=='quality'} className="digitizer-inspector-content">
         <h3>Stitch quality</h3>
         <section className="digitizer-quality-summary" aria-label="Stitch efficiency target"><strong>Production stitch target</strong><div><span>Preferred goal</span><b>10,000 or fewer</b></div><div><span>Review threshold</span><b>15,000</b></div><div><span>Current plan</span><b>{review.plan.stitches.toLocaleString()}</b></div><small>{review.plan.stitches<=10000?'Preferred stitch goal reached.':review.plan.stitches<=15000?'Within review threshold; further reduction may be possible.':'Above preferred range. Review alternatives, artwork complexity and physical size before exporting.'}</small><small>Count depends on embroidery dimensions, coverage, fabric and stitch type. The optimizer preserves coverage rather than forcing a fixed cap.</small></section>{review.optimization&&<section className="digitizer-quality-summary" aria-label="Automatic optimization results"><strong>Automatic production optimization applied</strong><div><span>Original plan</span><b>{review.optimization[0].toLocaleString()}</b></div><div><span>Optimized plan</span><b>{review.optimization[1].toLocaleString()}</b></div><div><span>Stitch points saved</span><b>{(review.optimization[0]-review.optimization[1]).toLocaleString()} ({(100*(review.optimization[0]-review.optimization[1])/Math.max(1,review.optimization[0])).toFixed(1)}%)</b></div><small>The alternative passed automated geometry and stitch-count comparisons. Test sew to confirm coverage.</small></section>}
+        {review.estimated_seconds!=null&&review.original_estimated_seconds!=null&&<section className="digitizer-quality-summary" aria-label="Estimated production time"><strong>Production estimate</strong><div><span>Before optimization</span><b>{(review.original_estimated_seconds/60).toFixed(1)} min</b></div><div><span>Current design</span><b>{(review.estimated_seconds/60).toFixed(1)} min</b></div><div><span>Estimated time saved</span><b>{((review.original_estimated_seconds-review.estimated_seconds)/60).toFixed(1)} min</b></div>{review.original_trims!=null&&<div><span>Trims before → after</span><b>{review.original_trims} → {review.plan.trims}</b></div>}<small>Estimated at 800 stitches/min and 3 seconds per trim; actual machine time varies.</small></section>}
         <section className="digitizer-quality-summary" aria-label="Design preflight">
           <strong>{review.warnings.length || review.quality.long || review.quality.zero ? 'Review recommended' : 'No flagged geometry issues'}</strong>
           <small>Automated geometry checks are not a substitute for a test sew.</small>
