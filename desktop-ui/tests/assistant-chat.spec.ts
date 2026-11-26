@@ -91,6 +91,7 @@ test('the offline assistant previews requests and runs only the confirmed change
   await ask('Simplify the bow into a solid shape');
   await expect(proposal).toContainText('1 matching layer');
   expect((await callsOf('preview_simplification')).at(-1)?.args.uids).toEqual([8]);
+  await expect(dialog.getByRole('button',{name:'Skip',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await open.click();

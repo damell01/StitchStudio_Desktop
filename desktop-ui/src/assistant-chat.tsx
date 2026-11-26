@@ -75,6 +75,7 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const skip = useRef<HTMLButtonElement>(null);
   const feed = useRef<HTMLDivElement>(null);
   const sequence = useRef(0);
   const processing = useRef(false);
@@ -96,7 +97,7 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
   }, [entries, proposal, operation]);
 
   useEffect(() => {
-    if (open && !operation && !proposal && !busy) input.current?.focus();
+    if (open && !operation && !busy) (proposal ? skip.current : input.current)?.focus();
   }, [open, operation, proposal, busy]);
 
   function append(speaker: Entry['speaker'], text: string) {
@@ -154,6 +155,12 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
   }
 
   return <dialog ref={dialog} className="assistant-chat" aria-labelledby="assistant-chat-title"
+    onKeyDown={event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+      }
+    }}
     onCancel={event => {event.preventDefault(); close();}}>
     <header className="assistant-chat-heading">
       <span className="assistant-icon"><Sparkles size={21} aria-hidden="true"/></span>
@@ -175,7 +182,7 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
         <p>{proposal.detail}</p>
         {proposal.comparison && <PlanComparison {...proposal.comparison}/>}
         <div className="assistant-proposal-actions">
-          <button type="button" disabled={disabled} onClick={() => {
+          <button ref={skip} type="button" disabled={disabled} onClick={() => {
             setProposal(null);
             append('Assistant', 'Change skipped.');
           }}>Skip</button>
