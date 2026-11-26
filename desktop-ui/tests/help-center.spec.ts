@@ -63,3 +63,38 @@ test('opens lettering help without clearing the text in progress', async ({page}
   await expect(help).toBeFocused();
   await expect(lettering).toHaveValue('TEAM');
 });
+
+test('opens searchable guides in the editor and keeps the project and viewport', async ({page}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('studio-tour-seen', '1');
+    const plan = {name:'Working design',stitches:2,trims:0,blocks:[{color:[105,69,162],runs:[[[0,0],[10,12]]]}]};
+    Object.assign(window, {__TAURI_INTERNALS__: {
+      async invoke(command: string) {
+        if (command === 'current_preview') return plan;
+        return ['editable_objects', 'fabric_catalog'].includes(command) ? [] : null;
+      },
+    }});
+  });
+  await page.goto('/');
+  await page.getByRole('button', {name: /Blank design/}).last().click();
+  const workspace = page.getByRole('main');
+  await expect(workspace.getByRole('heading', {name:'Working design'})).toBeVisible();
+  await page.getByTitle('Zoom in', {exact:true}).click();
+  const canvas = workspace.locator('.design-canvas');
+  const view = await canvas.getAttribute('viewBox');
+
+  const help = workspace.getByRole('button', {name:'Editor guides',exact:true});
+  await help.click();
+  const dialog = page.getByRole('dialog', {name:'Editor guides'});
+  await expect(dialog.getByRole('heading', {name:'Insert into an open design'})).toBeVisible();
+  await dialog.getByRole('searchbox', {name:'Search how-to guides'}).fill('puffy');
+  await expect(dialog.getByRole('heading', {name:'Make puffy lettering with foam'})).toBeVisible();
+  await dialog.getByText('Show screenshot', {exact:true}).click();
+  await expect(dialog.getByRole('img', {name:/Foam satin with end caps/})).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await expect(dialog).toBeHidden();
+  await expect(help).toBeFocused();
+  await expect(workspace.getByRole('heading', {name:'Working design'})).toBeVisible();
+  await expect(canvas).toHaveAttribute('viewBox', view!);
+});

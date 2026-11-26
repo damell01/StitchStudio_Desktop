@@ -25,7 +25,7 @@ import {InsertDesignDialog} from './insert-design-dialog';
 import {confirmAction,toast} from './dialogs';
 import {ExportCenter} from './export-center';
 import {readThreads} from './threads';
-import {StitchPicker} from './stitch-guide';
+import {EditorHelp, StitchPicker} from './stitch-guide';
 import {useState,useEffect,useRef,useMemo,type PointerEvent as ReactPointerEvent,type CSSProperties} from 'react';
 import {Save,Undo2,Redo2,FolderOpen,Download,RotateCw,Move,Maximize,Play,Pause,Eye,EyeOff,PanelLeft,PanelRight,ZoomIn,ZoomOut,Grid,Scan,FlipHorizontal,FlipVertical,FilePlus,Layers3,SquareDashed,Scissors,RotateCcw,Minimize,Menu,StepBack,StepForward,MousePointer2,PenLine,Hand,Copy,Trash2,GripHorizontal,Search,X,Waypoints,Group,Wrench,Palette,MoreHorizontal,CheckCircle2,LockKeyhole,LockKeyholeOpen,GripVertical,SlidersHorizontal} from 'lucide-react';
 import {invoke,isTauri} from '@tauri-apps/api/core';
@@ -1136,6 +1136,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <Layers3 size={17} aria-hidden="true"/>
     <h1 title={plan?.name || 'Untitled design'}>{plan?.name || 'Untitled design'}</h1>
   </div>
+  <EditorHelp/>
   <div className="studio-command-group">
     <button className="studio-tool-icon" title="Open artwork" aria-label="Open artwork" disabled={busy} onClick={open}><FolderOpen size={18}/></button>
     <button className="studio-insert-action" title="Insert design (Ctrl+I or Cmd+I)" aria-label="Insert design" disabled={busy} onClick={openInsertDialog}><FilePlus size={18}/><span>Insert design</span></button>

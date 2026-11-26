@@ -22,7 +22,7 @@ The [desktop build and packaging guide](docs/DESKTOP.md) has local commands for 
 3. Save a `.stitchstudio` project. Use **Insert design** to add a template or a saved machine file to the same project.
 4. Check hoop fit and open **Thread order** to review the blocks. Choose **Export design** and select a format your machine accepts. Test sew a new design on matching scrap fabric.
 
-Open **Help → Help Center** for searchable how-to guides and screenshots, including foam satin lettering, appliqué, and mapping threads on a Poolin EOM. Use the **?** beside the Digitize, Lettering, or Appliqué page title to read its guide without leaving the page. **Quick tour** walks through the main areas of the app and can be restarted from Help.
+Use **?** in the editor toolbar to search how-to guides and view screenshots while your project stays open. Digitize, Lettering, and Appliqué also have a **?** for help with that tool. Open **Help → Help Center** for the visual stitch reference or to restart the optional tour.
 
 ## Automatic updates
 

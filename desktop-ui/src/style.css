@@ -1503,6 +1503,10 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .workflow-help-heading h2{margin:0}
 .workflow-help ol{padding-left:24px}
 .workflow-help li{padding-block:4px}
+.editor-help{width:min(880px,calc(100vw - 32px))}
+.editor-help .workflow-help-heading{margin-bottom:12px}
+.editor-help .help-lesson-card{min-width:0}
+.editor-help .help-lesson-nav button{white-space:normal}
 .help-reference-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .help-reference-heading h2{margin:0}
 .help-reference-heading input{width:min(280px,40%)}

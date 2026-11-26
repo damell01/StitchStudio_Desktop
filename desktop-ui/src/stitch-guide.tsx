@@ -92,6 +92,14 @@ const lessons: Lesson[] = [
     screenshot: {src: appliqueImage, alt: 'The appliqué design preview with the Tack-down stage selected and the sewing sequence below it.'},
   },
   {
+    name: 'Simplify a design',
+    steps: [
+      'Open Simplify in the studio toolbar. To target part of the design, select the objects first and choose Selected objects under Adjust optimization options.',
+      'Generate previews and compare stitch counts, trims, estimated sewing time, and visible details with the original.',
+      'Choose Apply selected design when the preview looks right, or Keep original to leave the design as it is.',
+    ],
+  },
+  {
     name: 'Prevent puckering and thread breaks',
     steps: [
       'Choose a stabilizer, needle and thread suited to your fabric.',
@@ -137,38 +145,64 @@ export function WorkflowHelp({page}: {page: string}) {
   );
 }
 
-export function HelpCenter({onStartTour}: {onStartTour: () => void}) {
-  const [active, setActive] = useState(lessons[0].name);
+function GuideBrowser({firstLesson = lessons[0].name, onStartTour}: {firstLesson?: string; onStartTour?: () => void}) {
+  const [active, setActive] = useState(firstLesson);
   const [lessonQuery, setLessonQuery] = useState('');
-  const [stitchQuery, setStitchQuery] = useState('');
   const matchingLessons = lessons.filter(lesson =>
     [lesson.name, ...lesson.steps].join(' ').toLowerCase().includes(lessonQuery.trim().toLowerCase()));
   const lesson = matchingLessons.find(item => item.name === active) ?? matchingLessons[0];
+
+  return (
+    <div className="help-lesson-layout">
+      <div className="help-lesson-nav">
+        <h2>How-to guides</h2>
+        <input type="search" aria-label="Search how-to guides" placeholder="Search how-to guides…" value={lessonQuery} onChange={event => setLessonQuery(event.target.value)}/>
+        <nav aria-label="How-to guides">
+          {matchingLessons.map(item => (
+            <button key={item.name} aria-pressed={lesson?.name === item.name} onClick={() => setActive(item.name)}>{item.name}</button>
+          ))}
+        </nav>
+        {onStartTour && <button className="help-tour-launch" onClick={onStartTour}><PlayCircle size={16} aria-hidden="true"/> Start guided tour</button>}
+      </div>
+      {lesson ? (
+        <article className="help-lesson-card" key={lesson.name}>
+          <h2>{lesson.name}</h2>
+          <LessonSteps lesson={lesson}/>
+        </article>
+      ) : (
+        <article className="help-lesson-card"><p role="status">No matching guides. Try searching for a tool or action.</p></article>
+      )}
+    </div>
+  );
+}
+
+export function EditorHelp() {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  return (
+    <>
+      <button type="button" className="studio-tool-icon" title="Editor guides" aria-label="Editor guides" aria-haspopup="dialog" onClick={() => dialog.current?.showModal()}>
+        <HelpCircle size={17} aria-hidden="true"/>
+      </button>
+      <dialog ref={dialog} className="workflow-help editor-help" aria-labelledby={titleId}>
+        <div className="workflow-help-heading">
+          <h2 id={titleId}>Editor guides</h2>
+          <button type="button" onClick={() => dialog.current?.close()}>Close</button>
+        </div>
+        <GuideBrowser firstLesson="Insert into an open design"/>
+      </dialog>
+    </>
+  );
+}
+
+export function HelpCenter({onStartTour}: {onStartTour: () => void}) {
+  const [stitchQuery, setStitchQuery] = useState('');
   const visibleStitches = stitchGuides.filter(stitch =>
     [stitch.name, stitch.tip, stitch.watch].join(' ').toLowerCase().includes(stitchQuery.trim().toLowerCase()));
 
   return (
     <section className="help-workspace help-dashboard">
-      <div className="help-lesson-layout">
-        <div className="help-lesson-nav">
-          <h2>How-to guides</h2>
-          <input type="search" aria-label="Search how-to guides" placeholder="Search how-to guides…" value={lessonQuery} onChange={event => setLessonQuery(event.target.value)}/>
-          <nav aria-label="How-to guides">
-            {matchingLessons.map(item => (
-              <button key={item.name} aria-pressed={lesson?.name === item.name} onClick={() => setActive(item.name)}>{item.name}</button>
-            ))}
-          </nav>
-          <button className="help-tour-launch" onClick={onStartTour}><PlayCircle size={16} aria-hidden="true"/> Start guided tour</button>
-        </div>
-        {lesson ? (
-          <article className="help-lesson-card" key={lesson.name}>
-            <h2>{lesson.name}</h2>
-            <LessonSteps lesson={lesson}/>
-          </article>
-        ) : (
-          <article className="help-lesson-card"><p role="status">No matching guides. Try searching for a tool or action.</p></article>
-        )}
-      </div>
+      <GuideBrowser onStartTour={onStartTour}/>
       <div className="help-reference-heading">
         <div><h2>Visual stitch reference</h2><small>Explore stitch types and their uses.</small></div>
         <input type="search" aria-label="Search stitch types" placeholder="Search stitch types…" value={stitchQuery} onChange={event => setStitchQuery(event.target.value)}/>
