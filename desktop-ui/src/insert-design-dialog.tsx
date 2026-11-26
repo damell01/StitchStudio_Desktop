@@ -128,6 +128,23 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
     });
   }
 
+  useEffect(()=>{
+    const receive=(event:DragEvent)=>{
+      if(event.defaultPrevented||!event.dataTransfer?.types.includes('Files')||lock.current)return;
+      const file=event.dataTransfer.files[0];
+      if(!file||!/\.(png|jpe?g|webp|bmp|svg)$/i.test(file.name))return;
+      event.preventDefault();
+      if(!dialogRef.current?.open)dialogRef.current?.showModal();
+      chooseArtwork(file);
+    };
+    const allow=(event:DragEvent)=>{
+      if(event.dataTransfer?.types.includes('Files')&&!lock.current)event.preventDefault();
+    };
+    window.addEventListener('dragover',allow);
+    window.addEventListener('drop',receive);
+    return()=>{window.removeEventListener('dragover',allow);window.removeEventListener('drop',receive)};
+  },[dialogRef]);
+
   async function loadFiles() {
     setFiles(await invoke<string[]>('personal_designs'));
   }
