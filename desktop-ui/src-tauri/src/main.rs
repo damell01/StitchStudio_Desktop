@@ -903,6 +903,11 @@ fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->Optim
     };
     let (a,_)=sample(original);let (b,peak)=sample(plan);
     let overlap=a.intersection(&b).count() as f64/a.union(&b).count().max(1) as f64;
+    // A small contrasting detail should not disappear inside a large fill.
+    let mut totals=HashMap::<[u8;3],(usize,usize)>::new();
+    for cell in a.union(&b){let t=totals.entry(cell.0).or_default();t.0+=1;if a.contains(cell)&&b.contains(cell){t.1+=1;}}
+    let weakest=totals.values().map(|(n,k)|*k as f64/(*n).max(1) as f64).fold(1.0_f64,f64::min);
+    let overlap=overlap.min(weakest);
     OptimizationQuality{coverage:overlap*100.,density_peak:peak,seconds:optimization_seconds(plan,speed,trim)}
 }
 fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
@@ -912,7 +917,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     let mut mode=options.clone();mode.target_minutes=None;mode.solid=true;mode.merge=true;mode.auto_types=true;
     if let Ok(v)=choose_simplification(source,original,3,uids,false,&mode){choices.push(v);}
     for angle in [0.,30.,60.,90.,120.,150.] {if let Some(v)=economical_fill_candidate(source,original,uids,3,angle){choices.push(v);}}
-    if uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&s.params.kind!=Some(zigzag::params::Kind::Manual)){
+    if uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&!matches!(s.params.kind,Some(zigzag::params::Kind::Manual|zigzag::params::Kind::Applique))){
         // Reuse dependency-aware ordering, without moving overlapping layers.
         let mut doc=source.clone();doc.settings.hat_order=true;
         if doc.sync().is_ok(){
@@ -2785,6 +2790,38 @@ mod tests {
         assert_eq!(formats::write_format(&workspace.source.unwrap().plan(), "dst").unwrap(), expected);
     }
 
+
+    #[test]
+    fn sports_applique_keeps_explicit_stitch_kind() {
+        let svg=r#"<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="80mm" viewBox="0 0 80 80"><circle id="applique" cx="40" cy="40" r="30" fill="navy"/></svg>"#;
+        let mut w=Workspace::default();
+        insert_vector_artwork(&mut w,svg,"Sports patch",60.,0.,0.).unwrap();
+        let doc=w.source.as_ref().unwrap();
+        assert_eq!(doc.shapes[0].params.kind,Some(zigzag::params::Kind::Applique));
+        let design=w.current.as_ref().unwrap();
+        assert!(design.blocks.len()>=3);
+        validate_export(design,"dst",100.,100.).unwrap();
+    }
+    #[test]
+    fn optimizer_preserves_small_contrasting_color() {
+        use zigzag::{design::{Block,Run},geom::P};
+        let run=Run{pts:vec![P::new(0.,0.),P::new(20.,0.)],trim_before:false};
+        let original=Design{blocks:vec![Block{color:[0,0,0],runs:vec![run.clone()]},Block{color:[255,0,0],runs:vec![run.clone()]}],..Default::default()};
+        let candidate=Design{blocks:vec![Block{color:[0,0,0],runs:vec![run]}],..Default::default()};
+        assert_eq!(optimization_quality(&original,&candidate,800.,3.).coverage,0.);
+        assert_eq!(optimization_quality(&original,&original,800.,3.).coverage,100.);
+    }
+    #[test]
+    fn optimizer_reports_savings_for_overlapping_fill_fixture() {
+        let svg=r#"<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="60mm" viewBox="0 0 80 60"><rect id="a" x="5" y="5" width="45" height="40" fill="navy"/><rect id="b" x="10" y="5" width="45" height="40" fill="navy"/></svg>"#;
+        let doc=zigzag::document::Document::from_svg(svg,"Overlap",None).unwrap();
+        let original=doc.plan();let start=std::time::Instant::now();
+        let options=SimplifyOptions{merge:true,..Default::default()};
+        let (_,candidate)=choose_simplification(&doc,&original,2,None,false,&options).expect("overlapping fills should admit a faster alternative");
+        assert!(candidate.stitch_count()<original.stitch_count());
+        assert!(optimization_seconds(&candidate,800.,3.)<optimization_seconds(&original,800.,3.));
+        eprintln!("optimizer fixture: {} -> {} stitches; {:.1} -> {:.1} estimated seconds; generation {:?}",original.stitch_count(),candidate.stitch_count(),optimization_seconds(&original,800.,3.),optimization_seconds(&candidate,800.,3.),start.elapsed());
+    }
     #[test]
     fn bundled_vector_insert_scales_visible_width_and_keeps_existing_objects() {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 500 500"><rect x="100" y="100" width="200" height="100" fill="purple"/></svg>"#;
