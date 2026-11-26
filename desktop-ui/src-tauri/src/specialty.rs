@@ -93,6 +93,69 @@ pub(crate) async fn export_applique_cut_svg(shape: String, width: f64) -> Result
     Ok(true)
 }
 
+
+// Original built-in polygon alphabets, independent of system fonts.
+fn alphabet_path(c:char)->Option<&'static str>{
+ Some(match c{
+ 'A'=>"M0 100 L25 0 H75 L100 100 H73 L65 72 H35 L27 100 Z M43 48 H57 L50 20 Z",
+ 'B'=>"M0 0 H65 L90 15 V40 L75 50 L95 62 V85 L75 100 H0 Z M25 20 V40 H55 L65 35 V25 L55 20 Z M25 60 V80 H60 L70 74 V66 L60 60 Z",
+ 'C'=>"M25 0 H95 V25 H35 L25 35 V65 L35 75 H95 V100 H25 L0 75 V25 Z",
+ 'D'=>"M0 0 H60 L95 28 V72 L60 100 H0 Z M25 25 V75 H50 L70 60 V40 L50 25 Z",
+ 'E'=>"M0 0 H95 V24 H27 V38 H80 V62 H27 V76 H95 V100 H0 Z",
+ 'F'=>"M0 0 H95 V25 H27 V40 H80 V65 H27 V100 H0 Z",
+ 'G'=>"M25 0 H95 V25 H35 L25 35 V65 L35 75 H70 V62 H50 V40 H95 V100 H25 L0 75 V25 Z",
+ 'H'=>"M0 0 H27 V37 H73 V0 H100 V100 H73 V63 H27 V100 H0 Z",
+ 'I'=>"M10 0 H90 V23 H64 V77 H90 V100 H10 V77 H36 V23 H10 Z",
+ 'J'=>"M35 0 H100 V75 L75 100 H25 L0 75 V55 H27 V65 L37 75 H63 L73 65 V25 H35 Z",
+ 'K'=>"M0 0 H27 V38 L65 0 H100 L55 48 L100 100 H65 L27 60 V100 H0 Z",
+ 'L'=>"M0 0 H28 V75 H95 V100 H0 Z",
+ 'M'=>"M0 0 H27 L50 43 L73 0 H100 V100 H75 V45 L50 85 L25 45 V100 H0 Z",
+ 'N'=>"M0 0 H27 L73 58 V0 H100 V100 H73 L27 42 V100 H0 Z",
+ 'O'=>"M25 0 H75 L100 25 V75 L75 100 H25 L0 75 V25 Z M35 25 L25 35 V65 L35 75 H65 L75 65 V35 L65 25 Z",
+ 'P'=>"M0 0 H75 L100 25 V48 L75 72 H27 V100 H0 Z M27 24 V48 H64 L75 38 V34 L64 24 Z",
+ 'Q'=>"M25 0 H75 L100 25 V72 L85 87 L100 100 H68 L60 92 H25 L0 70 V25 Z M35 25 L25 35 V62 L35 70 H65 L75 60 V35 L65 25 Z",
+ 'R'=>"M0 0 H75 L100 25 V48 L75 67 L100 100 H66 L43 70 H27 V100 H0 Z M27 24 V46 H64 L75 35 L64 24 Z",
+ 'S'=>"M25 0 H95 V25 H35 L27 32 L35 40 H75 L100 65 V75 L75 100 H5 V75 H65 L73 68 L65 60 H25 L0 35 V25 Z",
+ 'T'=>"M0 0 H100 V25 H64 V100 H36 V25 H0 Z",
+ 'U'=>"M0 0 H27 V65 L37 75 H63 L73 65 V0 H100 V75 L75 100 H25 L0 75 Z",
+ 'V'=>"M0 0 H29 L50 65 L71 0 H100 L66 100 H34 Z",
+ 'W'=>"M0 0 H24 L34 65 L50 24 L66 65 L76 0 H100 L84 100 H60 L50 72 L40 100 H16 Z",
+ 'X'=>"M0 0 H32 L50 29 L68 0 H100 L67 50 L100 100 H68 L50 71 L32 100 H0 L33 50 Z",
+ 'Y'=>"M0 0 H32 L50 35 L68 0 H100 L64 63 V100 H36 V63 Z",
+ 'Z'=>"M0 0 H100 V23 L37 75 H100 V100 H0 V77 L63 25 H0 Z",
+ _=>return None})
+}
+fn applique_alphabet(text:&str,style:&str,height:f64,color:[u8;3])->Result<Document,String>{
+ if !(20.0..=100.0).contains(&height)||text.is_empty()||text.chars().count()>16||!text.chars().all(|c|c.is_ascii_alphabetic()||c==' '){return Err("Use 1–16 A–Z letters and a height of 20–100 mm.".into())}
+ let scale=match style{"block"=>1.0,"collegiate"=>0.82,"wide"=>1.18,_=>return Err("Unknown alphabet".into())};
+ let mut body=String::new();let mut x=0.;
+ for (i,c) in text.to_ascii_uppercase().chars().enumerate(){
+  if c==' '{x+=55.;continue}
+  let d=alphabet_path(c).ok_or("Unsupported letter")?;
+  let _=write!(body,r##"<path id="letter-{i}" transform="translate({x} 0) scale({scale} 1)" fill="#{:02x}{:02x}{:02x}" fill-rule="evenodd" d="{d}"/>"##,color[0],color[1],color[2]);
+  x+=100.*scale+15.;
+ }
+ if body.is_empty(){return Err("Enter at least one letter".into())}
+ let svg=format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}mm" height="{height}mm" viewBox="0 0 {x} 100">{body}</svg>"#,x*height/100.);
+ let mut doc=Document::from_svg(&svg,"Appliqué lettering",None).map_err(|e|e.to_string())?;
+ for shape in &mut doc.shapes{shape.params.kind=Some(Kind::Applique);}
+ Ok(doc)
+}
+#[tauri::command]
+pub(crate) async fn preview_applique_letters(text:String,style:String,height:f64,color:[u8;3])->Result<crate::Preview,String>{
+ tauri::async_runtime::spawn_blocking(move||Ok(crate::preview(&applique_alphabet(&text,&style,height,color)?.plan()))).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+pub(crate) async fn insert_applique_letters(text:String,style:String,height:f64,color:[u8;3],app:tauri::AppHandle)->Result<crate::Preview,String>{
+ use tauri::Manager;
+ tauri::async_runtime::spawn_blocking(move||{
+  let mut doc=applique_alphabet(&text,&style,height,color)?;
+  let svg=doc.to_svg().map_err(|e|e.to_string())?;
+  let state=app.state::<std::sync::Mutex<crate::Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;
+  crate::insert_editable_artwork(&mut w,&svg,"Appliqué lettering",0.,0.,false)
+ }).await.map_err(|e|e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
