@@ -312,6 +312,8 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
       return result.plan?'Combined edits applied. Undo reverses all changes.':result.error;
     }};
   }
+  const wantsAlternatives=/^(?:show|create|generate|give me) (?:three |some |different )?(?:layout |design )?(?:options|alternatives) (?:for|to) /i.test(input);
+  if(wantsAlternatives)input=input.replace(/^(?:show|create|generate|give me) (?:three |some |different )?(?:layout |design )?(?:options|alternatives) (?:for|to) /i,'');
   let interpreted = input;
   let intent = assistantIntent(interpreted);
   if(!intent&&localModelEnabled()&&input.trim().length<=240){
@@ -458,7 +460,15 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
       'Includes fabric placement, tack-down and finishing stitches. Check pauses on your machine.' :
       'Adds editable artwork to the current design.');
     const title = motif.applique ? 'Add appliqué motif' : 'Add design motif';
-    return compositionProposal({name:artwork.name,field:[width,height],motifs:[motif],lettering:[],edits:[]},title,detail);
+    const primary=await compositionProposal({name:artwork.name,field:[width,height],motifs:[motif],lettering:[],edits:[]},title,detail);
+    if(wantsAlternatives){
+      const alternatives:AssistantProposal[]=[];
+      for(const candidate of [{...motif,width:Math.max(motif.applique?20:5,motif.width*.8)},{...motif,position:position==='above'?'below':position==='below'?'above':position==='left'?'right':position==='right'?'left':position==='center'?'above':'sides'}]){
+        try{alternatives.push(await compositionProposal({name:artwork.name,field:[width,height],motifs:[candidate],lettering:[],edits:[]},candidate.width!==motif.width?'Compact decoration':'Alternate placement',artwork.name+' · '+candidate.width.toFixed(1)+' mm · '+candidate.position));}catch{}
+      }
+      return {...primary,alternatives};
+    }
+    return primary;
   }
 
   if (intent.kind === 'lettering') {
