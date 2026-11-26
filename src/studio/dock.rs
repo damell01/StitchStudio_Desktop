@@ -1988,6 +1988,35 @@ impl Studio {
             caption(ui, "No problems found.");
             return;
         }
+        let repairs: Vec<_> = self.doc.shapes.iter().enumerate().filter_map(|(i, s)| {
+            use zigzag::params::Kind;
+            let p = &s.params;
+            let kind = p.kind.unwrap_or(Kind::Fill);
+            if !matches!(kind, Kind::Fill | Kind::Satin) { return None; }
+            let spacing = p.spacing.is_some_and(|v| !v.is_finite() || v < 0.20);
+            let pull = p.pull.is_some_and(|v| !v.is_finite() || !(0.0..=0.8).contains(&v));
+            let split = kind == Kind::Satin && p.split.is_some_and(|v| !v.is_finite() || v <= 0.0);
+            (spacing || pull || split).then_some((i, spacing, pull, split))
+        }).collect();
+        if !repairs.is_empty() {
+            caption(ui, format!("{} objects have repairable stitch settings. Restore automatic fabric settings; artwork stays unchanged.", repairs.len()));
+            if ui.button("Repair stitch settings").on_hover_text("Reset risky density, pull and satin split overrides. Undo restores the previous settings.").clicked() {
+                let count = repairs.len();
+                match self.structural(|d| {
+                    for (i, spacing, pull, split) in repairs {
+                        let p = &mut d.shapes[i].params;
+                        if spacing { p.spacing = None; }
+                        if pull { p.pull = None; }
+                        if split { p.split = None; }
+                    }
+                    Ok(())
+                }) {
+                    Ok(()) => self.status = format!("Repaired stitch settings on {count} objects. Undo to restore."),
+                    Err(e) => self.status = format!("Repair failed: {e:#}"),
+                }
+            }
+            ui.separator();
+        }
         let mut pick = None;
         egui::ScrollArea::vertical()
             .id_salt("issues")
