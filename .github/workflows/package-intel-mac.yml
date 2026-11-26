@@ -38,11 +38,30 @@ jobs:
         run: |
           test "$(uname -m)" = x86_64
           npm run tauri build -- --bundles app dmg -- --locked
+      - name: Verify DMG and prepare diagnostic ZIP
+        run: |
+          for image in src-tauri/target/release/bundle/dmg/*.dmg; do
+            hdiutil verify "$image"
+          done
+          ditto -c -k --keepParent 'src-tauri/target/release/bundle/macos/Stitch Studio.app' src-tauri/target/release/bundle/Stitch-Studio-macOS-Intel.zip
+          unzip -tq src-tauri/target/release/bundle/Stitch-Studio-macOS-Intel.zip
       - name: Check the installer and Intel app executable
+        id: install
         run: bash ../.github/scripts/check-macos-install.sh src-tauri/target/release/bundle x86_64
       - uses: actions/upload-artifact@v4
         with:
           name: Stitch-Studio-Mac-Intel
-          path: desktop-ui/src-tauri/target/release/bundle/dmg/*.dmg
+          path: |
+            desktop-ui/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop-ui/src-tauri/target/release/bundle/Stitch-Studio-macOS-Intel.zip
+          if-no-files-found: error
+          compression-level: 0
+      - if: failure() && steps.install.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stitch-Studio-Mac-Intel-UNVALIDATED
+          path: |
+            desktop-ui/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop-ui/src-tauri/target/release/bundle/Stitch-Studio-macOS-Intel.zip
           if-no-files-found: error
           compression-level: 0
