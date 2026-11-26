@@ -74,3 +74,25 @@ The stitch metrics stayed the same on these three fixtures. Timings are single d
 - Local Tauri compilation on the Linux development image is blocked at missing GTK development dependencies. Native workflow logs and artifacts are available through [Desktop production checks](https://github.com/damell01/StitchStudio_Desktop/actions/workflows/desktop-production-checks.yml).
 - The legacy egui GUI suite also runs separately. The missing export glyph was removed. A Linux run still reported 10 legacy interaction test failures after 149 passes and 3 skips.
 - There are no physical machine results. Verify the Poolin EOM and fabric settings using the [sew-out worksheet](SEW_OUT.md).
+
+
+## Expanded design and production roadmap (November 26)
+
+Acceptance requires working native operations, undo where applicable, saved-project round trips, and tests. Existing implementations should be extended rather than duplicated.
+
+| Workstream | Acceptance criteria |
+| --- | --- |
+| Smart compositions | Editable theme layouts, names, motif repetition, relative placement and collision/hoop checks |
+| Variations | Non-destructive alternatives for palette, lettering, applique and production cost |
+| Effects | Editable outlines, shadows, decorative fills, pattern brush and thread blending |
+| Geometry | Mirror drawing, linked duplicates, replacement, envelope warp, knockout and version history |
+| Garment placement | Garment-specific size guidance, placement preview and compatible hoop checks |
+| Production | Compare stitch count, trims, colors, thread length, estimated time and cost before applying |
+| Batch personalization | CSV names, per-name fit checks, preview and collision-safe export |
+| Specialty | Puff, patches, applique, in-the-hoop and lace with explicit machine stops |
+| Multi-hoop | Split with registration marks, overlap and seam review; physical verification required |
+| Learning | Contextual explanations, fabric guidance and reversible repair suggestions |
+| Native imports | Drop artwork, fonts and machine files; report unsupported BX honestly |
+| Release | Windows/macOS native checks, regression fixtures and Poolin sew-outs |
+
+No payment implementation is in scope.
