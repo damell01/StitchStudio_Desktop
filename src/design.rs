@@ -508,8 +508,9 @@ fn fill_runs(
     let p = &shape.params;
     // Independent islands can use their own fill direction and density.
     // Preserve explicit settings and the original ordering outside auto mode.
-    let lettering = shape.id.contains("type=") && shape.id.contains("txt=") || shape.groups.iter().any(|g|g.starts_with("tl-lettering-"));
-    if (opt.hat_order || lettering) && p.angle.is_none() && p.spacing.is_none() {
+    // Automatically plan disconnected regions for manually drawn and imported artwork too.
+    // Explicit density or direction remains authoritative.
+    if p.angle.is_none() && p.spacing.is_none() && rings.iter().map(Vec::len).sum::<usize>() < 4000 {
         let islands = satin::components(rings, rule);
         if islands.len() > 1 {
             return islands.iter().flat_map(|comp| fill_runs_connected(comp, FillRule::EvenOdd, shape, opt)).collect();
@@ -533,8 +534,8 @@ fn fill_runs_connected(
     // Score disconnected row transitions separately from stitch count:
     // fewer rows alone does not guarantee fewer cuts or hidden travel.
     // Preserve authored angles and bound the extra planning cost.
-    let lettering = shape.id.contains("type=") && shape.id.contains("txt=") || shape.groups.iter().any(|g|g.starts_with("tl-lettering-"));
-    if (opt.hat_order || lettering) && p.angle.is_none() && rings.iter().map(Vec::len).sum::<usize>() < 4000 {
+    // Automatic direction selection applies to every editable fill, not just text.
+    if p.angle.is_none() && rings.iter().map(Vec::len).sum::<usize>() < 4000 {
         let mut candidates = vec![angle, 0.0, std::f64::consts::FRAC_PI_4,
             std::f64::consts::FRAC_PI_2, 3.0*std::f64::consts::FRAC_PI_4];
         let mut longest = 0.0_f64;
