@@ -632,7 +632,7 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
 #[serde(rename_all="camelCase",default)]
 struct SimplifyOptions {
     solid:bool, merge:bool, auto_types:bool, lighter_underlay:bool,
-    target_minutes:Option<f64>, speed:Option<f64>, trim_seconds:Option<f64>,
+    target_minutes:Option<f64>, speed:Option<f64>, trim_seconds:Option<f64>, quick:bool,
 }
 fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptions,uids:Option<&[usize]>,texture_radius:f64)->Result<(),String>{
     use zigzag::{params::Kind,svg::Geometry,boolean::{self,PathOp},geom::FillRule};
@@ -971,6 +971,9 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let seconds=|d:&Design|d.stitch_count() as f64/speed*60.0+d.trim_count() as f64*trim;
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
         let mut candidates=Vec::new();
+        if options.quick {
+            if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}
+        }else{
         if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
         if options.solid||options.merge||options.auto_types||options.lighter_underlay{
             let radii:&[f64]=if options.solid&&strength>=3{&[4.0,8.0,12.0]}else if options.solid&&strength==2{&[2.0,4.0]}else{&[2.0]};
@@ -1000,6 +1003,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
                     }
                 }
             }
+        }
         }
         let before=measure_stitches(original);let a=original.bounds();
         candidates.retain(|(_,d)|{let b=d.bounds();let after=measure_stitches(d);
@@ -1047,13 +1051,13 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move||{
         let state=app.state::<Mutex<Workspace>>();
-        let mut w=state.lock().map_err(|e|e.to_string())?;
-        let original=w.current.clone().ok_or("Open a design first")?;
-        let source=editable_base(&w,"Simplified design")?;
+        let (original,source,source_xml)={let w=state.lock().map_err(|e|e.to_string())?;
+        (w.current.clone().ok_or("Open a design first")?,editable_base(&w,"Simplified design")?,w.source.as_ref().map(|d|d.xml.clone()))};
         if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
         let options=options.unwrap_or_default();
         let mut variants=Vec::new();let mut stored=Vec::new();
-        for strength in 1..=5{
+        let strengths:&[u8]=if options.quick{&[2,3]}else{&[1,2,3,4,5]};
+        for &strength in strengths{
             if strength>=4{
                 match if strength==4{choose_silhouette(&source,&original,uids.as_deref(),&options)}else{choose_fast_stitch(&source,&original,uids.as_deref(),&options)}{
                     Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
@@ -1070,8 +1074,10 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
                 Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
             }
         }
+        let mut w=state.lock().map_err(|e|e.to_string())?;
+        if !w.current.as_ref().is_some_and(|d|same_stitch_plan(d,&original))||w.source.as_ref().map(|d|d.xml.clone())!=source_xml{return Err("Design changed during optimization".into())}
         w.next_draft_id=w.next_draft_id.wrapping_add(1);
-        let id=w.next_draft_id;let source_xml=w.source.as_ref().map(|d|d.xml.clone());
+        let id=w.next_draft_id;
         w.simplify_draft=Some(SimplifyDraft{id,original,source_xml,variants:stored});
         Ok(SimplifyReview{id,variants})
     }).await.map_err(|e|e.to_string())?
@@ -2542,7 +2548,7 @@ async fn insert_approved_design(file:String,x_mm:f64,y_mm:f64,app:tauri::AppHand
 }
 // Compare against the same digitized source without changing the editor.
 #[tauri::command]
-async fn compare_digitizer_draft(id:u64,app:tauri::AppHandle)->Result<Vec<SimplifyVariant>,String>{
+async fn compare_digitizer_draft(id:u64,quick:Option<bool>,app:tauri::AppHandle)->Result<Vec<SimplifyVariant>,String>{
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move||{
         let state=app.state::<Mutex<Workspace>>();
@@ -2552,7 +2558,8 @@ async fn compare_digitizer_draft(id:u64,app:tauri::AppHandle)->Result<Vec<Simpli
             (d.document.clone(),d.design.clone())
         };
         let mut variants=Vec::new();let mut alternatives=Vec::new();
-        for strength in 1..=5 {
+        let quick=quick.unwrap_or(true);let strengths:&[u8]=if quick{&[2,3]}else{&[1,2,3,4,5]};
+        for &strength in strengths {
             if strength>=4{
                 match if strength==4{choose_silhouette(&doc,&original,None,&SimplifyOptions::default())}else{choose_fast_stitch(&doc,&original,None,&SimplifyOptions::default())}{
                     Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None,quality:Some(optimization_quality(&original,&plan,800.,3.))});alternatives.push((strength,d,plan));}
@@ -2560,7 +2567,7 @@ async fn compare_digitizer_draft(id:u64,app:tauri::AppHandle)->Result<Vec<Simpli
                 }
                 continue
             }
-            let options=SimplifyOptions{solid:strength==3,merge:strength>=2,auto_types:strength>=2,..Default::default()};
+            let options=SimplifyOptions{quick,solid:strength==3,merge:strength>=2,auto_types:strength>=2,..Default::default()};
             match choose_simplification(&doc,&original,strength,None,strength==3,&options){
                 Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None,quality:Some(optimization_quality(&original,&plan,800.,3.))});alternatives.push((strength,d,plan));}
                 Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
