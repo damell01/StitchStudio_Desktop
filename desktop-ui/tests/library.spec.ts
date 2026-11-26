@@ -24,6 +24,7 @@ test.beforeEach(async ({ page }) => {
 
 test('the compact template library previews stitches before opening a template', async ({ page }) => {
   await page.getByRole('button', { name: /Template Library/ }).last().click();
+  await page.getByRole('button', { name: 'Starter templates', exact: true }).click();
   await page.getByRole('textbox', { name: 'Search templates' }).fill('thread spool');
   await page.getByRole('button', { name: 'Preview Thread spool' }).click();
   const dialog = page.getByRole('dialog', { name: 'Thread spool' });
@@ -63,6 +64,7 @@ test('the compact template library previews stitches before opening a template',
 
 test('the design library finds a personal machine file and inserts it', async ({ page }) => {
   await page.getByRole('button', { name: /Design Library/ }).last().click();
+  await page.getByRole('button', { name: 'Embroidery files', exact: true }).click();
   await page.getByRole('textbox', { name: 'Search designs' }).fill('football');
   await expect(page.getByText('football.dst')).toBeVisible();
   await expect(page.getByText('star.pes')).toBeHidden();

@@ -19,6 +19,7 @@ for (const source of ['library', 'insert dialog']) {
     await page.goto('/');
     if (source === 'library') {
       await page.getByRole('button', {name:/Design Library/}).last().click();
+      await page.getByRole('button', {name:'Embroidery files', exact:true}).click();
     } else {
       await page.getByRole('button', {name:/Blank design/}).last().click();
       await page.getByRole('button', {name:'Insert design', exact:true}).click();

@@ -36,7 +36,7 @@ function Tile({entry,onArt,actionLabel,openPrepared}:{entry:Entry;onArt:(a:Art)=
 export function CharacterGallery({onArt,actionLabel='Digitize',bundledOnly=false,onPrepared}:{onArt:(a:Art)=>void;actionLabel?:string;bundledOnly?:boolean;onPrepared?:(id:string)=>Promise<void>}){
  const [local,setLocal]=useState<Entry[]>([]),[query,setQuery]=useState(''),[group,setGroup]=useState('All'),[source,setSource]=useState<'all'|'built-in'|'local'>(bundledOnly?'built-in':'all'),[error,setError]=useState(''),[busy,setBusy]=useState(!bundledOnly);
  const [prepared,setPrepared]=useState<string[]>([]);
- useEffect(()=>{if(!onPrepared)return;let active=true;invoke<string[]>('prepared_bundled_designs').then(ids=>{if(active)setPrepared(ids)}).catch(()=>{});return()=>{active=false}},[!!onPrepared]);
+ useEffect(()=>{if(!onPrepared)return;let active=true;invoke<string[]>('prepared_bundled_designs').then(ids=>{if(active&&Array.isArray(ids))setPrepared(ids)}).catch(()=>{});return()=>{active=false}},[!!onPrepared]);
  async function refresh(){if(bundledOnly)return;setBusy(true);setError('');try{setLocal(await invoke<Entry[]>('character_list'))}catch(e){setError('Local artwork could not be loaded: '+String(e))}finally{setBusy(false)}}
  useEffect(()=>{void refresh()},[bundledOnly]);
  const entries=source==='built-in'||bundledOnly?builtins:source==='local'?local:[...builtins,...local];
