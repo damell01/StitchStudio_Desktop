@@ -736,7 +736,7 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
     let selected=|uid|uids.is_none_or(|ids|ids.contains(&uid));
     let eligible=|d:&zigzag::document::Document,i:usize| {
         let s=&d.shapes[i];
-        selected(s.uid)&&!d.records_text(i)&&!s.groups.iter().any(|g|g.starts_with("tl-lettering-"))
+        selected(s.uid)&&!d.records_text(i)&&!d.layer_properties(&s.id).is_some_and(|l|l.hidden||l.locked)&&!s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")
         && d.shapes.iter().filter(|q|q.id==s.id).count()==1
     };
     if options.solid{
@@ -1049,6 +1049,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let score=|d:&Design|optimization_seconds(d,speed,trim);
     let mut choices=Vec::new();
+    if let Some(v)=automatic_texture_candidate(source,uids,options){choices.push(v);}
     if let Some(v)=remove_covered_fill_candidate(source,uids,options){choices.push(v);}
     if let Some(v)=narrow_artwork_candidate(source,original,uids,options){choices.push(v);}
     if let Some(v)=combined_economy_candidate(source,original,uids,options){choices.push(v);}
@@ -1307,7 +1308,7 @@ fn remove_covered_fill_candidate(source:&zigzag::document::Document,uids:Option<
         let area=|rings:&[zigzag::geom::Polyline],rule|zigzag::stitch::satin::components(rings,rule).iter().map(|c|boolean::ring_area(&c[0]).abs()-c.iter().skip(1).map(|h|boolean::ring_area(h).abs()).sum::<f64>()).sum::<f64>();
         let old=area(ar,*af);
         if old<=0.||area(&overlap,FillRule::EvenOdd)<old*0.20{continue}
-        let remaining=boolean::pathfinder(&parts,PathOp::Difference);
+        let remaining=boolean::pathfinder(&parts,PathOp::MinusFront);
         if remaining.is_empty(){remove.push(a.uid);continue}
         if area(&remaining,FillRule::EvenOdd)>=old*0.80{continue}
         let path=zigzag::bezier::from_rings(&remaining,0.2);
@@ -1320,6 +1321,19 @@ fn remove_covered_fill_candidate(source:&zigzag::document::Document,uids:Option<
     else if let Some(uid)=remove.first(){let i=doc.shapes.iter().position(|s|s.uid==*uid)?;doc.delete_many(&[i]).ok()?;}
     doc.sync().ok()?;let plan=doc.plan();Some((doc,plan))
 }
+// A bounded automatic texture pass: close narrow scratches and merge
+// adjacent same-thread fragments, then let the actual stitch plan decide
+// whether this is an improvement. Never discard whole decorative objects.
+fn automatic_texture_candidate(source:&zigzag::document::Document,uids:Option<&[usize]>,options:&SimplifyOptions)->Option<(zigzag::document::Document,Design)>{
+    if options.exhausted(){return None}
+    let mut mode=options.clone();mode.solid=true;mode.merge=true;mode.auto_types=false;mode.lighter_underlay=false;
+    let mut doc=rebuild_solid_artwork(source,uids,6.0,&mode).unwrap_or_else(||source.clone());
+    if mode.exhausted(){return None}
+    optimize_geometry(&mut doc,&mode,uids,4.0).ok()?;
+    if doc.xml==source.xml||mode.exhausted(){return None}
+    let plan=doc.plan();
+    Some((doc,plan))
+}
 fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
@@ -1331,6 +1345,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             if strength==3&&!options.exhausted(){if let Some(v)=remove_covered_fill_candidate(source,uids,options){candidates.push(v);}if !options.exhausted(){if let Some(v)=narrow_artwork_candidate(source,original,uids,options){candidates.push(v);}}}
             if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}
             if strength==3 && original.stitch_count()>=12_000 {
+                if !options.exhausted(){if let Some(v)=automatic_texture_candidate(source,uids,options){candidates.push(v);}}
                 if let Some(v)=combined_economy_candidate(source,original,uids,options){candidates.push(v);}
                 if !options.exhausted(){if let Some(v)=economical_fill_candidate(source,original,uids,5,0.0){candidates.push(v);}}
                 if !options.exhausted(){
