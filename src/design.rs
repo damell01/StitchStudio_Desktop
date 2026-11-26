@@ -450,6 +450,25 @@ fn mean_width(r: &Rails) -> f64 {
     ps.iter().map(|(a, b)| a.dist(*b)).sum::<f64>() / ps.len().max(1) as f64
 }
 
+fn automatic_fill_angle(rings: &[Polyline]) -> f64 {
+    let mut best = (f64::INFINITY, 0.0);
+    for degrees in [0.0_f64, 15.0, 30.0, 45.0, 60.0, 75.0, 90.0, 105.0, 120.0, 135.0, 150.0, 165.0] {
+        let angle = degrees.to_radians();
+        let (sin, cos) = angle.sin_cos();
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for p in rings.iter().flatten() {
+            let across = -p.x * sin + p.y * cos;
+            lo = lo.min(across);
+            hi = hi.max(across);
+        }
+        let span = hi - lo;
+        if span.is_finite() && span >= 0.0 && span < best.0 - 1e-6 {
+            best = (span, angle);
+        }
+    }
+    best.1
+}
+
 fn fill_runs(
     rings: &[Polyline],
     rule: FillRule,
@@ -458,7 +477,14 @@ fn fill_runs(
 ) -> Vec<Vec<Piece>> {
     let p = &shape.params;
     let f = &opt.fabric;
-    let angle = p.fill_angle().to_radians();
+    // Evaluate a few scanline orientations using projected bounds. Fewer
+    // rows means fewer turns and connectors on elongated shapes. Respect
+    // explicit angles and cap bottom-up sewing.
+    let angle = if p.angle.is_none() && !opt.hat_order {
+        automatic_fill_angle(rings)
+    } else {
+        p.fill_angle().to_radians()
+    };
     let mut groups = Vec::new();
     if p.underlay_on() {
         if f.fill_edge_walk {
@@ -1818,6 +1844,16 @@ mod tests {
     /// Overlap removal is cached per shape: after moving one object, the
     /// cached plan must still equal a plan made from scratch (what moved
     /// and what it overlapped are redone; the rest is reused).
+    #[test]
+    fn automatic_angle_follows_long_axis_of_rectangles() {
+        let vertical = vec![vec![P::new(0.0,0.0), P::new(20.0,0.0),
+            P::new(20.0,200.0), P::new(0.0,200.0)]];
+        assert!((automatic_fill_angle(&vertical) - std::f64::consts::FRAC_PI_2).abs() < 1e-6);
+        let horizontal = vec![vec![P::new(0.0,0.0), P::new(200.0,0.0),
+            P::new(200.0,20.0), P::new(0.0,20.0)]];
+        assert!(automatic_fill_angle(&horizontal).abs() < 1e-6);
+    }
+
     #[test]
     fn broad_default_fill_uses_fewer_stitches_than_legacy_density() {
         let mut s = shape(fill(sq(0.0, 0.0, 300.0)), Kind::Fill, [0,0,0]);
