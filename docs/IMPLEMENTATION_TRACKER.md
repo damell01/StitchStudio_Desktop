@@ -2,6 +2,22 @@
 
 Baseline `Dev` commit `4075876`. The checkout contains a shared Rust engine, a legacy egui application, and the React/Tauri desktop target. Native and browser tests exercise different boundaries. See [desktop setup and commands](DESKTOP.md), [competitor research](COMPETITORS.md) and [physical testing](SEW_OUT.md).
 
+## Advanced lettering effects audit (November 26, 2026)
+
+The React/Tauri editor and shared Rust planner now have **committed** source paths for the following effects on branch `Dev`. They are **not yet qualified** by green CI or machine sew-outs:
+
+| Effect | Committed implementation | Acceptance still required |
+| --- | --- | --- |
+| Foam/puff satin | Dense satin and open-column foam cap stitches; persisted `foam_caps` in native shape parameters; inline editor warning | Test appropriate foam thickness, cap sealing, tiny corners, trim/stop handling and Poolin sew-outs |
+| Two-color double outline | Two separate, SVG-text-derived satin-stroke layers, independently editable widths and thread colors | Confirm glyph-stroke import with installed fonts, overlap/density around counters, all text paths and save/edit/delete behaviors |
+| Offset drop shadow | Separate filled-letter stitch layer, adjustable x/y offset and thread color | Confirm offset on arcs/custom paths, preserve layering on text updates, minimize hidden overlap and machine travel |
+| Satin color blend | Two physical thread groups with overlapping satin strips and reduced density; editable second color | Validate thread-change order, even gradient transitions, wider columns, density hot spots and source-to-export fidelity |
+| Existing styles | Satin, tatami, running, triple-pass bean, appliqué, ripple, contour, cross, meander and blanket; monogram/circular lettering layouts | Font-size/fabric fixtures and full editing/reopen/undo tests, including failures and bounds checks |
+
+**Next effect work:** stitch-safe single and triple outlines, sketch/scribble fills (not just running borders), motifs and repeatable pattern brushes, realistic chenille-style simulations, decorative gradients with more than two threads, combining multiple effects on one editable text object, foam-aware underlay/placement/stop sequencing, and machine-specific quality guidance. Do not label simulations as genuine chenille machine support.
+
+**Important:** CI checks for `dbd8884` were queued during this audit, not confirmed passing. Native code and UI paths exist, and regression tests were added, but build acceptance, undo/delete/reopen audits, performance tests and Poolin EOM physical sew-outs are still outstanding. All desktop work remains on `Dev`; no payments are in scope.
+
 ## Current Dev update
 
 | Workstream | Implemented and checked | Open acceptance work |
