@@ -2283,6 +2283,43 @@ fn apply_stitch_properties(uid:Option<usize>,fabric:String,spacing:f64,length:f6
  let d=doc.plan();if d.blocks.is_empty(){return Err("No stitches generated".into())}
  let p=preview(&d);w.checkpoint_named("Change stitch properties");w.current=Some(d);w.source=Some(doc);Ok(p)
 }
+#[derive(serde::Deserialize)]
+struct SpecialtySettings {
+ width:Option<f64>,split:Option<f64>,repeats:Option<u32>,cell:Option<f64>,
+ spiral:Option<bool>,border:Option<bool>,short_stitches:Option<bool>,
+ start:Option<f64>,end:Option<f64>,
+}
+#[tauri::command]
+fn set_specialty_settings(uids:Vec<usize>,settings:SpecialtySettings,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
+ if settings.width.is_some_and(|v|!(0.2..=20.0).contains(&v))
+ ||settings.split.is_some_and(|v|!(0.0..=12.0).contains(&v))
+ ||settings.repeats.is_some_and(|v|v!=1&&v!=3)
+ ||settings.cell.is_some_and(|v|!(0.5..=10.0).contains(&v))
+ ||[settings.start,settings.end].into_iter().flatten().any(|v|!(0.0..=1.0).contains(&v)){return Err("Invalid specialty stitch settings".into())}
+ let mut w=state.lock().map_err(|e|e.to_string())?;
+ let mut doc=w.source.clone().ok_or("No editable artwork")?;
+ let ids:std::collections::HashSet<_>=uids.into_iter().collect();
+ let indices:Vec<_>=doc.shapes.iter().enumerate().filter(|(_,s)|ids.contains(&s.uid)).map(|(i,_)|i).collect();
+ if ids.is_empty()||indices.len()!=ids.len(){return Err("Select valid artwork".into())}
+ for &i in &indices {
+ let s=&doc.shapes[i];
+ if doc.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)||s.params.kind==Some(zigzag::params::Kind::Manual){return Err("Select unlocked generated artwork".into())}
+ }
+ for i in indices {
+ let p=&mut doc.shapes[i].params;
+ if settings.width.is_some(){p.width=settings.width;}
+ if settings.split.is_some(){p.split=settings.split;}
+ if settings.repeats.is_some(){p.repeats=settings.repeats;}
+ if settings.cell.is_some(){p.cell=settings.cell;}
+ if settings.spiral.is_some(){p.spiral=settings.spiral;}
+ if settings.border.is_some(){p.border=settings.border;}
+ if settings.short_stitches.is_some(){p.short_stitches=settings.short_stitches;}
+ if settings.start.is_some(){p.start=settings.start;}
+ if settings.end.is_some(){p.end=settings.end;}
+ }
+ let design=doc.plan_cached(&mut w.plan_cache);validate_resized_design(&design)?;
+ let result=preview(&design);w.checkpoint_named("Specialty stitch settings");w.source=Some(doc);w.current=Some(design);Ok(result)
+}
 #[tauri::command]
 fn copy_stitch_properties(source_uid:usize,uids:Vec<usize>,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
  let mut w=state.lock().map_err(|e|e.to_string())?;
@@ -3664,7 +3701,7 @@ async fn open_prepared_bundled_design(id:String,app:tauri::AppHandle)->Result<Op
         project.restore(&state)
     }).await.map_err(|e|e.to_string())?
 }
-fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,local_assistant::bundled_assistant_ready,local_assistant::interpret_with_local_model,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,copy_stitch_properties, set_sewing_commands, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,local_assistant::bundled_assistant_ready,local_assistant::interpret_with_local_model,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,set_specialty_settings, copy_stitch_properties, set_sewing_commands, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
