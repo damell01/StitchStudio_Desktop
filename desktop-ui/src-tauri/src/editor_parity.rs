@@ -11,7 +11,7 @@ use zigzag::{
     svg::{Geometry, Shape, shapes_bounds},
 };
 
-fn editable_index(doc: &Document, uid: usize) -> Result<usize, String> {
+pub(super) fn editable_index(doc: &Document, uid: usize) -> Result<usize, String> {
     let index = doc
         .shapes
         .iter()
@@ -67,7 +67,7 @@ fn paste_settings(doc: &mut Document, source: &Params, uids: Vec<usize>) -> Resu
     Ok(())
 }
 
-fn regenerate(
+pub(super) fn regenerate(
     workspace: &mut Workspace,
     mut doc: Document,
     label: &str,

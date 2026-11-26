@@ -32,12 +32,52 @@ function ProjectThumbnail({project}:{project:Project}) {
 }
 function readProjectLibrary():Project[]{try{const saved:Project[]=JSON.parse(localStorage.getItem('studio-project-library')||'[]');const recent:Project[]=JSON.parse(localStorage.getItem('studio-recent-projects')||'[]');return Array.from(new Map([...saved,...recent].map(p=>[p.file,p])).values())}catch{return []}}
 function addProjectFiles(files:Project[]){const next=Array.from(new Map([...readProjectLibrary(),...files].map(p=>[p.file,p])).values());localStorage.setItem('studio-project-library',JSON.stringify(next));return next}
-export function RecentProjects({onOpen}:{onOpen:()=>void}) {
+export function RecentProjects({onOpen,limit=5,disabled=false}:{onOpen:()=>void;limit?:number;disabled?:boolean}) {
   const [projects,setProjects]=useState<Project[]>(()=>{try{return JSON.parse(localStorage.getItem('studio-recent-projects')||'[]')}catch{return []}});
   const [error,setError]=useState('');
-  async function scan(){try{const result=await invoke<Project[]|null>('scan_projects');if(result){const recent=result.sort((a,b)=>b.modified-a.modified).slice(0,5);recent.slice().reverse().forEach(rememberProject);setProjects(JSON.parse(localStorage.getItem('studio-recent-projects')||'[]'))}}catch(e){setError(String(e))}}
-  async function open(project:Project){try{if(!await confirmAction('Open this project? Save existing work first.'))return;const settings=await invoke<{width:number;height:number;format:string}>('library_open',{file:project.file});sessionStorage.setItem('studio-open-project-settings',JSON.stringify(settings));rememberProject(project);onOpen()}catch(e){setError(String(e))}}
-  return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><ProjectThumbnail project={p}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><ProjectDates project={p} compact/><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
+  const [busy,setBusy]=useState(false);
+  async function run(action:()=>Promise<void>){
+    if(busy||disabled)return;
+    setBusy(true);setError('');
+    try{await action();}catch(error){setError(String(error));}finally{setBusy(false);}
+  }
+  function scan(){
+    void run(async()=>{
+      const result=await invoke<Project[]|null>('scan_projects');
+      if(result){
+        const recent=[...result].sort((a,b)=>b.modified-a.modified).slice(0,limit);
+        recent.reverse().forEach(rememberProject);
+        setProjects(JSON.parse(localStorage.getItem('studio-recent-projects')||'[]'));
+      }
+    });
+  }
+  function open(project:Project){
+    void run(async()=>{
+      if(!await confirmAction('Open this project? Save existing work first.'))return;
+      const {width,height,format,thread_assignments}=await invoke<{
+        width:number;height:number;format:string;thread_assignments?:Record<string,string>
+      }>('library_open',{file:project.file});
+      sessionStorage.setItem('studio-open-project-settings',JSON.stringify({width,height,format,thread_assignments}));
+      rememberProject(project);
+      onOpen();
+    });
+  }
+  return <>
+    {projects.length>0?<div className="studio-recent-list">{projects.slice(0,limit).map(project=>
+      <button className="studio-recent-project" key={project.file} title={project.name} disabled={disabled||busy} onClick={()=>open(project)}>
+        <ProjectThumbnail project={project}/>
+        <span className="studio-recent-info"><strong>{project.name}</strong>
+          <small>{project.stitches.toLocaleString()} points · {project.colors} colors</small>
+        </span>
+        <FolderOpen size={16} aria-hidden="true"/>
+      </button>
+    )}</div>:<div className="studio-recent-empty">
+      <span className="studio-home-icon"><FolderOpen size={21}/></span>
+      <div><strong>No recent projects yet</strong><p>Open a saved project or scan a folder to find one.</p></div>
+    </div>}
+    <button className="studio-recent-scan" disabled={disabled||busy} onClick={scan}><FolderOpen size={16}/> Find saved projects</button>
+    {error&&<p role="alert" className="studio-home-error">{error}</p>}
+  </>;
 }
 
 export function Library({ onDone,onArtwork,onBulkImport,onPrepared,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;onBulkImport?:()=>void;onPrepared?:(id:string)=>Promise<void>;initialTab?:'embroidery'|'projects'|'artwork' }) {

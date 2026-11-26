@@ -150,7 +150,12 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
   </section>;
 }
 
-export function InlineLettering({uid,disabled,onBusy,onDone}:{uid:number|null;disabled:boolean;onBusy:(busy:boolean)=>void;onDone:(uid:number|null)=>void}){
+export type PickedBaseline = {path:string;label:string};
+
+export function InlineLettering({uid,disabled,onBusy,onDone,baseline,pickingBaseline,onPickBaseline}:{
+ uid:number|null;disabled:boolean;onBusy:(busy:boolean)=>void;onDone:(uid:number|null)=>void;
+ baseline?:PickedBaseline|null;pickingBaseline?:boolean;onPickBaseline?:()=>void;
+}){
  const [fonts,setFonts]=useState<string[]>([]);
  const [target,setTarget]=useState(uid);
  const [settings,setSettings]=useState<Settings>({text:'Your name',font:'',size:12,spacing:.4,arc:0,bold:true,italic:false,color:[105,69,162],align:'center'});
@@ -160,6 +165,10 @@ export function InlineLettering({uid,disabled,onBusy,onDone}:{uid:number|null;di
  const [fontQuery,setFontQuery]=useState(''),[showAdvanced,setShowAdvanced]=useState(false),[committed,setCommitted]=useState('');
  const [autoApply,setAutoApply]=useState(true),[failedFingerprint,setFailedFingerprint]=useState('');
  const [preview,setPreview]=useState<StitchPlan|null>(null),[previewPending,setPreviewPending]=useState(false);
+ useEffect(()=>{
+   if(!baseline)return;
+   setSettings(previous=>({...previous,path:baseline.path,arc:0,path_offset:.5,path_flip:false,align:'center'}));
+ },[baseline]);
  const fingerprint=JSON.stringify(settings);
  const dirty=fingerprint!==committed;
  const filteredFonts=useMemo(()=>fonts.filter(f=>f===settings.font||matchesName(f,fontQuery)),[fonts,fontQuery,settings.font]);
@@ -183,6 +192,13 @@ export function InlineLettering({uid,disabled,onBusy,onDone}:{uid:number|null;di
  <div className="lettering-size-presets" role="group" aria-label="Quick sizes">{[8,12,20,30].map(n=><button key={n} aria-pressed={settings.size===n} onClick={()=>change('size',n)}>{n} mm</button>)}</div><div className="inline-lettering-grid"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.1" value={settings.size} onChange={e=>change('size',Number(e.target.value))}/></label><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={settings.spacing} onChange={e=>change('spacing',Number(e.target.value))}/></label></div>
  <div className="inline-lettering-style"><button aria-pressed={settings.bold} onClick={()=>change('bold',!settings.bold)}><b>B</b></button><button aria-pressed={settings.italic} onClick={()=>change('italic',!settings.italic)}><i>I</i></button><label>Thread color<input type="color" value={hex} onChange={e=>change('color',[1,3,5].map(i=>parseInt(e.target.value.slice(i,i+2),16)))}/></label></div>
  <div className="inline-color-presets" role="group" aria-label="Thread color presets">{['#754bb0','#111111','#ffffff','#ae294f','#24558c','#34754b','#d5a52e'].map(v=><button key={v} aria-label={'Thread '+v} aria-pressed={hex===v} style={{backgroundColor:v}} onClick={()=>change('color',[1,3,5].map(i=>parseInt(v.slice(i,i+2),16)))}/>)}</div><h4>Text layout</h4><div className="inline-lettering-layout" role="group" aria-label="Text direction">{[{label:'Straight',arc:0},{label:'Arc up',arc:60},{label:'Arc down',arc:-60}].map(a=><button key={a.label} aria-pressed={a.arc===0?settings.arc===0:a.arc>0?settings.arc>0:settings.arc<0} onClick={()=>setSettings(s=>({...s,arc:a.arc,path:''}))}>{a.label}</button>)}<button aria-pressed={!!settings.path} onClick={()=>{setShowAdvanced(true);setSettings(s=>({...s,arc:0,path:s.path||'M 0 0 Q 30 -25 60 0'}))}}>Custom curve</button></div>
+ {target===null&&onPickBaseline&&<div className="lettering-baseline-picker">
+   <button type="button" aria-pressed={!!pickingBaseline} onClick={onPickBaseline}>
+     {pickingBaseline?'Cancel baseline selection':'Pick a baseline on canvas'}
+   </button>
+   {pickingBaseline?<p role="status">Click an open path. Press Escape to cancel.</p>:
+     baseline&&settings.path===baseline.path?<small>Baseline from {baseline.label}</small>:null}
+ </div>}
  <button aria-expanded={showAdvanced} onClick={()=>setShowAdvanced(v=>!v)}>{showAdvanced?'Hide advanced layout':'Advanced layout'}</button>{showAdvanced&&<><div className="inline-lettering-grid"><label>Width scale (%)<input type="number" min="25" max="250" value={settings.h_scale??100} onChange={e=>change('h_scale',Number(e.target.value))}/></label><label>Height scale (%)<input type="number" min="25" max="250" value={settings.v_scale??100} onChange={e=>change('v_scale',Number(e.target.value))}/></label></div><label>Character spacing<select value={character} onChange={e=>setCharacter(Number(e.target.value))}>{Array.from(settings.text).map((ch,i)=><option key={i} value={i}>{i+1}: {ch===' '?'Space':ch}</option>)}</select></label><label>Extra gap before character (mm)<input type="number" min="-10" max="10" step=".1" value={settings.kern?.find(([i])=>i===character)?.[1]??0} onChange={e=>change('kern',[...(settings.kern??[]).filter(([i])=>i!==character),[character,Number(e.target.value)]])}/></label><button onClick={()=>change('kern',[])}>Reset character spacing</button><label>Curve radius (mm)<input type="number" min="-300" max="300" value={settings.arc} onChange={e=>change('arc',Number(e.target.value))}/></label>
  <label>Custom baseline (SVG path, mm)<textarea rows={2} placeholder="M 0 0 Q 30 -25 60 0" value={settings.path??''} onChange={e=>change('path',e.target.value)}/></label><small>Use the curve presets or enter a custom SVG path. Clear the path to restore the normal layout.</small><div className="inline-lettering-layout" role="group" aria-label="Custom baseline presets">{[['Wave','M 0 0 Q 15 -15 30 0 T 60 0'],['Arch','M 0 0 Q 30 -30 60 0'],['Vertical baseline','M 0 0 L 0 80']].map(([label,path])=><button key={label} onClick={()=>setSettings(s=>({...s,path,arc:0}))}>{label}</button>)}</div>{settings.path&&<><label>Start along path (%)<input type="number" min="0" max="100" value={Math.round((settings.path_offset??0)*100)} onChange={e=>change('path_offset',Math.max(0,Math.min(1,Number(e.target.value)/100)))}/></label><label><input type="checkbox" checked={settings.path_flip??false} onChange={e=>change('path_flip',e.target.checked)}/> Flip lettering along path</label></>}<label>Alignment<select value={settings.align} onChange={e=>change('align',e.target.value)}>{['left','center','right'].map(a=><option key={a}>{a}</option>)}</select></label></>}
  </fieldset>{!valid&&!loading&&<p role="status">Enter text, choose a font, and check the height (0.5–80 mm), spacing and scale.</p>}{target!==null&&settings.size*(settings.v_scale??100)/100<3&&<small role="status">Very small lettering: inspect stitch coverage and test sew before exporting.</small>}{target!==null&&<label className="live-text-toggle"><input type="checkbox" checked={autoApply} onChange={e=>setAutoApply(e.target.checked)}/> Update canvas automatically</label>}<button className="primary" disabled={disabled||saving||!valid||(target!==null&&!dirty)} onClick={()=>void apply()}>{saving?'Updating…':target===null?'Add text to design':dirty?'Apply text changes':'Changes applied'}</button></>}{error&&<p role="alert">{error}</p>}</section>

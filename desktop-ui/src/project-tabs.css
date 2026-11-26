@@ -1,0 +1,44 @@
+.project-tab-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 35px;
+  padding: 3px 10px 0;
+  background: var(--workspace-surface, #fff);
+  border-bottom: 1px solid var(--workspace-border, #ded3ed);
+}
+.project-tab-scroll {
+  display: flex;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.project-tab {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 185px;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: 7px 7px 0 0;
+  color: var(--workspace-ink, #352744);
+}
+.project-tab[data-current="true"] {
+  background: var(--workspace-soft, #f1eafa);
+  border-color: var(--workspace-border, #ded3ed);
+  border-bottom-color: transparent;
+  color: var(--workspace-accent, #6945a2);
+}
+.project-tab:not([data-current="true"]):hover { background: var(--workspace-soft, #f1eafa); }
+.project-tab-strip button { min-height: 27px; padding: 4px 6px; }
+.project-tab button { background: transparent; border-color: transparent; }
+.project-tab button[role="tab"] { padding-inline: 8px; color: inherit; }
+.project-tab button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-tab button svg { flex: 0 0 auto; }
+.project-tab-close { flex: 0 0 auto; }
+.project-tab-strip small { color: var(--danger, #99334e); }
+.editor-workspace:has(.studio-focus-active) > .project-tab-strip { display: none; }

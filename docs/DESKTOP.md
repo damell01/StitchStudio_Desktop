@@ -120,6 +120,10 @@ Choose **Draw → Satin column** to drag the two rails, then add optional rungs 
 
 Open **Stitches → Object stitch tools** to display sewing order, show satin rails and rungs, drag the fill angle, or set entry and exit points. Use **Ctrl+Alt+C** and **Ctrl+Alt+V** to copy and paste stitch settings on Windows, or **Cmd+Option+C** and **Cmd+Option+V** on Mac. In the Text inspector, convert lettering to outlines for node edits. Restoring text uses the original lettering metadata, so changes made to the outline nodes are lost when you restore it.
 
+Use **+** on the project tab bar to start another design. Each tab remembers its own design, hoop, thread assignments, view, and Undo history while the app is open. Choose **Restore a project tab** to reopen a saved recovery copy. After recovery, you can continue editing the project with a fresh Undo history.
+
+Select an object and open **Stitches → Advanced stitch settings** to adjust the controls for its current stitch type. For lettering on a curve, draw or import an open path, choose **Add text**, and choose **Pick a baseline on canvas**. Click the curve, review the actual stitch preview, and apply the text. The artwork path remains a separate object.
+
 ## Preview placement on a garment
 
 Open a design and choose the shirt icon in the editor toolbar. Choose a T-shirt, hoodie, cap, or shorts. Pick toddler, kids, or adult sizing and select a placement. The preset anchor follows the current design position relative to the hoop center. Use the offsets and fabric color to compare placements. With Hoodie selected, drag the 3D preview or use the rotation slider. **Flat view** is available in the same preview. The mockup uses the current stitch paths and an approximate garment scale. It leaves the project and exports as they were.

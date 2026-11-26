@@ -162,3 +162,45 @@ mod tests {
         assert_eq!(workspace.undo.len(), 1);
     }
 }
+
+fn baseline_svg(document: &Document, uid: usize) -> Result<String, String> {
+    use zigzag::{bezier,svg::Geometry};
+    let index = super::editor_parity::editable_index(document,uid)?;
+    if !matches!(document.shapes[index].geometry,Geometry::Stroke{..}) {
+        return Err("Choose an open stroke, such as a path drawn with the Pen.".into());
+    }
+    let path = document.edit_path(index).map_err(|error|error.to_string())?;
+    let [part] = path.as_slice() else {return Err("Choose a stroke with one open path.".into());};
+    if part.closed||part.anchors.len()<2 {
+        return Err("Choose an open path with at least two points.".into());
+    }
+    let svg=bezier::to_svg_d(&bezier::transform(&path,[0.1,0.0,0.0,0.1,0.0,0.0]));
+    if svg.len()>4096{return Err("Simplify this path before using it for lettering.".into());}
+    Ok(svg)
+}
+
+#[tauri::command]
+pub(crate) fn lettering_baseline(uid: usize, state: tauri::State<'_,std::sync::Mutex<Workspace>>) -> Result<String,String> {
+    let workspace=state.lock().map_err(|error|error.to_string())?;
+    let document=workspace.source.as_ref().ok_or("Open editable artwork first.")?;
+    baseline_svg(document,uid)
+}
+
+#[cfg(test)]
+mod baseline_tests {
+    use super::*;
+
+    #[test]
+    fn picks_a_bezier_baseline_in_design_mm_without_moving_its_source() {
+        let mut doc=Document::empty();
+        let path=zigzag::bezier::from_svg_d("M-120 60 Q0 -30 120 60");
+        let index=doc.add_drawing_path(&path,[25,25,25],zigzag::params::Kind::Run).unwrap();
+        let uid=doc.shapes[index].uid;
+        let before=doc.to_svg().unwrap();
+        let svg=baseline_svg(&doc,uid).unwrap();
+        let derived=zigzag::bezier::from_svg_d(&svg);
+        assert_eq!(derived[0].anchors[0].p,zigzag::geom::P::new(-12.0,6.0));
+        assert_eq!(derived[0].anchors[1].p,zigzag::geom::P::new(12.0,6.0));
+        assert_eq!(doc.to_svg().unwrap(),before);
+    }
+}

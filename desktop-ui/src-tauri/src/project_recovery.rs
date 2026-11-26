@@ -5,6 +5,10 @@ use super::{OpenedProject, Project, Workspace, open_project_path, write_project}
 const CURRENT_NAME: &str = "recovery.stitchstudio";
 const PREVIOUS_NAME: &str = "recovery.previous";
 
+pub(super) fn available(directory: &Path) -> bool {
+    [CURRENT_NAME, PREVIOUS_NAME].iter().any(|name| directory.join(name).is_file())
+}
+
 pub(super) fn save(directory: &Path, project: &Project) -> Result<(), String> {
     project.validate()?;
     std::fs::create_dir_all(directory).map_err(|error| error.to_string())?;
