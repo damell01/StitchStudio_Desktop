@@ -267,6 +267,64 @@ pub(super) async fn trace_assistant_motif(
     .map_err(|error| error.to_string())?
 }
 
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct Composition {
+    name: String,
+    field: [f64; 2],
+    motifs: Vec<Motif>,
+    lettering: Vec<CompositionText>,
+}
+#[derive(serde::Deserialize)]
+struct CompositionText {
+    settings: super::lettering_edit::LetteringSettings,
+    center: [f64; 2],
+}
+fn prepare_composition(workspace: &Workspace, composition: Composition) -> Result<(Document, [f64; 2]), String> {
+    if composition.name.trim().is_empty() || composition.name.len()>160
+        || !composition.field.iter().all(|v| (10.0..=1200.0).contains(v))
+        || composition.motifs.len()+composition.lettering.len()>24
+        || composition.motifs.is_empty() && composition.lettering.is_empty() {
+        return Err("Choose a valid composition with up to 24 elements.".into());
+    }
+    let mut doc=editable_base(workspace,&composition.name)?;
+    for mut motif in composition.motifs {
+        motif.field=composition.field;
+        motif.add_to(&mut doc)?;
+    }
+    for text in composition.lettering {
+        if !text.center.iter().all(|v| v.is_finite() && v.abs()<=500.0) {
+            return Err("Invalid lettering position.".into());
+        }
+        let spec=text.settings.spec()?;
+        doc.add_lettering(&spec,(text.center[0],text.center[1])).map_err(|e|e.to_string())?;
+    }
+    Ok((doc,composition.field))
+}
+#[tauri::command]
+pub(super) async fn compose_assistant_design(composition: Composition, apply: bool, app: tauri::AppHandle) -> Result<Preview,String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state=app.state::<Mutex<Workspace>>();
+        let mut workspace=state.lock().map_err(|e|e.to_string())?;
+        let (doc,field)=prepare_composition(&workspace,composition)?;
+        let design=doc.plan_cached(&mut workspace.plan_cache);
+        validate_resized_design(&design)?;
+        if design.blocks.iter().flat_map(|b| &b.runs).flat_map(|r| &r.pts)
+            .any(|p|p.x.abs()>field[0]*5.0 || p.y.abs()>field[1]*5.0) {
+            return Err("Composition exceeds the hoop. Reduce its size or adjust placement.".into());
+        }
+        let result=preview(&design);
+        if apply {
+            if workspace.current.is_none() {workspace.current=Some(Document::empty().plan());}
+            workspace.checkpoint_named("Create assistant composition");
+            workspace.current=Some(design);
+            workspace.source=Some(doc);
+        }
+        Ok(result)
+    }).await.map_err(|e|e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
