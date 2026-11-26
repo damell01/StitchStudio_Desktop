@@ -111,6 +111,39 @@ pub fn check(
         }
     }
 
+    // Check the actual planned needle movements, not just vector geometry.
+    // Run boundaries represent travel/trim events, not sewn stitches.
+    let (mut sewn, mut short, mut long, mut invalid) = (0usize, 0usize, 0usize, 0usize);
+    let mut trims = 0usize;
+    for block in &design.blocks {
+        for run in &block.runs {
+            trims += usize::from(run.trim_before);
+            invalid += run.pts.iter().filter(|p| !p.x.is_finite() || !p.y.is_finite()).count();
+            for pair in run.pts.windows(2) {
+                let distance = pair[0].dist(pair[1]);
+                if !distance.is_finite() { continue; }
+                sewn += 1;
+                if distance < 2.0 { short += 1; }
+                if distance > 120.0 { long += 1; }
+            }
+        }
+    }
+    if invalid > 0 {
+        add(None, Level::Error, format!("{invalid} non-finite needle positions; regenerate the design before exporting."));
+    }
+    if sewn == 0 && shapes.iter().any(|s| s.params.kind != Some(Kind::Skip)) {
+        add(None, Level::Warning, "No sewn stitches were generated for this design.".into());
+    }
+    if long > 0 {
+        add(None, Level::Warning, format!("{long} sewn stitches exceed 12 mm; inspect for snagging and split long stitches before exporting."));
+    }
+    if sewn >= 50 && short as f64 / sewn as f64 > 0.15 {
+        add(None, Level::Warning, format!("{short} of {sewn} sewn stitches are under 0.2 mm; inspect dense corners, tie-ins and tiny details for thread buildup."));
+    }
+    if trims >= 10 && sewn > 0 && trims as f64 / sewn as f64 > 0.02 {
+        add(None, Level::Info, format!("{trims} planned trims for {sewn} sewn stitches; review routing and separated objects."));
+    }
+
     for (i, s) in shapes.iter().enumerate() {
         let kind = s.params.kind.unwrap_or(Kind::Fill);
         if kind == Kind::Skip {
@@ -287,6 +320,20 @@ mod tests {
         let opt = PlanOptions::default();
         let d = plan("t", shapes, &opt);
         check(shapes, &d, &opt, hoop)
+    }
+
+    #[test]
+    fn checks_actual_stitch_lengths_not_travel_between_runs() {
+        use crate::design::{Block, Run};
+        let mut d = Design::default();
+        d.blocks.push(Block { color: [0,0,0], runs: vec![
+            Run { pts: vec![P::new(0.0,0.0), P::new(130.0,0.0)], trim_before: false },
+            Run { pts: vec![P::new(500.0,0.0), P::new(520.0,0.0)], trim_before: true },
+        ]});
+        let issues = check(&[], &d, &PlanOptions::default(), None);
+        assert!(issues.iter().any(|i| i.message.contains("1 sewn stitches exceed 12 mm")));
+        d.blocks[0].runs[0].pts[1] = P::new(20.0,0.0);
+        assert!(!check(&[], &d, &PlanOptions::default(), None).iter().any(|i| i.message.contains("exceed 12 mm")));
     }
 
     #[test]
