@@ -29,7 +29,7 @@ Run the resulting setup executable to install the app. Use Windows **Installed a
 
 - **Maximize in hoop** and **Fill hoop** regenerate stitches when size changes. When only placement needs to change, they move the existing stitch plan as a unit.
 - For a dense logo, compare **Balanced** and **Maximum** first. Choose **Deep optimization** in the digitizer or Simplify dialog to inspect **Fast Stitch** and **Solid silhouette** when available. Fast Stitch can use longer penetrations and wider spacing in broad fills. Solid silhouette can change decorative shading. Review stitch count, trims, and footprint before applying an option.
-- To simplify just a bow or other ornament, select its artwork on the canvas or in Layers and choose **Make selection solid**. Shift-click to include neighboring shading pieces. The preview can join compatible pieces of the same color while preserving large openings. Check the estimated sewing time before applying it.
+- To simplify a bow or other ornament, choose **Solid area** in the canvas toolbar, choose **Box** or **Oval**, then drag around it. The tool uses whole editable objects enclosed by the outline. Change the fill thread color and compare stitches, trims, and estimated sewing time before applying. You can also select objects and choose **Make selection solid**.
 - Choose **Insert design** or press Ctrl+I on Windows or Cmd+I on macOS to add to the current workspace. Machine import accepts DST, PES, PEC, EXP, JEF and VP3. Save as `.stitchstudio` to keep editable geometry and layer properties.
 - Open **Layers** or **Inspector** from the editor toolbar. Smaller windows open one panel at a time. Press F11 for focus view. Drag the camera toolbar grip up or down to dock it above or below the canvas.
 - Select an object. Choose **Edit artwork nodes** or **Edit stitch points** to move, add, or erase individual points. Applying changes creates one undo step.
@@ -68,6 +68,32 @@ ls src-tauri/target/release/bundle/dmg/
 ```
 
 For installation, open the DMG and copy the app into Applications. Local packaging targets the build machine’s architecture. Distribution outside your machine needs a Developer ID signing identity and Apple notarization. See [Tauri signing and notarization](https://v2.tauri.app/distribute/sign/macos/).
+
+## Download a Mac or Windows installer
+
+Open **Desktop production checks** and select a completed run on **Dev**. Download the Mac or Windows artifact. The Mac download contains a `.dmg` and a ZIP with the `.app`. Open the DMG on your Mac and move Stitch Studio to Applications. Check the filename for `aarch64` (Apple silicon) or `x64` (Intel). Windows uses the NSIS setup `.exe`. Standard builds are unsigned. [Desktop production checks](https://github.com/damell01/StitchStudio_Desktop/actions/workflows/desktop-production-checks.yml)
+
+## Signed automatic updates
+
+Feed-enabled builds check after startup and periodically while open. Save open projects before using **Settings → App updates → Install and restart**. A regular local or CI build uses manual updates.
+
+Set `STITCH_UPDATE_FEED` to the HTTPS `latest.json` URL and `STITCH_UPDATE_ASSETS` to its HTTPS payload directory URL, ending in `/`. From `desktop-ui`, generate one updater key pair with `npm run tauri signer generate -- --write-keys /path/outside/repo/stitch-update.key`. Keep the private key and password outside the repository and use the same key pair on both build machines.
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = 'C:\secure\stitch-update.key'
+$env:STITCH_UPDATE_PUBLIC_KEY = (Get-Content 'C:\secure\stitch-update.key.pub' -Raw).Trim()
+npm.cmd run package:update -- 0.1.1
+```
+
+```sh
+export TAURI_SIGNING_PRIVATE_KEY="$HOME/.stitch-studio/stitch-update.key"
+export STITCH_UPDATE_PUBLIC_KEY="$(cat "$TAURI_SIGNING_PRIVATE_KEY.pub")"
+npm run package:update -- 0.1.1
+```
+
+Set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in the build environment for an encrypted key. Configure Developer ID signing and notarization for Mac distribution. Upload each signed payload to the versioned URL printed by the build. Copy the JSON files from `src-tauri/target/release/bundle/updates` to one machine. From `desktop-ui`, run `node ../.github/scripts/package-desktop-update.mjs merge windows-x86_64.json darwin-aarch64.json` and save the output as UTF-8 `latest.json`. Publish the manifest after the payloads are accessible. Install the first feed-enabled build manually, then verify an update to a higher version on each OS and architecture you plan to support.
+
+You can build all platforms from GitHub while using Windows. In the repository's Actions settings, store the three `STITCH_UPDATE_*` values as variables, the two `TAURI_SIGNING_*` values as secrets, and the Apple credentials under the names used in the workflow. From **Desktop production checks → Run workflow**, choose **Dev** and enter the update version. Download the signed payloads and platform JSON files from the artifacts. Include `darwin-x86_64.json` when publishing the Intel build.
 
 ## Offline lettering recognition
 
