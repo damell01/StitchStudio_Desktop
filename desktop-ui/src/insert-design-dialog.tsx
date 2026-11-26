@@ -75,9 +75,11 @@ function TemplatePreview({ template, widthMm }: { template: Template; widthMm: n
   </>;
 }
 
-export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
+export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, editorBusy=false }: {
   dialogRef: RefObject<HTMLDialogElement | null>;
   onInsert: (plan: Plan) => void;
+  anchorBounds?: number[] | null;
+  editorBusy?: boolean;
 }) {
   const [source, setSource] = useState<Source>('templates');
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -130,7 +132,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
 
   useEffect(()=>{
     const receive=(event:DragEvent)=>{
-      if(event.defaultPrevented||!event.dataTransfer?.types.includes('Files')||lock.current)return;
+      if(editorBusy||event.defaultPrevented||!event.dataTransfer?.types.includes('Files')||lock.current)return;
       const file=event.dataTransfer.files[0];
       if(!file||!/\.(png|jpe?g|webp|bmp|svg)$/i.test(file.name))return;
       event.preventDefault();
@@ -143,7 +145,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
     window.addEventListener('dragover',allow);
     window.addEventListener('drop',receive);
     return()=>{window.removeEventListener('dragover',allow);window.removeEventListener('drop',receive)};
-  },[dialogRef]);
+  },[dialogRef,editorBusy]);
 
   async function loadFiles() {
     setFiles(await invoke<string[]>('personal_designs'));
@@ -255,6 +257,17 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
                 onChange={event => setWidth(event.target.value)} aria-invalid={!widthValid}/>
               {!widthValid && <small>Enter a width from 5 to 250 mm.</small>}
             </label>}
+        {anchorBounds&&widthValid&&<div className="studio-insert-files" role="group" aria-label="Placement relative to existing design">
+          <strong>Place relative to existing design</strong>
+          {(['above','below','left','right','center'] as const).map(side=><button key={side} disabled={busy} onClick={()=>{
+            const [ax,ay,aw,ah]=anchorBounds;
+            const radius=widthMm/2+3;
+            const cx=side==='left'?ax-radius:side==='right'?ax+aw+radius:ax+aw/2;
+            const cy=side==='above'?ay-radius:side==='below'?ay+ah+radius:ay+ah/2;
+            setOffset(true);setX((cx/MM_PER_INCH).toFixed(3));setY((cy/MM_PER_INCH).toFixed(3));
+          }}>{side==='center'?'Overlay center':side[0].toUpperCase()+side.slice(1)+' design'}</button>)}
+          <small>Suggested spacing uses the chosen width; check tall artwork after insertion.</small>
+        </div>}
         <div className="studio-insert-files" role="group" aria-label="Quick placement">
           <button disabled={busy} onClick={()=>{setOffset(false);setX('0');setY('0')}}>Hoop center</button>
           <button disabled={busy||!widthValid} onClick={()=>{setOffset(true);setX('0');setY(String(-Number(width)*0.65))}}>Above center</button>
