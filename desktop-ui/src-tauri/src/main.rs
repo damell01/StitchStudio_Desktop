@@ -638,7 +638,8 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
     let selected=|uid:usize|uids.is_none_or(|ids|ids.contains(&uid)) && !protected.contains(&uid);
     let mut best=None;let cost=|d:&Design|d.stitch_count().saturating_add(d.trim_count().saturating_mul(40));
     let before=measure_stitches(original);let original_bounds=original.bounds();
-    for factor in [1.05,1.10,1.18,1.25].into_iter().take(strength.clamp(1,3) as usize+1){
+    let factors:&[f64]=match strength{1=>&[1.05,1.10],2=>&[1.10,1.18,1.25],_=>&[1.18,1.25,1.35,1.45]};
+    for &factor in factors{
         let mut next=source.clone();let fabric=next.plan_options().fabric;let mut changed=false;
         let mut paths=Vec::new();let mut remove=Vec::new();
         for (i,shape) in next.shapes.iter_mut().enumerate(){
@@ -707,6 +708,7 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
             ||original_bounds.min.dist(b.min)>5.0||original_bounds.max.dist(b.max)>5.0
             ||!original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color)){continue}
         if remove.is_empty()&&(original.per_shape.len()!=d.per_shape.len()||!original.per_shape.iter().zip(&d.per_shape).all(|(&a,&b)|a==0||b>0)){continue}
+        if optimization_quality(original,&d,800.,3.).coverage < if remove_detail{85.0}else{90.0}{continue}
         if best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|cost(&d)<cost(old)){best=Some((next,d));}
     }
     best
@@ -2962,7 +2964,7 @@ async fn recognize_artwork_lettering(bytes: Vec<u8>, remove_background: bool, to
 async fn digitize_artwork(
     bytes: Vec<u8>, name: String, mime: String, width_mm: f64, colors: u32,
     remove_background: bool, detail: f64, fabric: String, cleanup: bool,
-    tolerance: u8, thin_lines: bool, speckle_mm: Option<f64>, thread_palette: Option<Vec<[u8; 3]>>, lettering: Option<Vec<zigzag::ocr::RecognizedLine>>, state: tauri::State<'_, Mutex<Workspace>>,
+    tolerance: u8, thin_lines: bool, speckle_mm: Option<f64>, optimization_strength: Option<u8>, thread_palette: Option<Vec<[u8; 3]>>, lettering: Option<Vec<zigzag::ocr::RecognizedLine>>, state: tauri::State<'_, Mutex<Workspace>>,
 ) -> Result<DigitizerReview, String> {
     if bytes.is_empty() || bytes.len() > 20_000_000 || !(5.0..=300.0).contains(&width_mm)
         || !(0.0..=100.0).contains(&detail) || !(colors == 0 || (2..=10).contains(&colors))
@@ -2970,6 +2972,8 @@ async fn digitize_artwork(
     {
         return Err("Invalid artwork settings or file size".into());
     }
+    let optimization_strength=optimization_strength.unwrap_or(2);
+    if optimization_strength>3{return Err("Invalid optimization strength".into());}
     let speckle_mm=speckle_mm.unwrap_or(1.0);
     if !(0.0..=3.0).contains(&speckle_mm){return Err("Minimum detail must be between 0 and 3 mm".into());}
     static NEXT_DRAFT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -3099,7 +3103,7 @@ async fn digitize_artwork(
         let mut optimization = if design.stitch_count()<initial_count{Some([initial_count,design.stitch_count()])}else{None};
         // Prefer a production-efficient plan at the original requested size.
         // 10k is a soft goal, 15k a review threshold, never a destructive cap.
-        if design.stitch_count() <= 100_000 {
+        if optimization_strength>0 && design.stitch_count() <= 100_000 {
             let before=design.stitch_count();
             let original=design.clone();
             let budget=SimplifyBudget::new(std::time::Duration::from_secs(10));
@@ -3118,7 +3122,7 @@ async fn digitize_artwork(
             };
             // The aggressive pass comes first for expensive designs, so the
             // time budget is not spent entirely on marginal improvements.
-            let levels:&[u8]=if before>15_000{&[3,2]}else{&[2]};
+            let levels:&[u8]=match optimization_strength{1=>&[1],3=>&[3,2,1],_ if before>15_000=>&[3,2],_=>&[2,1]};
             for &level in levels{
                 if opts.exhausted(){break}
                 if let Ok((d,p))=choose_simplification(&document,&original,level,None,false,&opts){
@@ -3128,7 +3132,7 @@ async fn digitize_artwork(
                 }
                 if best.as_ref().is_some_and(|(_,p)|p.stitch_count()<=10_000){break}
             }
-            if before>15_000&&!opts.exhausted()&&best.as_ref().is_none_or(|(_,p)|p.stitch_count()>10_000){
+            if optimization_strength>=2&&(before>15_000||optimization_strength==3)&&!opts.exhausted()&&best.as_ref().is_none_or(|(_,p)|p.stitch_count()>10_000){
                 if let Ok((d,p))=choose_fast_stitch(&document,&original,None,&opts){
                     if eligible(&p)&&best.as_ref().is_none_or(|(_,old)|p.stitch_count()<old.stitch_count()){
                         best=Some((d,p));
