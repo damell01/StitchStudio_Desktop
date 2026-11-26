@@ -366,6 +366,15 @@ impl Studio {
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.issues_button(ui);
+                ui.menu_button(format!("v{}", env!("CARGO_PKG_VERSION")), |ui| {
+                    ui.label("Stitch Studio Desktop");
+                    ui.label(format!("Installed version: {}", env!("CARGO_PKG_VERSION")));
+                    ui.hyperlink_to("Check for updates / release notes",
+                        "https://github.com/damell01/StitchStudio_Desktop/releases/latest");
+                    ui.hyperlink_to("Open-source license",
+                        "https://github.com/damell01/StitchStudio_Desktop/blob/main/LICENSE");
+                    ui.label("Install updates only from official releases.");
+                });
                 self.machine_chip(ui);
                 self.mcp_chip(ui);
                 ui.add_space(4.0);
