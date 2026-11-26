@@ -279,12 +279,57 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
             "Reconstructed lettering does not fit the original region");
         let id=&candidate.shapes[i].id;
         let rebuilt:Vec<_>=candidate.shapes.iter().enumerate().filter(|(_,s)|&s.id==id).map(|(j,_)|j).collect();
-        let openings=enclosed_openings(&outline_mask(&candidate,&rebuilt,fitted));
+        let rebuilt_mask=outline_mask(&candidate,&rebuilt,fitted.clone());
+        let openings=enclosed_openings(&rebuilt_mask);
         anyhow::ensure!(openings>=original_openings.saturating_sub(1),
             "Reconstructed lettering loses enclosed openings; original retained");
         let plan=candidate.plan();
         anyhow::ensure!(plan.per_shape.get(i).is_some_and(|&n|n>0),
             "Reconstructed lettering generated no stitches");
+        // Inspect actual continuous sewn segments, not jumps between runs.
+        // Sample only deep interior background cells to tolerate edge pull.
+        if openings>0 {
+            let mut background=vec![false;MASK_W*MASK_H];
+            let mut seen=vec![false;MASK_W*MASK_H];
+            for start in 0..seen.len(){
+                if seen[start]||rebuilt_mask[start]>=0.5{continue;}
+                let mut stack=vec![start];let mut region=Vec::new();let mut edge=false;seen[start]=true;
+                while let Some(k)=stack.pop(){
+                    region.push(k);let x=k%MASK_W;let y=k/MASK_W;
+                    edge|=x==0||y==0||x+1==MASK_W||y+1==MASK_H;
+                    for j in [if x>0{Some(k-1)}else{None},if x+1<MASK_W{Some(k+1)}else{None},if y>0{Some(k-MASK_W)}else{None},if y+1<MASK_H{Some(k+MASK_W)}else{None}].into_iter().flatten(){
+                        if !seen[j]&&rebuilt_mask[j]<0.5{seen[j]=true;stack.push(j);}
+                    }
+                }
+                if !edge&&region.len()>=9{
+                    for k in region{
+                        if [k-1,k+1,k-MASK_W,k+MASK_W].iter().all(|&j|rebuilt_mask[j]<0.5){background[k]=true;}
+                    }
+                }
+            }
+            let mut crossed=vec![false;background.len()];
+            for block in &plan.blocks{
+                if block.color!=color{continue;}
+                for run in &block.runs{
+                    for w in run.pts.windows(2){
+                        let n=(w[0].dist(w[1])/0.5).ceil().clamp(1.0,2048.0) as usize;
+                        for j in 0..=n{
+                            let p=w[0].lerp(w[1],j as f64/n as f64);
+                            let x=(p.x-fitted.min.x)/fitted.width()*MASK_W as f64;
+                            let y=(p.y-fitted.min.y)/fitted.height()*MASK_H as f64;
+                            if x>=0.0&&y>=0.0&&x<MASK_W as f64&&y<MASK_H as f64{
+                                let k=y as usize*MASK_W+x as usize;
+                                if background[k]{crossed[k]=true;}
+                            }
+                        }
+                    }
+                }
+            }
+            let total=background.iter().filter(|&&v|v).count();
+            let covered=crossed.iter().filter(|&&v|v).count();
+            anyhow::ensure!(total<4||covered*4<=total,
+                "Generated stitches cross too much of the enclosed lettering space; original retained");
+        }
     }
     *doc = candidate;
     Ok(())
