@@ -6,7 +6,7 @@ import { CharacterGallery, type Art } from './character-gallery';
 import { confirmAction } from './dialogs';
 import { importToLibrary, type LibraryImportSource } from './library-import';
 
-export type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number; created?: number; thumbnail?: string };
+export type Project = { file: string; name: string; stitches: number; colors: number; width: number; height: number; modified: number; created?: number; thumbnail?: string; category?: string };
 function ProjectDates({project,compact=false}:{project:Project;compact?:boolean}){
   const format=(value:number)=>new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value*1000));
   const valid=(value:number|undefined):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>0&&Number.isFinite(new Date(value*1000).getTime());
@@ -48,6 +48,7 @@ export function Library({ onDone,onArtwork,onBulkImport,initialTab='embroidery' 
   const [layout,setLayout]=useState<'grid'|'list'>(()=>localStorage.getItem('studio-library-layout')==='list'?'list':'grid');
   useEffect(()=>{localStorage.setItem('studio-library-layout',layout)},[layout]);
   const [sort, setSort] = useState('recent');
+  const [category,setCategory]=useState('all');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -106,10 +107,10 @@ export function Library({ onDone,onArtwork,onBulkImport,initialTab='embroidery' 
   }
 
   const visibleFiles = files.filter(file => matchesName(file,query)).sort(compareNames);
-  const visibleProjects = projects.filter(project => matchesName(project.name + ' ' + project.file,query))
+  const visibleProjects = projects.filter(project => matchesName(project.name + ' ' + project.file + ' ' + (project.category??'Uncategorized'),query)&&(category==='all'||(project.category??'Uncategorized')===category))
     .sort((a, b) => sort === 'name' ? compareNames(a.name,b.name) : sort === 'stitches' ? b.stitches - a.stitches : b.modified - a.modified);
   const filePage=usePagedList(visibleFiles,query);
-  const projectPage=usePagedList(visibleProjects,JSON.stringify([query,sort]));
+  const projectPage=usePagedList(visibleProjects,JSON.stringify([query,sort,category]));
   return <section className={`design-library library-${layout}`}>
     <div className="studio-tools" role="group" aria-label="Design library sources">
       <button aria-pressed={tab === 'embroidery'} onClick={() => { setTab('embroidery'); setQuery(''); }}>Embroidery files</button>
@@ -125,7 +126,7 @@ export function Library({ onDone,onArtwork,onBulkImport,initialTab='embroidery' 
         <button disabled={busy} onClick={() => importDesigns('zip')}><FileArchive size={16} /> Import ZIP</button>
       </> : <>
         <button className="primary" disabled={busy} onClick={importProjects}><FilePlus size={16}/> Import project files</button><button disabled={busy} onClick={scan}><FolderOpen size={16} /> Scan project folder</button>
-        <select aria-label="Sort projects" value={sort} onChange={event => setSort(event.target.value)}>
+        <select aria-label="Filter design categories" value={category} onChange={e=>setCategory(e.target.value)}><option value="all">All categories</option>{Array.from(new Set(projects.map(p=>p.category??"Uncategorized"))).sort().map(c=><option key={c}>{c}</option>)}</select><select aria-label="Sort projects" value={sort} onChange={event => setSort(event.target.value)}>
           <option value="recent">Recently modified</option><option value="name">Name A–Z</option><option value="stitches">Stitch count</option>
         </select>
       </>}
@@ -150,7 +151,7 @@ export function Library({ onDone,onArtwork,onBulkImport,initialTab='embroidery' 
       <p>{visibleProjects.length} {visibleProjects.length===1?'project':'projects'} found</p>
       <div className="font-list">
         {projectPage.items.map(project => <article key={project.file}>
-          <ProjectThumbnail project={project}/><div><strong>{project.name}</strong>
+          <ProjectThumbnail project={project}/><div><strong>{project.name}</strong><small>{project.category??'Uncategorized'}</small>
             <small className="project-metrics">{project.stitches.toLocaleString()} stitches · {project.colors} blocks</small><small className="project-metrics">{(project.width/25.4).toFixed(2)} × {(project.height/25.4).toFixed(2)} in hoop</small><ProjectDates project={project}/>
           </div>
           <button disabled={busy} onClick={() => open(project)}>Open project</button>
