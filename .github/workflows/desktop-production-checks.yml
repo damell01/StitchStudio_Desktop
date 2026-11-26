@@ -2,6 +2,7 @@ name: Desktop production checks
 on:
   push:
     branches: [Dev]
+    tags: ['stitch-update-v*']
   pull_request:
     branches: [Dev]
   workflow_dispatch:
@@ -13,10 +14,43 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ (inputs.update_version || startsWith(github.ref, 'refs/tags/stitch-update-v')) && 'signed-release' || github.ref }}
+  cancel-in-progress: ${{ !inputs.update_version && !startsWith(github.ref, 'refs/tags/stitch-update-v') }}
 jobs:
+  release-request:
+    if: inputs.update_version != '' || startsWith(github.ref, 'refs/tags/stitch-update-v')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        env:
+          MANUAL_VERSION: ${{ inputs.update_version }}
+          STITCH_UPDATE_PUBLIC_KEY: ${{ vars.STITCH_UPDATE_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          STITCH_ARTIFACT_KEY: ${{ secrets.STITCH_ARTIFACT_KEY }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/stitch-update-v* ]]; then
+            version=${GITHUB_REF_NAME#stitch-update-v}
+          elif [[ "$GITHUB_REF" == refs/heads/Dev ]]; then
+            version=$MANUAL_VERSION
+          else
+            echo 'Signed Stitch Studio builds use the Dev branch.' >&2
+            exit 1
+          fi
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/Dev
+          if [[ -z "$STITCH_UPDATE_PUBLIC_KEY" || -z "$TAURI_SIGNING_PRIVATE_KEY" || ! "$STITCH_ARTIFACT_KEY" =~ ^[a-fA-F0-9]{64}$ ]]; then
+            echo 'Configure the updater signing keys and artifact encryption key before building a signed release.' >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
   desktop:
+    needs: release-request
+    if: ${{ !cancelled() && (needs.release-request.result == 'success' || needs.release-request.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -38,16 +72,17 @@ jobs:
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - run: cargo test --locked --manifest-path ../Cargo.toml --test digitizer_formats
       - run: cargo run --locked --manifest-path ../Cargo.toml --example digitizing_benchmark
-      - if: runner.os == 'Windows' && !inputs.update_version
+      - if: runner.os == 'Windows' && !needs.release-request.outputs.version
         run: npm run tauri build -- --bundles nsis -- --locked
-      - if: runner.os == 'macOS' && !inputs.update_version
+      - if: runner.os == 'macOS' && !needs.release-request.outputs.version
         run: npm run tauri build -- --bundles app dmg -- --locked
-      - if: inputs.update_version != ''
+      - if: needs.release-request.outputs.version != ''
         name: Package signed updater and installer
         env:
-          UPDATE_VERSION: ${{ inputs.update_version }}
-          STITCH_UPDATE_FEED: ${{ vars.STITCH_UPDATE_FEED }}
-          STITCH_UPDATE_ASSETS: ${{ vars.STITCH_UPDATE_ASSETS }}
+          UPDATE_VERSION: ${{ needs.release-request.outputs.version }}
+          STITCH_UPDATE_FEED: ${{ vars.STITCH_UPDATE_FEED || 'https://www.dbellcreations.com/stitch-updates/latest.json' }}
+          STITCH_UPDATE_ASSETS: ${{ vars.STITCH_UPDATE_ASSETS || 'https://www.dbellcreations.com/stitch-updates/' }}
+          STITCH_UPDATE_REQUIRE_KEY: ${{ vars.STITCH_UPDATE_REQUIRE_KEY || '1' }}
           STITCH_UPDATE_PUBLIC_KEY: ${{ vars.STITCH_UPDATE_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -58,7 +93,11 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         shell: bash
-        run: npm run package:update -- "$UPDATE_VERSION"
+        run: |
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then unset "$name"; fi
+          done
+          npm run package:update -- "$UPDATE_VERSION"
       - if: runner.os == 'macOS'
         run: ditto -c -k --keepParent 'src-tauri/target/release/bundle/macos/Stitch Studio.app' src-tauri/target/release/bundle/Stitch-Studio-macOS.zip
       - if: runner.os == 'Windows'
@@ -73,16 +112,14 @@ jobs:
           for image in dmg/*.dmg; do
             hdiutil verify "$image"
           done
-      - uses: actions/upload-artifact@v4
+      - if: needs.release-request.outputs.version == ''
+        uses: actions/upload-artifact@v4
         with:
           name: stitch-studio-tauri-${{ matrix.os }}
           path: |
             desktop-ui/src-tauri/target/release/bundle/nsis/*.exe
             desktop-ui/src-tauri/target/release/bundle/Stitch-Studio-macOS.zip
             desktop-ui/src-tauri/target/release/bundle/dmg/*.dmg
-            desktop-ui/src-tauri/target/release/bundle/nsis/*.sig
-            desktop-ui/src-tauri/target/release/bundle/macos/*.app.tar.gz*
-            desktop-ui/src-tauri/target/release/bundle/updates/*.json
             desktop-ui/src-tauri/target/release/bundle/SHA256SUMS.txt
           if-no-files-found: error
       - if: runner.os == 'Windows'
@@ -92,6 +129,17 @@ jobs:
       - if: runner.os == 'macOS'
         name: Mount and copy the Mac application
         run: bash ../.github/scripts/check-macos-install.sh src-tauri/target/release/bundle
+      - if: needs.release-request.outputs.version != ''
+        name: Encrypt the signed artifacts before upload
+        env:
+          STITCH_ARTIFACT_KEY: ${{ secrets.STITCH_ARTIFACT_KEY }}
+        run: node ../.github/scripts/crypt-desktop-release.mjs encrypt src-tauri/target/release/bundle/updates encrypted-updates
+      - if: needs.release-request.outputs.version != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: stitch-studio-updater-${{ matrix.os }}
+          path: desktop-ui/encrypted-updates/
+          if-no-files-found: error
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -112,3 +160,51 @@ jobs:
           name: playwright-failure-traces
           path: desktop-ui/test-results
           if-no-files-found: ignore
+  stage-update:
+    if: needs.release-request.outputs.version != ''
+    needs: [release-request, desktop, browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stitch-studio-updater-*
+          path: updater-artifacts
+      - name: Verify the platform payloads and assemble one feed
+        env:
+          UPDATE_VERSION: ${{ needs.release-request.outputs.version }}
+          STITCH_ARTIFACT_KEY: ${{ secrets.STITCH_ARTIFACT_KEY }}
+          STITCH_UPDATE_ASSETS: ${{ vars.STITCH_UPDATE_ASSETS || 'https://www.dbellcreations.com/stitch-updates/' }}
+        run: |
+          node .github/scripts/crypt-desktop-release.mjs decrypt updater-artifacts decrypted-updates
+          node .github/scripts/stage-desktop-release.mjs "$UPDATE_VERSION" decrypted-updates update-feed
+          node .github/scripts/crypt-desktop-release.mjs encrypt update-feed encrypted-feed
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stitch-studio-update-feed
+          path: encrypted-feed/
+          if-no-files-found: error
+      - if: vars.HOSTINGER_UPDATE_DEPLOY == '1'
+        name: Publish the release to the private Hostinger feed
+        env:
+          UPDATE_VERSION: ${{ needs.release-request.outputs.version }}
+          STITCH_UPDATE_FEED: ${{ vars.STITCH_UPDATE_FEED || 'https://www.dbellcreations.com/stitch-updates/latest.json' }}
+          STITCH_FEED_ACCESS_KEY: ${{ secrets.STITCH_FEED_ACCESS_KEY }}
+          HOSTINGER_SSH_HOST: ${{ vars.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_PORT: ${{ vars.HOSTINGER_SSH_PORT }}
+          HOSTINGER_FEED_DIR: ${{ vars.HOSTINGER_FEED_DIR }}
+          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          HOSTINGER_KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
+        run: |
+          [[ "$STITCH_FEED_ACCESS_KEY" =~ ^[a-f0-9]{64}$ && "$STITCH_UPDATE_FEED" == https://* ]]
+          [[ $(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$STITCH_UPDATE_FEED") == 401 ]]
+          authenticated() {
+            printf 'header = "Authorization: Bearer %s"\n' "$STITCH_FEED_ACCESS_KEY" |
+              curl -fsS -K - --max-time 15 "$STITCH_UPDATE_FEED"
+          }
+          authenticated > /dev/null
+          bash .github/scripts/deploy-hostinger-update.sh "$UPDATE_VERSION" update-feed
+          authenticated | jq -e --arg version "$UPDATE_VERSION" '.version == $version' > /dev/null

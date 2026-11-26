@@ -1,0 +1,4 @@
+RewriteEngine On
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteRule ^(latest\.json)$ index.php?asset=$1 [L]
+RewriteRule ^([0-9]+\.[0-9]+\.[0-9]+/(windows-x86_64|darwin-(aarch64|x86_64))/stitch-studio-[a-z0-9_-]+\.(exe|app\.tar\.gz|dmg))$ index.php?asset=$1 [L]

@@ -75,7 +75,7 @@ Open **Desktop production checks** and select a completed run on **Dev**. Downlo
 
 ## Signed automatic updates
 
-Feed-enabled builds check after startup and periodically while open. Save open projects before using **Settings → App updates → Install and restart**. A regular local or CI build uses manual updates.
+Install a feed-enabled build once. It checks after startup and periodically while open. Save open projects before choosing **Settings → App updates → Install and restart**. Future releases install from that screen. A regular local or CI build uses manual updates. The embroidery tools remain available offline.
 
 Set `STITCH_UPDATE_FEED` to the HTTPS `latest.json` URL and `STITCH_UPDATE_ASSETS` to its HTTPS payload directory URL, ending in `/`. From `desktop-ui`, generate one updater key pair with `npm run tauri signer generate -- --write-keys /path/outside/repo/stitch-update.key`. Keep the private key and password outside the repository and use the same key pair on both build machines.
 
@@ -91,9 +91,9 @@ export STITCH_UPDATE_PUBLIC_KEY="$(cat "$TAURI_SIGNING_PRIVATE_KEY.pub")"
 npm run package:update -- 0.1.1
 ```
 
-Set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in the build environment for an encrypted key. Configure Developer ID signing and notarization for Mac distribution. Upload each signed payload to the versioned URL printed by the build. Copy the JSON files from `src-tauri/target/release/bundle/updates` to one machine. From `desktop-ui`, run `node ../.github/scripts/package-desktop-update.mjs merge windows-x86_64.json darwin-aarch64.json` and save the output as UTF-8 `latest.json`. Publish the manifest after the payloads are accessible. Install the first feed-enabled build manually, then verify an update to a higher version on each OS and architecture you plan to support.
+Set `STITCH_UPDATE_REQUIRE_KEY=1` for the Hostinger feed, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for an encrypted signing key. Configure Developer ID signing and notarization for Mac distribution. The release directory under `src-tauri/target/release/bundle/updates` contains the signed updater packages and the installer files. See the Hostinger guide for creating one feed and publishing it.
 
-You can build all platforms from GitHub while using Windows. In the repository's Actions settings, store the three `STITCH_UPDATE_*` values as variables, the two `TAURI_SIGNING_*` values as secrets, and the Apple credentials under the names used in the workflow. From **Desktop production checks → Run workflow**, choose **Dev** and enter the update version. Download the signed payloads and platform JSON files from the artifacts. Include `darwin-x86_64.json` when publishing the Intel build.
+You can build Windows, Apple silicon and Intel Mac versions from GitHub while using Windows. The workflow encrypts signed update artifacts and can deploy them to the private Hostinger feed. [Hostinger setup and release instructions](../packaging/update-host/README.md)
 
 ## Offline lettering recognition
 
