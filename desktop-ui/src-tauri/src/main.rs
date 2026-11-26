@@ -2828,11 +2828,11 @@ fn lettering_fonts()->Vec<String>{zigzag::document::font_families()}
 #[tauri::command]
 async fn create_lettering(
     text: String, font: String, size: f64, spacing: f64, arc: f64, bold: bool,
-    italic: bool, color: [u8; 3], align: String, placement: Option<[f64; 2]>, kind: Option<String>, leading: Option<f64>, h_scale: Option<f64>, v_scale: Option<f64>, app: tauri::AppHandle,
+    italic: bool, color: [u8; 3], align: String, placement: Option<[f64; 2]>, kind: Option<String>, leading: Option<f64>, h_scale: Option<f64>, v_scale: Option<f64>, effect_color: Option<[u8;3]>, inner_color: Option<[u8;3]>, outer_width: Option<f64>, inner_width: Option<f64>, shadow_x: Option<f64>, shadow_y: Option<f64>, app: tauri::AppHandle,
 ) -> Result<Preview, String> {
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move || {
-        let settings = lettering_edit::LetteringSettings { text, font, size, spacing, arc, bold, italic, color, align, kind, leading, h_scale,v_scale,kern:None,path:None,path_offset:None,path_flip:None };
+        let settings = lettering_edit::LetteringSettings { text, font, size, spacing, arc, bold, italic, color, align, kind, leading, h_scale,v_scale,kern:None,path:None,path_offset:None,path_flip:None,effect_color,inner_color,outer_width,inner_width,shadow_x,shadow_y };
         let spec = settings.spec()?;
         let state = app.state::<Mutex<Workspace>>();
         let mut workspace = state.lock().map_err(|err| err.to_string())?;
