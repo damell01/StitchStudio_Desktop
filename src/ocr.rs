@@ -45,8 +45,11 @@ pub fn recognize_rgba(w: u32, h: u32, rgba: &[u8]) -> anyhow::Result<Vec<Recogni
         lines.push(line);
     }
     let mut lines = group_lines(lines);
+    // Bound font matching on text-heavy artwork. Remaining regions retain
+    // the default editable font and can still be reviewed manually.
+
     let fonts = crate::document::font_families();
-    for line in &mut lines {
+    for line in lines.iter_mut().filter(|l|l.text.chars().count()<=120).take(64) {
         line.font = recommend_font(line, &fonts, w, h, &rgb);
     }
     Ok(lines)
@@ -348,6 +351,21 @@ mod tests {
     use super::*;
     fn line(text:&str,x:f64,y:f64,w:f64,h:f64)->RecognizedLine {
         RecognizedLine{text:text.into(),confidence:-1.0,rect:[x,y,x+w,y+h],font:String::new(),enabled:false}
+    }
+    #[test]
+    fn invalid_ocr_buffers_fail_before_model_loading(){
+        assert!(recognize_rgba(0,1,&[]).is_err());
+        assert!(recognize_rgba(2,2,&[0;15]).is_err());
+        assert!(recognize_rgba(u32::MAX,u32::MAX,&[]).is_err());
+    }
+    #[test]
+    fn invalid_reconstruction_scale_preserves_document(){
+        let mut doc=crate::document::Document::empty();
+        let before=doc.shapes.len();
+        for scale in [0.0,-1.0,f64::NAN,f64::INFINITY]{
+            assert!(replace_lettering(&mut doc,&[],scale).is_err());
+            assert_eq!(doc.shapes.len(),before);
+        }
     }
     #[test]
     fn enclosed_letter_openings_are_distinguished_from_open_gaps(){
