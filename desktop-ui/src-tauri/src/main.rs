@@ -1082,10 +1082,11 @@ fn combined_economy_candidate(source:&zigzag::document::Document,original:&Desig
 fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let score=|d:&Design|optimization_seconds(d,speed,trim);
+    let baseline_seconds=score(original);
     let mut choices=Vec::new();
-    if let Some(v)=automatic_texture_candidate(source,uids,options){choices.push(v);}
-    if let Some(v)=remove_covered_fill_candidate(source,uids,options){choices.push(v);}
-    if let Some(v)=narrow_artwork_candidate(source,original,uids,options){choices.push(v);}
+    if !options.exhausted(){if let Some(v)=automatic_texture_candidate(source,uids,options){choices.push(v);}}
+    if !options.exhausted(){if let Some(v)=remove_covered_fill_candidate(source,uids,options){choices.push(v);}}
+    if !options.exhausted(){if let Some(v)=narrow_artwork_candidate(source,original,uids,options){choices.push(v);}}
     if let Some(v)=combined_economy_candidate(source,original,uids,options,5){choices.push(v);}
     if !options.exhausted(){if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){choices.push(v);}}choices.push((doc,plan));}}
     for angle in [0.,45.,90.] {
@@ -1105,7 +1106,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     }
     let audit=measure_stitches(original);let bounds=original.bounds();
     choices.retain(|(_,d)|{let b=d.bounds();let q=measure_stitches(d);
-        d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&score(d)<score(original)&&q.long<=audit.long&&q.zero<=audit.zero
+        d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&score(d)<baseline_seconds&&q.long<=audit.long&&q.zero<=audit.zero&&q.short<=audit.short.saturating_add(5)
         &&d.trim_count()<=original.trim_count()
         &&bounds.min.dist(b.min)<=5.&&bounds.max.dist(b.max)<=5.
         &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
@@ -1377,10 +1378,10 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let seconds=|d:&Design|optimization_seconds(d,speed,trim);
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
         let stitch_goal=options.target_stitches.or_else(||(original.stitch_count()>15_000).then_some(10_000));
-        let before=measure_stitches(original);let a=original.bounds();
+        let before=measure_stitches(original);let a=original.bounds();let baseline_seconds=seconds(original);
         let eligible=|d:&Design|{let b=d.bounds();let after=measure_stitches(d);
-            d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&seconds(d)<seconds(original)
-            &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero
+            d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&seconds(d)<baseline_seconds
+            &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero&&after.short<=before.short.saturating_add(5)
             &&a.min.dist(b.min)<=5.0&&a.max.dist(b.max)<=5.0
             &&optimization_quality(original,d,speed,trim).coverage>=if strength==1{95.}else if strength==2{90.}else{85.}
             &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
