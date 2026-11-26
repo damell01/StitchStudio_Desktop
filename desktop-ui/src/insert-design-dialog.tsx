@@ -1,3 +1,4 @@
+import {thumbnailOf,type Project} from './library';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Crosshair, FileInput, FolderOpen, Image, LayoutGrid, Plus, Search, X } from 'lucide-react';
@@ -8,10 +9,11 @@ import { importToLibrary, type LibraryImportSource } from './library-import';
 import './insert-design-dialog.css';
 
 type Artwork = { name: string; mime: string; bytes: number[] };
-type Source = 'templates' | 'personal' | 'artwork' | 'layouts';
+type Source = 'templates' | 'personal' | 'artwork' | 'layouts' | 'approved';
 type Selection =
   | { source: 'templates'; template: Template }
   | { source: 'layouts'; file: string }
+  | { source: 'approved'; project: Project }
   | { source: 'personal'; file: string | null }
   | { source: 'artwork'; art: Artwork };
 
@@ -25,9 +27,15 @@ const sources = [
   { id: 'templates', label: 'Templates', icon: LayoutGrid },
   { id: 'layouts', label: 'Saved layouts', icon: LayoutGrid },
   { id: 'personal', label: 'My designs', icon: FolderOpen },
+  { id: 'approved', label: 'Digitized designs', icon: LayoutGrid },
   { id: 'artwork', label: 'Artwork', icon: Image },
 ] as const;
 
+function ApprovedPreview({file}:{file:string}){
+ const [image,setImage]=useState('');const [error,setError]=useState('');
+ useEffect(()=>{let active=true;setImage('');setError('');invoke<StitchPreview>('project_thumbnail',{file}).then(p=>{if(active)setImage(thumbnailOf(p))}).catch(e=>{if(active)setError(String(e))});return()=>{active=false}},[file]);
+ return image?<img src={image} alt="Approved stitch preview"/>:<small>{error||'Loading stitch preview…'}</small>;
+}
 function ArtworkPreview({art}: {art: Artwork}) {
   const [url, setUrl] = useState('');
   useEffect(() => {
@@ -73,8 +81,10 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
 }) {
   const [source, setSource] = useState<Source>('templates');
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [approved,setApproved]=useState<Project[]>([]);
   const [files, setFiles] = useState<string[]>([]);
   const [query, setQuery] = useState('');
+  const approvedPage=usePagedList(approved.filter(p=>matchesName(p.name,query)).sort((a,b)=>compareNames(a.name,b.name)),query,12);
   const [width, setWidth] = useState('2');
   const [x, setX] = useState('0');
   const [y, setY] = useState('0');
@@ -89,7 +99,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
   const xMm = offset ? Number(x) * MM_PER_INCH : 0;
   const yMm = offset ? Number(y) * MM_PER_INCH : 0;
   const offsetValid = Math.abs(xMm) <= 500 && Math.abs(yMm) <= 500;
-  const name = selection?.source === 'templates' ? selection.template.name :
+  const name = selection?.source === 'approved' ? selection.project.name : selection?.source === 'templates' ? selection.template.name :
     selection?.source === 'personal' ? selection.file ?? 'Machine file from disk' :
     selection?.source === 'artwork' ? selection.art.name : selection?.source === 'layouts' ? selection.file.replace(/\.stitchstudio$/,'') : '';
 
@@ -117,6 +127,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
     setError('');
     setMessage('');
     if (next === 'personal') void run(loadFiles);
+    if(next==='approved')void run(async()=>setApproved(await invoke<Project[]>('approved_batch_projects')));
     if (next === 'layouts') void run(async()=>setFiles(await invoke<string[]>('saved_templates')));
   }
 
@@ -133,7 +144,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
     if (!candidate || !offsetValid || ((candidate.source === 'templates' || candidate.source === 'artwork') && !widthValid)) return;
     void run(async () => {
       const position = { xMm, yMm };
-      const result = candidate.source === 'templates'
+      const result = candidate.source === 'approved' ? await invoke<Plan>('insert_approved_design',{...position,file:candidate.project.file}) : candidate.source === 'templates'
         ? await invoke<Plan>('insert_template', { ...position, id: candidate.template.id, art: candidate.template.art, widthMm })
         : candidate.source === 'artwork'
           ? await invoke<Plan>('insert_character', { ...position, bytes: candidate.art.bytes, name: candidate.art.name, widthMm })
@@ -165,6 +176,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
           selectedId={selection?.source === 'templates' ? selection.template.id : undefined}
           onPreview={template => { setSelection({ source, template }); setError(''); }} />}
         {source === 'artwork' && <CharacterGallery onArt={art => { setSelection({ source, art }); setError(''); }} />}
+        {source==='approved'&&<><label className="studio-insert-search"><Search size={16}/><input placeholder="Search digitized designs" value={query} onChange={e=>setQuery(e.target.value)}/></label>{!approvedPage.total&&<p>{approved.length?'No matching designs.':'Approve artwork in Bulk Design Import to add reusable designs here.'}</p>}<div className="approved-insert-grid">{approvedPage.items.map(project=><button key={project.file} aria-pressed={selection?.source==='approved'&&selection.project.file===project.file} onClick={()=>setSelection({source:'approved',project})}><ApprovedPreview file={project.file}/><strong>{project.name}</strong><small>{project.stitches.toLocaleString()} stitches</small></button>)}</div><ListNavigation {...approvedPage}/></>}
         {source === 'layouts' && <>
           <label className="studio-insert-search"><Search size={16}/><input placeholder="Find a saved layout" aria-label="Search saved layouts"
             value={query} onChange={event=>setQuery(event.target.value)}/></label>
@@ -197,7 +209,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
       <section className="studio-insert-placement" aria-label="Design placement">
         <h3>{name || 'Choose a design'}</h3>
         <div className="studio-insert-preview">
-          {selection?.source === 'templates'
+          {selection?.source === 'approved' ? <ApprovedPreview file={selection.project.file}/> : selection?.source === 'templates'
             ? <TemplatePreview key={`${selection.template.id}/${widthMm}`} template={selection.template} widthMm={widthValid ? widthMm : null} />
             : selection?.source === 'artwork' ? <ArtworkPreview art={selection.art}/>
             : selection?.source === 'personal' ? <FileInput size={34}/> : <Crosshair size={34}/>}
@@ -205,7 +217,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
         {selection?.source === 'templates' && <TemplateAttribution template={selection.template}/>}
         {selection?.source === 'personal'
           ? <p>Machine files keep their original size.</p>
-          : selection?.source === 'layouts' ? <p>Layouts keep their original size and internal arrangement.</p> : <label>Width (in)
+          : selection?.source === 'approved' ? <p>Editable design is inserted at its saved size; resize after insertion.</p> : selection?.source === 'layouts' ? <p>Layouts keep their original size and internal arrangement.</p> : <label>Width (in)
               <input type="number" value={width} min=".2" max="9.84" step="any" disabled={busy}
                 onChange={event => setWidth(event.target.value)} aria-invalid={!widthValid}/>
               {!widthValid && <small>Enter a width from 5 to 250 mm.</small>}
