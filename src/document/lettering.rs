@@ -897,8 +897,12 @@ impl Document {
         });
         // Keep the stitch settings already in the id.
         let el = spec.layered_element(&id, &arc_id, transform.as_deref());
-        let replacement = n.parent_element()
-            .filter(|g| g.tag_name().name() == "g" && g.attribute("id").is_some_and(|id| id.starts_with("tl-lettering-")))
+        // Rebuild the entire lettering group, including generated layers.
+        // The shadow may add another nested group; walk upward to the original
+        // editable-text group rather than replacing only its shadow contents.
+        let replacement = n.ancestors()
+            .find(|g| g.is_element() && g.tag_name().name() == "g"
+                && g.attribute("id").is_some_and(|id| id.starts_with("tl-lettering-")))
             .map(|g| {
                 let group_range = g.range();
                 let existing = &self.xml[group_range.clone()];
