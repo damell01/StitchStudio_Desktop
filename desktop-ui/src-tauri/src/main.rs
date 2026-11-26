@@ -2430,7 +2430,7 @@ async fn stage_batch_draft(id:u64,strength:u8,token:String,app:tauri::AppHandle)
  tauri::async_runtime::spawn_blocking(move||write_project(&path,&project)).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
-async fn approve_batch_draft(token:String,app:tauri::AppHandle)->Result<LibraryEntry,String>{
+async fn approve_batch_draft(token:String,category:Option<String>,app:tauri::AppHandle)->Result<serde_json::Value,String>{
  let path=batch_token_path(&app,&token)?;let dir=batch_dir(&app,true)?;
  tauri::async_runtime::spawn_blocking(move||{
   let p=Project::load(&path)?;p.validate()?;
@@ -2439,7 +2439,14 @@ async fn approve_batch_draft(token:String,app:tauri::AppHandle)->Result<LibraryE
   if !dest.exists(){write_project(&dest,&p)?;}
   let meta=std::fs::metadata(&dest).map_err(|e|e.to_string())?;
   let entry=LibraryEntry{file:dest.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0),created:meta.created().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs())};
-  let _=std::fs::remove_file(path);Ok(entry)
+  let category=category.unwrap_or_else(||"Uncategorized".into());
+  let category:String=category.chars().filter(|c|!c.is_control()).take(100).collect();
+  let mut meta_file=tempfile::NamedTempFile::new_in(&dir).map_err(|e|e.to_string())?;
+  use std::io::Write;
+  meta_file.write_all(category.as_bytes()).map_err(|e|e.to_string())?;
+  meta_file.persist(dest.with_extension("category")).map_err(|e|e.to_string())?;
+  let mut value=serde_json::to_value(entry).map_err(|e|e.to_string())?;value["category"]=serde_json::Value::String(category);
+  let _=std::fs::remove_file(path);Ok(value)
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
@@ -2448,7 +2455,7 @@ fn discard_batch_draft(token:String,app:tauri::AppHandle)->Result<(),String>{
  match std::fs::remove_file(p){Ok(())=>Ok(()),Err(e) if e.kind()==std::io::ErrorKind::NotFound=>Ok(()),Err(e)=>Err(e.to_string())}
 }
 #[tauri::command]
-async fn approved_batch_projects(app:tauri::AppHandle)->Result<Vec<LibraryEntry>,String>{
+async fn approved_batch_projects(app:tauri::AppHandle)->Result<Vec<serde_json::Value>,String>{
  let dir=batch_dir(&app,true)?;
  tauri::async_runtime::spawn_blocking(move||{
   let mut out=Vec::new();
@@ -2456,7 +2463,10 @@ async fn approved_batch_projects(app:tauri::AppHandle)->Result<Vec<LibraryEntry>
    let path=entry.path();let Ok(meta)=std::fs::symlink_metadata(&path) else{continue};
    if !meta.is_file()||!path.extension().is_some_and(|e|e=="stitchstudio"){continue}
    let Ok(p)=Project::load(&path) else{continue};
-   out.push(LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0),created:meta.created().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs())});
+   let entry=LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0),created:meta.created().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs())};
+   let mut value=serde_json::to_value(entry).map_err(|e|e.to_string())?;
+   let category=std::fs::read_to_string(path.with_extension("category")).unwrap_or_else(|_|"Uncategorized".into());
+   value["category"]=serde_json::Value::String(category);out.push(value);
   }Ok(out)
  }).await.map_err(|e|e.to_string())?
 }
