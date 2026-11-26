@@ -1229,18 +1229,30 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         }
         }
         let before=measure_stitches(original);let a=original.bounds();
-        candidates.retain(|(_,d)|{let b=d.bounds();let after=measure_stitches(d);
+        let eligible=|d:&Design|{let b=d.bounds();let after=measure_stitches(d);
             d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&seconds(d)<seconds(original)
             &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero
             &&a.min.dist(b.min)<=5.0&&a.max.dist(b.max)<=5.0
             &&optimization_quality(original,d,speed,trim).coverage>=if strength==1{95.}else if strength==2{90.}else{85.}
             &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
-        });
+        };
+        candidates.retain(|(_,d)|eligible(d));
         candidates.sort_by(|(_,a),(_,b)|{
             let rank=|d:&Design|if target.is_some_and(|t|seconds(d)<=t){(0,seconds(d))}else{(1,seconds(d))};
             let a=rank(a);let b=rank(b);a.0.cmp(&b.0).then(a.1.total_cmp(&b.1))
         });
-        let (doc,design)=candidates.into_iter().next().ok_or("No eligible improvement passed the checks. Original retained.")?;
+        let (mut doc,mut design)=candidates.into_iter().next().ok_or("No eligible improvement passed the checks. Original retained.")?;
+        if strength==3 {
+            // Repeat only the inexpensive fill adjustment. Every accepted pass
+            // must still pass the checks against the original stitch plan.
+            for _ in 0..2 {
+                if options.exhausted(){break}
+                let Some((next_doc,next_plan))=economical_fill_candidate(&doc,&design,uids,3,0.0) else {break};
+                if next_plan.stitch_count()>design.stitch_count() || next_plan.trim_count()>design.trim_count()
+                    || seconds(&next_plan)>=seconds(&design) || !eligible(&next_plan){break}
+                (doc,design)=(next_doc,next_plan);
+            }
+        }
         Ok((doc,design))
 }
 #[tauri::command]
@@ -3211,6 +3223,28 @@ fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::ne
 
 #[cfg(test)]
 mod fixed_resize_tests {
+    #[test]
+    fn maximum_refines_a_dense_fill_beyond_one_pass() {
+        let mut source = zigzag::document::Document::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="40mm" viewBox="0 0 80 40"><rect x="4" y="4" width="72" height="32" fill="red"/></svg>"#,
+            "Dense fill", None,
+        ).unwrap();
+        source.shapes[0].params.spacing = Some(0.28);
+        source.shapes[0].params.len = Some(2.2);
+        source.sync().unwrap();
+        let original = source.plan();
+        let (_, single) = super::economical_fill_candidate(&source, &original, None, 3, 0.0).unwrap();
+        let options = super::SimplifyOptions { quick: true, ..Default::default() };
+        let (result, refined) = super::choose_simplification(&source, &original, 3, None, false, &options).unwrap();
+        assert!(refined.stitch_count() < single.stitch_count());
+        assert!(refined.trim_count() <= single.trim_count());
+        assert!(super::optimization_quality(&original, &refined, 800., 3.).coverage >= 85.);
+        let fabric = result.plan_options().fabric;
+        assert!(result.shapes[0].params.fill_spacing(&fabric) <= 0.55);
+        assert!(super::same_stitch_plan(&original, &source.plan()));
+        eprintln!("Original: {}, one pass: {}, Maximum: {}", original.stitch_count(), single.stitch_count(), refined.stitch_count());
+    }
+
     #[test]
     fn stopped_optimization_skips_new_candidate_plans() {
         use super::{SimplifyBudget, SimplifyOptions, choose_fast_stitch, choose_silhouette};
