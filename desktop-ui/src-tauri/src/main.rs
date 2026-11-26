@@ -11,7 +11,7 @@ mod specialty;
 mod thread_recolor;
 use std::sync::Mutex;
 #[derive(Default)]
-struct Workspace { simplify_draft: Option<SimplifyDraft>, plan_cache: zigzag::design::PlanCache, digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)>, undo_labels: Vec<String>, redo_labels: Vec<String> }
+struct Workspace { cancelled_simplify_request: u64, simplify_job: Option<(u64, SimplifyBudget)>, simplify_draft: Option<SimplifyDraft>, plan_cache: zigzag::design::PlanCache, digitizer_draft: Option<DigitizerDraft>, next_draft_id: u64, source: Option<zigzag::document::Document>, current: Option<Design>, undo: Vec<(Design,Option<zigzag::document::Document>)>, redo: Vec<(Design,Option<zigzag::document::Document>)>, undo_labels: Vec<String>, redo_labels: Vec<String> }
 impl Workspace {
  fn checkpoint(&mut self){self.checkpoint_named("Edit design");}
  fn checkpoint_named(&mut self,label:&str){
@@ -692,6 +692,30 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
     }
     best
 }
+#[derive(Clone)]
+struct SimplifyBudget {
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    deadline: std::time::Instant,
+}
+
+impl SimplifyBudget {
+    fn new(duration: std::time::Duration) -> Self {
+        Self { cancelled: Default::default(), deadline: std::time::Instant::now() + duration }
+    }
+
+    fn cancel(&self) {
+        self.cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn exhausted(&self) -> bool {
+        self.is_cancelled() || std::time::Instant::now() >= self.deadline
+    }
+}
+
 #[derive(Clone,Default,serde::Deserialize)]
 #[serde(rename_all="camelCase",default)]
 struct SimplifyOptions {
@@ -699,6 +723,13 @@ struct SimplifyOptions {
     target_minutes:Option<f64>, speed:Option<f64>, trim_seconds:Option<f64>, quick:bool,
     solid_only: bool,
     solid_color: Option<[u8; 3]>,
+    #[serde(skip)]
+    budget: Option<SimplifyBudget>,
+}
+impl SimplifyOptions {
+    fn exhausted(&self) -> bool {
+        self.budget.as_ref().is_some_and(SimplifyBudget::exhausted)
+    }
 }
 fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptions,uids:Option<&[usize]>,texture_radius:f64)->Result<(),String>{
     use zigzag::{params::Kind,svg::Geometry,boolean::{self,PathOp},geom::FillRule};
@@ -713,6 +744,7 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
         // disconnected components intact. Never change recorded text.
         let mut edits=Vec::new();
         for (i,s) in doc.shapes.iter().enumerate(){
+            if options.exhausted(){return Err("Optimization search ended".into())}
             if !eligible(doc,i)||s.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill{continue}
             if let Geometry::Fill{rings,rule}=&s.geometry{
                 let grown=boolean::offset(rings,*rule,texture_radius);
@@ -733,6 +765,7 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
     if options.merge {
         let mut i=0;let mut budget=128;
         while i+1<doc.shapes.len() && budget>0{
+            if options.exhausted(){return Err("Optimization search ended".into())}
             budget-=1;
             let a=&doc.shapes[i];let b=&doc.shapes[i+1];
             let compatible=eligible(doc,i)&&eligible(doc,i+1)&&a.color==b.color&&a.params==b.params
@@ -763,6 +796,7 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
     if options.solid && options.merge && texture_radius>=4.0{
         let mut i=0;let mut budget=64usize;
         while i+2<doc.shapes.len()&&budget>0{
+            if options.exhausted(){return Err("Optimization search ended".into())}
             let first=&doc.shapes[i];
             let mut parts=Vec::new();
             let mut ids=Vec::new();
@@ -858,11 +892,12 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
 }
 // Rebuild distressed ink as opaque, smooth shapes. Work on editable fills
 // rather than altering the machine points; large counters remain negative.
-fn rebuild_solid_artwork(source:&zigzag::document::Document,uids:Option<&[usize]>,radius:f64)->Option<zigzag::document::Document>{
+fn rebuild_solid_artwork(source:&zigzag::document::Document,uids:Option<&[usize]>,radius:f64,options:&SimplifyOptions)->Option<zigzag::document::Document>{
     use zigzag::{boolean,geom::FillRule,params::Kind,svg::Geometry,stitch::satin};
     let mut doc=source.clone();
     let mut edits=Vec::new();
     for (i,s) in source.shapes.iter().enumerate(){
+        if options.exhausted(){return None}
         if !uids.is_none_or(|ids|ids.contains(&s.uid))||source.records_text(i)
             ||source.layer_properties(&s.id).is_some_and(|layer| layer.hidden || layer.locked)
             ||s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")
@@ -996,20 +1031,18 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let score=|d:&Design|optimization_seconds(d,speed,trim);
     let mut choices=Vec::new();
-    let mut mode=options.clone();mode.target_minutes=None;mode.solid=true;mode.merge=true;mode.auto_types=true;
-    if let Ok(v)=choose_simplification(source,original,3,uids,false,&mode){choices.push(v);}
-    for angle in [0.,30.,60.,90.,120.,150.] {
+    for angle in [0.,45.,90.] {
+        if options.exhausted(){break}
         if let Some(v)=economical_fill_candidate(source,original,uids,5,angle)
             .or_else(|| economical_fill_candidate(source,original,uids,3,angle)) {
             choices.push(v);
         }
     }
-    if uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&!matches!(s.params.kind,Some(zigzag::params::Kind::Manual|zigzag::params::Kind::Applique))){
+    if !options.exhausted() && uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&!matches!(s.params.kind,Some(zigzag::params::Kind::Manual|zigzag::params::Kind::Applique))){
         // Reuse dependency-aware ordering, without moving overlapping layers.
         let mut doc=source.clone();doc.settings.hat_order=true;
         if doc.sync().is_ok(){
             let plan=doc.plan();
-            if let Ok(v)=choose_simplification(&doc,&plan,3,None,false,&mode){choices.push(v);}
             choices.push((doc,plan));
         }
     }
@@ -1106,13 +1139,15 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
     let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
     let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
     let seconds=|d:&Design|optimization_seconds(d,speed,trim);
-    for radius in [8.0,12.0,16.0]{
+    let radii = if uids.is_some() { [8.0,12.0,16.0] } else { [16.0,12.0,8.0] };
+    for radius in radii {
+        if options.exhausted(){break}
         let joined = uids.and_then(|ids| solid_selected_fill(source, ids, radius, options.solid_color));
         let (doc, joined_uid) = match joined {
             Some((doc, uid)) => (doc, Some([uid])),
             None => {
                 if options.solid_color.is_some() { continue; }
-                let Some(doc) = rebuild_solid_artwork(source, uids, radius) else { continue };
+                let Some(doc) = rebuild_solid_artwork(source, uids, radius, options) else { continue };
                 (doc, None)
             }
         };
@@ -1121,7 +1156,8 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
         // Do not convert the reconstructed artwork back into outline-only
         // paths: this alternative is intended to show a solid fill.
         let mut variants=vec![(doc.clone(),plan.clone())];
-        for angle in [0.0,45.0,90.0]{
+        for angle in [0.0,90.0]{
+            if options.exhausted(){break}
             if let Some(v)=economical_fill_candidate(&doc,&plan,fill_scope,3,angle){variants.push(v);}
         }
         for (d,p) in variants{
@@ -1134,6 +1170,7 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
             // stitch savings. At equal strength choose the fastest plan.
             candidates.push((radius,d,p));
         }
+        if uids.is_none() && !candidates.is_empty(){break}
     }
     candidates.sort_by(|a,b| if uids.is_some() {
         seconds(&a.2).total_cmp(&seconds(&b.2)).then_with(|| b.0.total_cmp(&a.0))
@@ -1152,12 +1189,15 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
                 if let Some(v)=economical_fill_candidate(source,original,uids,4,0.0){candidates.push(v);}
             }
         }else{
-        if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
+        if !options.exhausted(){
+            if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
+        }
         if options.solid||options.merge||options.auto_types||options.lighter_underlay{
             let radii:&[f64]=if options.solid&&strength>=3{&[4.0,8.0,12.0]}else if options.solid&&strength==2{&[2.0,4.0]}else{&[2.0]};
             for &radius in radii{
+                if options.exhausted(){break}
                 let mut geometry=source.clone();
-                if optimize_geometry(&mut geometry,&options,uids,radius).is_ok(){
+                if optimize_geometry(&mut geometry,options,uids,radius).is_ok() && !options.exhausted(){
                     let plan=geometry.plan();
                     if let Some(v)=simplify_design_candidate(&geometry,&plan,strength,uids,false){candidates.push(v);}
                     candidates.push((geometry,plan));
@@ -1166,6 +1206,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         }
         if strength>=2{
             for angle in [0.0,45.0,90.0]{
+                if options.exhausted(){break}
                 let level=if strength==3{4}else{strength};
                 if let Some(v)=economical_fill_candidate(source,original,uids,level,angle)
                     .or_else(|| economical_fill_candidate(source,original,uids,strength,angle)) {candidates.push(v);}
@@ -1173,10 +1214,12 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         }
         if strength==3&&options.solid{
             for radius in [5.0,8.0,12.0]{
-                if let Some(mut doc)=rebuild_solid_artwork(source,uids,radius){
-                    if optimize_geometry(&mut doc,options,uids,4.0).is_ok(){
+                if options.exhausted(){break}
+                if let Some(mut doc)=rebuild_solid_artwork(source,uids,radius,options){
+                    if optimize_geometry(&mut doc,options,uids,4.0).is_ok() && !options.exhausted(){
                         let plan=doc.plan();
                         for angle in [0.0,90.0]{
+                            if options.exhausted(){break}
                             if let Some(v)=economical_fill_candidate(&doc,&plan,uids,3,angle){candidates.push(v);}
                         }
                         candidates.push((doc,plan));
@@ -1222,22 +1265,39 @@ struct SimplifyDraft {
 #[derive(serde::Serialize)]
 struct SimplifyVariant { strength:u8, plan:Option<Preview>, reason:Option<String>, quality:Option<OptimizationQuality> }
 #[derive(serde::Serialize)]
-struct SimplifyReview { id:u64, variants:Vec<SimplifyVariant> }
+struct SimplifyReview { id:u64, variants:Vec<SimplifyVariant>, limited: bool }
 fn same_stitch_plan(a:&Design,b:&Design)->bool{
     a.name==b.name&&a.blocks.len()==b.blocks.len()&&a.blocks.iter().zip(&b.blocks).all(|(x,y)|x.color==y.color&&x.runs.len()==y.runs.len()&&x.runs.iter().zip(&y.runs).all(|(p,q)|p.trim_before==q.trim_before&&p.pts==q.pts))
 }
 #[tauri::command]
-async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<bool>,options:Option<SimplifyOptions>,app:tauri::AppHandle)->Result<SimplifyReview,String>{
+async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<bool>,options:Option<SimplifyOptions>,request_id:Option<u64>,previous_id:Option<u64>,app:tauri::AppHandle)->Result<SimplifyReview,String>{
     use tauri::Manager;
-    tauri::async_runtime::spawn_blocking(move||{
-        let state=app.state::<Mutex<Workspace>>();
+    let request_id = request_id.unwrap_or(0);
+    let budget = SimplifyBudget::new(std::time::Duration::from_secs(10));
+    {
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|e| e.to_string())?;
+        if request_id != 0 && request_id <= workspace.cancelled_simplify_request {
+            return Err("Optimization cancelled".into());
+        }
+        if workspace.simplify_job.is_some() {
+            return Err("The previous preview is still stopping. Try again in a moment.".into());
+        }
+        workspace.simplify_job = Some((request_id, budget.clone()));
+    }
+    let worker_app = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move||{
+        let state=worker_app.state::<Mutex<Workspace>>();
         let (original,source,source_xml)={let w=state.lock().map_err(|e|e.to_string())?;
+        if budget.is_cancelled(){return Err("Optimization cancelled".into())}
         (w.current.clone().ok_or("Open a design first")?,editable_base(&w,"Simplified design")?,w.source.as_ref().map(|d|d.xml.clone()))};
         if let Some(ids)=&uids{if ids.is_empty()||ids.iter().any(|id|!source.shapes.iter().any(|s|s.uid==*id)){return Err("Select valid objects first".into())}}
-        let options=options.unwrap_or_default();
+        let mut options=options.unwrap_or_default();
+        options.budget = Some(budget.clone());
         let mut variants=Vec::new();let mut stored=Vec::new();
-        let strengths: &[u8] = if options.solid_only { &[4] } else if options.quick { &[2,3] } else { &[1,2,3,4,5] };
+        let strengths: &[u8] = if options.solid_only { &[4] } else if options.quick { &[2,3] } else if previous_id.is_some() { &[5,4] } else { &[2,3,5,4,1] };
         for &strength in strengths{
+            if options.exhausted(){break}
             if strength>=4{
                 match if strength==4{choose_silhouette(&source,&original,uids.as_deref(),&options)}else{choose_fast_stitch(&source,&original,uids.as_deref(),&options)}{
                     Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
@@ -1255,12 +1315,36 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
             }
         }
         let mut w=state.lock().map_err(|e|e.to_string())?;
+        if budget.is_cancelled(){return Err("Optimization cancelled".into())}
         if !w.current.as_ref().is_some_and(|d|same_stitch_plan(d,&original))||w.source.as_ref().map(|d|d.xml.clone())!=source_xml{return Err("Design changed during optimization".into())}
-        w.next_draft_id=w.next_draft_id.wrapping_add(1);
-        let id=w.next_draft_id;
+        if let Some(previous_id) = previous_id {
+            let previous = w.simplify_draft.as_mut().filter(|draft| draft.id == previous_id
+                && same_stitch_plan(&draft.original,&original) && draft.source_xml == source_xml)
+                .ok_or("The design changed. Generate fresh previews.")?;
+            previous.variants.retain(|(strength, _, _)| !stored.iter().any(|entry| entry.0 == *strength));
+            stored.append(&mut previous.variants);
+        }
+        variants.sort_by_key(|variant| variant.strength);
+        let id = previous_id.unwrap_or_else(|| {
+            w.next_draft_id = w.next_draft_id.wrapping_add(1);
+            w.next_draft_id
+        });
         w.simplify_draft=Some(SimplifyDraft{id,original,source_xml,variants:stored});
-        Ok(SimplifyReview{id,variants})
-    }).await.map_err(|e|e.to_string())?
+        Ok(SimplifyReview{id,variants,limited:budget.exhausted()})
+    }).await;
+    let state = app.state::<Mutex<Workspace>>();
+    let mut workspace = state.lock().map_err(|e| e.to_string())?;
+    workspace.simplify_job = None;
+    result.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+fn cancel_simplification(request_id: u64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
+    let mut workspace = state.lock().map_err(|e| e.to_string())?;
+    workspace.cancelled_simplify_request = workspace.cancelled_simplify_request.max(request_id);
+    if let Some((_, budget)) = workspace.simplify_job.as_ref().filter(|(id, _)| *id == request_id) {
+        budget.cancel();
+    }
+    Ok(())
 }
 #[tauri::command]
 fn apply_simplification(id:u64,strength:u8,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
@@ -3123,10 +3207,25 @@ async fn open_prepared_bundled_design(id:String,app:tauri::AppHandle)->Result<Op
         project.restore(&state)
     }).await.map_err(|e|e.to_string())?
 }
-fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,preview_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
+    #[test]
+    fn stopped_optimization_skips_new_candidate_plans() {
+        use super::{SimplifyBudget, SimplifyOptions, choose_fast_stitch, choose_silhouette};
+        let source = zigzag::document::Document::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="40mm" viewBox="0 0 80 40"><rect x="4" y="4" width="72" height="32" fill="red"/></svg>"#,
+            "Wide fill", None,
+        ).unwrap();
+        let original = source.plan();
+        let budget = SimplifyBudget::new(std::time::Duration::from_secs(10));
+        budget.cancel();
+        let options = SimplifyOptions { budget: Some(budget), ..Default::default() };
+        assert!(choose_fast_stitch(&source, &original, None, &options).is_err());
+        assert!(choose_silhouette(&source, &original, None, &options).is_err());
+    }
+
     #[test]
     fn solid_fill_joins_selected_shading_and_preserves_the_bow_opening_and_letter() {
         use zigzag::{document::Document, geom::{P, point_inside}, svg::Geometry};

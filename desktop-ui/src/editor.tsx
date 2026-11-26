@@ -37,6 +37,7 @@ function panelWidth(key: string, fallback: number, min: number, max: number) {
   return value >= min && value <= max ? value : fallback;
 }
 export function Editor({navigation=[]}:{beginner?:boolean;navigation?:Command[]}){const insertDialog=useRef<HTMLDialogElement>(null);const [focusCanvas,setFocusCanvas]=useState(false);const [pricingOpen,setPricingOpen]=useState(false);
+let nextSimplificationRequest = Date.now() * 1000;
 const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
@@ -153,8 +154,82 @@ function openSelectedSolid(ids=movementIds,color:number[]|null=null){
   setSolidOnly(true);setSimplifyScope('selection');setSimplifyBefore(plan);setSimplifyOpen(true);
   void simplify('selection',false,true,ids,color);
 }
-function openSimplify(){setSolidOnly(false);if(!plan||busy||editLock.current)return;const scope=movementIds.length&&movementIds.length<objects.length?'selection':'all';setSimplifyScope(scope);setSimplifyDetail(false);setSimplifyReview(null);setSimplifyBefore(plan);setSimplifyError('');setSimplifyOpen(true);void simplify(scope,true);}
-async function simplify(scope=simplifyScope,automatic=false,onlySolid=solidOnly,ids=solidIds,color=solidColor){if(!plan||busy||editLock.current)return;editLock.current=true;setBusy(true);setPlaying(false);setInlineWork('Generating stitch previews…');setSimplifyError('');setSimplifyReview(null);try{const review=await invoke<{id:number;variants:{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}>('preview_simplification',{uids:scope==='selection'?(onlySolid?ids:movementIds):null,removeDetail:automatic||onlySolid?false:simplifyDetail,options:{quick:automatic,solidOnly:onlySolid,solidColor:onlySolid?color:null,solid:onlySolid||(!automatic&&solidMode),merge:automatic?true:mergeShapes,autoTypes:automatic?true:autoTypes,lighterUnderlay:automatic?false:lighterUnderlay,targetMinutes:Number(targetMinutes)>0?Number(targetMinutes):null,speed:sewingSpm,trimSeconds}});setSimplifyReview(review);const minutes=(p:Plan)=>p.stitches/sewingSpm+p.trims*trimSeconds/60+Math.max(0,p.blocks.length-1)*changeSeconds/60;const eligible=review.variants.filter(v=>v.plan&&v.strength!==4&&(v.quality?.coverage??0)>=85&&minutes(v.plan)<minutes(plan));eligible.sort((a,b)=>minutes(a.plan!)-minutes(b.plan!));const best=onlySolid&&review.variants.some(v=>v.strength===4&&v.plan)?4:eligible[0]?.strength??0;setSimplifyRecommended(onlySolid?0:best);setSimplifyLevel(best);}catch(e){setSimplifyError(String(e))}finally{editLock.current=false;setBusy(false);setInlineWork('')}}
+function openSimplify(){setSolidOnly(false);if(!plan||busy||editLock.current)return;const scope=movementIds.length&&movementIds.length<objects.length?'selection':'all';setSimplifyScope(scope);setSimplifyDetail(false);setSimplifyReview(null);setSimplifyBefore(plan);setSimplifyError('');setSimplifyOpen(true);void simplify(scope,true,false);}
+const simplifyRequest = useRef<number|null>(null);
+const [searchingSimplify,setSearchingSimplify] = useState(false);
+const [simplifyLimited,setSimplifyLimited] = useState(false);
+useEffect(()=>()=> {
+  if(simplifyRequest.current!==null) {
+    void invoke('cancel_simplification',{requestId:simplifyRequest.current}).catch(()=>{});
+    simplifyRequest.current=null;
+  }
+},[]);
+function cancelSimplify() {
+  const requestId=simplifyRequest.current;
+  if(requestId!==null) {
+    simplifyRequest.current=null;
+    void invoke('cancel_simplification',{requestId}).catch(()=>{});
+    setSearchingSimplify(false);
+    editLock.current=false;
+    setBusy(false);
+    setInlineWork('');
+    if(simplifyReview)return;
+  }else if(busy){return;}
+  setSimplifyOpen(false);
+}
+useEffect(()=>{
+  if(!simplifyOpen)return;
+  function escape(event:KeyboardEvent){
+    if(event.key==='Escape'){event.preventDefault();cancelSimplify();}
+  }
+  window.addEventListener('keydown',escape);
+  return ()=>window.removeEventListener('keydown',escape);
+});
+async function simplify(scope=simplifyScope,automatic=false,onlySolid=solidOnly,ids=solidIds,color=solidColor,extend=false){
+  if(!plan||busy||editLock.current)return;
+  const previous=extend?simplifyReview:null;
+  const requestId=++nextSimplificationRequest;
+  simplifyRequest.current=requestId;
+  editLock.current=true;
+  setSearchingSimplify(true);
+  setBusy(true);
+  setPlaying(false);
+  setInlineWork('Generating stitch previews…');
+  setSimplifyError('');
+  setSimplifyLimited(false);
+  if(!previous)setSimplifyReview(null);
+  try{
+    const review=await invoke<{id:number;limited?:boolean;variants:{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}>('preview_simplification',{
+      requestId,previousId:previous?.id??null,uids:scope==='selection'?(onlySolid?ids:movementIds):null,
+      removeDetail:automatic||onlySolid?false:simplifyDetail,
+      options:{quick:automatic,solidOnly:onlySolid,solidColor:onlySolid?color:null,solid:onlySolid||(!automatic&&solidMode),
+        merge:automatic?true:mergeShapes,autoTypes:automatic?true:autoTypes,lighterUnderlay:automatic?false:lighterUnderlay,
+        targetMinutes:Number(targetMinutes)>0?Number(targetMinutes):null,speed:sewingSpm,trimSeconds}
+    });
+    if(simplifyRequest.current!==requestId)return;
+    const variants=[...(previous?.variants.filter(old=>!review.variants.some(next=>next.strength===old.strength&&next.plan))??[]),
+      ...review.variants.filter(next=>next.plan||!previous?.variants.some(old=>old.strength===next.strength))];
+    variants.sort((a,b)=>a.strength-b.strength);
+    setSimplifyReview({...review,variants});
+    setSimplifyLimited(!!review.limited);
+    const minutes=(p:Plan)=>p.stitches/sewingSpm+p.trims*trimSeconds/60+Math.max(0,p.blocks.length-1)*changeSeconds/60;
+    const eligible=variants.filter(v=>v.plan&&v.strength!==4&&(v.quality?.coverage??0)>=85&&minutes(v.plan)<minutes(plan));
+    eligible.sort((a,b)=>minutes(a.plan!)-minutes(b.plan!));
+    const best=onlySolid&&variants.some(v=>v.strength===4&&v.plan)?4:eligible[0]?.strength??0;
+    setSimplifyRecommended(onlySolid?0:best);
+    setSimplifyLevel(best);
+  }catch(e){
+    if(simplifyRequest.current===requestId)setSimplifyError(String(e));
+  }finally{
+    if(simplifyRequest.current===requestId){
+      simplifyRequest.current=null;
+      editLock.current=false;
+      setSearchingSimplify(false);
+      setBusy(false);
+      setInlineWork('');
+    }
+  }
+}
 async function applySimplify(){if(!simplifyReview||busy||editLock.current)return;editLock.current=true;setBusy(true);setInlineWork('Applying selected stitch plan…');try{const next=await invoke<Plan>('apply_simplification',{id:simplifyReview.id,strength:simplifyLevel});if(next.blocks.length!==plan?.blocks.length||next.blocks.some((block,i)=>block.color.join(',')!==plan?.blocks[i]?.color.join(',')))setThreadAssignments({});setPlan(next);setPlayhead(null);setSimplifyOpen(false);}catch(e){setSimplifyError(String(e));setSimplifyReview(null)}finally{editLock.current=false;setBusy(false);setInlineWork('')}}
 
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
@@ -1098,16 +1173,16 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </footer>
   <AssistantChat open={assistantOpen} busy={busy} onRequest={prepareAssistant} onClose={()=>setAssistantOpen(false)}/>
 
-{simplifyOpen&&<div role="presentation" onClick={()=>{if(!busy)setSimplifyOpen(false)}} style={{position:'fixed',inset:0,zIndex:1001,background:'#17102266',display:'grid',placeItems:'center'}}><section role="dialog" aria-modal="true" aria-label="Simplify design" aria-busy={busy} onClick={e=>e.stopPropagation()} className="workspace-inspector-group simplify-dialog" style={{background:'var(--panel,#fff)',padding:24,borderRadius:16,width:'min(1120px,94vw)',maxHeight:'85vh',overflow:'auto'}}><header className="simplify-dialog-heading"><h3><Scissors size={18}/> Simplify design</h3><button aria-label="Close simplification" disabled={busy} onClick={()=>setSimplifyOpen(false)}><X size={18}/></button></header><p>{solidOnly?'Compare a solid fill for the selected artwork. Fine shading may change.':'Reduce sewing time while preserving artwork outlines, lettering and thread order. Test sew before production.'}</p>{solidOnly&&solidColor&&<div className="studio-soft-area-tools">
+{simplifyOpen&&<div role="presentation" onClick={cancelSimplify} style={{position:'fixed',inset:0,zIndex:1001,background:'#17102266',display:'grid',placeItems:'center'}}><section role="dialog" aria-modal="true" aria-label="Simplify design" aria-busy={busy} onClick={e=>e.stopPropagation()} className="workspace-inspector-group simplify-dialog" style={{background:'var(--panel,#fff)',padding:24,borderRadius:16,width:'min(1120px,94vw)',maxHeight:'85vh',overflow:'auto'}}><header className="simplify-dialog-heading"><h3><Scissors size={18}/> Simplify design</h3><button aria-label={searchingSimplify?undefined:"Close simplification"} disabled={busy&&!searchingSimplify} onClick={cancelSimplify}>{searchingSimplify?"Stop search":<X size={18}/>}</button></header><p>{solidOnly?'Compare a solid fill for the selected artwork. Fine shading may change.':'Reduce sewing time while preserving artwork outlines, lettering and thread order. Test sew before production.'}</p>{solidOnly&&solidColor&&<div className="studio-soft-area-tools">
   <label>Fill thread color <input type="color" value={'#'+solidColor.map(value=>value.toString(16).padStart(2,'0')).join('')}
     disabled={busy} onChange={event=>{
       const next=[1,3,5].map(index=>parseInt(event.target.value.slice(index,index+2),16));
       setSolidColor(next);
       void simplify('selection',false,true,solidIds,next);
     }}/></label>
-</div>}{!solidOnly&&<details className="simplify-advanced"><summary>Adjust optimization options · {simplifyScope==='selection'?'Selected objects':'Entire design'}</summary><label>Apply to<select value={simplifyScope} disabled={busy||!!simplifyReview} onChange={e=>setSimplifyScope(e.target.value as 'all'|'selection')}><option value="all">Entire design</option><option value="selection" disabled={!movementIds.length}>Selected objects ({movementIds.length})</option></select></label><label><input type="checkbox" checked={simplifyDetail} disabled={busy||!!simplifyReview} onChange={e=>setSimplifyDetail(e.target.checked)}/> Remove tiny decorative details</label><small>Optional: may remove small marks and change artwork appearance. Review the canvas before sewing.</small><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,padding:'10px 0'}}><label><input type="checkbox" checked={solidMode} disabled={busy||!!simplifyReview} onChange={e=>setSolidMode(e.target.checked)}/> Solid artwork · close narrow texture gaps</label><label><input type="checkbox" checked={mergeShapes} disabled={busy||!!simplifyReview} onChange={e=>setMergeShapes(e.target.checked)}/> Merge compatible overlapping shapes</label><label><input type="checkbox" checked={autoTypes} disabled={busy||!!simplifyReview} onChange={e=>setAutoTypes(e.target.checked)}/> Automatically select stitch types</label><label><input type="checkbox" checked={lighterUnderlay} disabled={busy||!!simplifyReview} onChange={e=>setLighterUnderlay(e.target.checked)}/> Try lighter satin underlay</label></div><label>Target sewing time (minutes, optional)<input type="number" min="1" step="1" placeholder="Best available improvement" value={targetMinutes} disabled={busy||!!simplifyReview} onChange={e=>setTargetMinutes(e.target.value)}/></label><small>Uses your machine speed and trim time. A target is a goal, not a guarantee. Solid artwork and lighter underlay can change the sewn appearance.</small></details>}{simplifyReview&&!solidOnly&&<p className="simplify-recommendation">{simplifyRecommended?'Recommended: '+['Original','Gentle','Balanced','Maximum','Solid silhouette','Fast Stitch'][simplifyRecommended]+' · fastest eligible plan with at least 85% footprint overlap.':'Original recommended · no faster plan met the automatic coverage threshold.'} You may choose another preview.</p>}{simplifyBefore&&simplifyReview&&<SimplificationGallery before={simplifyBefore} variants={simplifyReview.variants} selected={simplifyLevel} recommended={simplifyRecommended} onSelect={setSimplifyLevel} speed={sewingSpm} trim={trimSeconds} change={changeSeconds} target={Number(targetMinutes)}/>}
-{busy&&!simplifyReview&&<section className="simplify-loading" role="status" aria-live="polite"><div className="simplify-spinner" aria-hidden="true"/><div><strong>Generating stitch previews</strong><p>Analyzing artwork and generating stitch plan candidates. Your original design is unchanged.</p><div className="simplify-progress" aria-hidden="true"><span/></div><small>Complex designs can take longer. No changes are applied until you choose a preview.</small></div></section>}{simplifyBefore&&!simplifyReview&&<p>Original: {simplifyBefore.stitches.toLocaleString()} stitch points · {simplifyBefore.trims} trims. Compare stitch plans without changing the design.</p>}
-{simplifyError&&<p role="alert">{simplifyError}</p>}<div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>{simplifyReview&&!solidOnly&&<button disabled={busy} onClick={()=>void simplify(simplifyScope,false)}>Deep optimization</button>}{simplifyReview&&!solidOnly&&<button disabled={busy} onClick={()=>setSimplifyReview(null)}>Change options</button>}<button disabled={busy} onClick={()=>setSimplifyOpen(false)}>Cancel</button>{simplifyReview?<button className="primary" disabled={busy||(simplifyLevel!==0&&!simplifyReview.variants.some(v=>v.strength===simplifyLevel&&v.plan))} onClick={()=>simplifyLevel===0?setSimplifyOpen(false):void applySimplify()}>{simplifyLevel===0?'Keep original':'Apply selected design'}</button>:<button className="primary" disabled={busy} onClick={()=>void simplify()}>{busy?'Generating stitch previews…':solidOnly?'Retry solid fill':'Compare all modes'}</button>}</div></section></div>}
+</div>}{!solidOnly&&<details className="simplify-advanced"><summary>Adjust optimization options · {simplifyScope==='selection'?'Selected objects':'Entire design'}</summary><label>Apply to<select value={simplifyScope} disabled={busy||!!simplifyReview} onChange={e=>setSimplifyScope(e.target.value as 'all'|'selection')}><option value="all">Entire design</option><option value="selection" disabled={!movementIds.length}>Selected objects ({movementIds.length})</option></select></label><label><input type="checkbox" checked={simplifyDetail} disabled={busy||!!simplifyReview} onChange={e=>setSimplifyDetail(e.target.checked)}/> Remove tiny decorative details</label><small>Optional: may remove small marks and change artwork appearance. Review the canvas before sewing.</small><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,padding:'10px 0'}}><label><input type="checkbox" checked={solidMode} disabled={busy||!!simplifyReview} onChange={e=>setSolidMode(e.target.checked)}/> Solid artwork · close narrow texture gaps</label><label><input type="checkbox" checked={mergeShapes} disabled={busy||!!simplifyReview} onChange={e=>setMergeShapes(e.target.checked)}/> Merge compatible overlapping shapes</label><label><input type="checkbox" checked={autoTypes} disabled={busy||!!simplifyReview} onChange={e=>setAutoTypes(e.target.checked)}/> Automatically select stitch types</label><label><input type="checkbox" checked={lighterUnderlay} disabled={busy||!!simplifyReview} onChange={e=>setLighterUnderlay(e.target.checked)}/> Try lighter satin underlay</label></div><label>Target sewing time (minutes, optional)<input type="number" min="1" step="1" placeholder="Best available improvement" value={targetMinutes} disabled={busy||!!simplifyReview} onChange={e=>setTargetMinutes(e.target.value)}/></label><small>Uses your machine speed and trim time. A target is a goal, not a guarantee. Solid artwork and lighter underlay can change the sewn appearance.</small></details>}{simplifyReview&&!solidOnly&&<p className="simplify-recommendation">{simplifyRecommended?'Recommended: '+['Original','Gentle','Balanced','Maximum','Solid silhouette','Fast Stitch'][simplifyRecommended]+' · fastest eligible plan with at least 85% footprint overlap.':'Original recommended · no faster plan met the automatic coverage threshold.'} You may choose another preview.</p>}{searchingSimplify&&<section className="simplify-loading" role="status" aria-live="polite"><div className="simplify-spinner" aria-hidden="true"/><div><strong>Generating stitch previews</strong><p>Analyzing artwork and generating stitch plan candidates. Your original design is unchanged.</p><div className="simplify-progress" aria-hidden="true"><span/></div><small>Stop the search at any time. Finished previews are available when the search returns.</small></div></section>}{simplifyBefore&&simplifyReview&&<SimplificationGallery before={simplifyBefore} variants={simplifyReview.variants} selected={simplifyLevel} recommended={simplifyRecommended} onSelect={setSimplifyLevel} speed={sewingSpm} trim={trimSeconds} change={changeSeconds} target={Number(targetMinutes)}/>}
+{simplifyBefore&&!simplifyReview&&<p>Original: {simplifyBefore.stitches.toLocaleString()} stitch points · {simplifyBefore.trims} trims. Compare stitch plans without changing the design.</p>}
+{simplifyLimited&&<p role="status">Search time limit reached. Review the available previews.</p>}{simplifyError&&<p role="alert">{simplifyError}</p>}<div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>{simplifyReview&&!solidOnly&&!simplifyReview.variants.some(v=>v.strength>=4)&&<button disabled={busy} onClick={()=>void simplify(simplifyScope,false,false,solidIds,null,true)}>Deep optimization</button>}{simplifyReview&&!solidOnly&&<button disabled={busy} onClick={()=>setSimplifyReview(null)}>Change options</button>}{!searchingSimplify&&<button disabled={busy} onClick={cancelSimplify}>Cancel</button>}{simplifyReview?<button className="primary" disabled={busy||(simplifyLevel!==0&&!simplifyReview.variants.some(v=>v.strength===simplifyLevel&&v.plan))} onClick={()=>simplifyLevel===0?setSimplifyOpen(false):void applySimplify()}>{simplifyLevel===0?'Keep original':'Apply selected design'}</button>:<button className="primary" disabled={busy} onClick={()=>void simplify()}>{busy?'Generating stitch previews…':solidOnly?'Retry solid fill':'Compare all modes'}</button>}</div></section></div>}
 {hoopOpen&&<div className="studio-modal-scrim" onClick={()=>setHoopOpen(false)}><section className="studio-modal workspace-inspector-group" role="dialog" aria-modal="true" aria-label="Hoop and machine settings" onClick={e=>e.stopPropagation()}><header><strong>Hoop & machine</strong><button aria-label="Close hoop settings" onClick={()=>setHoopOpen(false)}><X size={18}/></button></header>    <label>Machine<select value={machine} onChange={e=>{setMachine(e.target.value);const m=machines.find(p=>p.id===e.target.value);const preferred=hoops.find(h=>h.id===hoop&&hoopFits(h,m))||hoops.find(h=>h.id===localStorage.getItem("studio-default-hoop")&&hoopFits(h,m));if(preferred){setHoop(preferred.id);setWidth(preferred.width);setHeight(preferred.height)}else{setHoop("");if(m){setWidth(m.width);setHeight(m.height)}}if(m?.format)setFormat(m.format.toLowerCase())}}><option value="">Manual setup</option>{machines.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label><label>Saved hoop<select value={hoop} onChange={e=>{setHoop(e.target.value);const h=hoops.find(p=>p.id===e.target.value);if(h){setWidth(h.width);setHeight(h.height)}}}><option value="">Custom dimensions</option>{compatibleHoops.map(h=><option key={h.id} value={h.id}>{h.name} — {h.width} × {h.height}</option>)}</select></label>{selectedMachine&&<small>{compatibleHoops.length} compatible saved hoops · {hoops.length-compatibleHoops.length} excluded by field size or mounting assignment.</small>}<div className="workspace-hoop-fields"><label>Width (in) <small>({width.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((width/25.4).toFixed(3))} onChange={e=>{setHoop("");setWidth(Number(e.target.value)*25.4)}}/></label><label>Height (in) <small>({height.toFixed(1)} mm)</small><input type="number" step=".01" value={Number((height/25.4).toFixed(3))} onChange={e=>{setHoop("");setHeight(Number(e.target.value)*25.4)}}/></label></div>
 <p className="muted">Enter the usable sewing field, not the outer dimensions of the hoop.</p>{(invalidField||machineExceeded||incompatibleHoop)&&<p role="alert">Check the machine and hoop dimensions.</p>}<div className="studio-modal-actions"><button onClick={()=>{setHoopOpen(false);setZoom(100);setPan([0,0])}}>Done</button><button className="primary" disabled={!plan||busy||invalidField||machineExceeded||incompatibleHoop} onClick={()=>{setHoopOpen(false);fit(false)}}>Maximize design in hoop</button></div></section></div>}
 {pricingOpen&&plan&&<div className="pricing-modal-backdrop" onClick={()=>setPricingOpen(false)}><section role="dialog" aria-modal="true" aria-label="Job pricing calculator" className="pricing-modal" onClick={e=>e.stopPropagation()} onKeyDown={e=>{if(e.key==='Escape')setPricingOpen(false);e.stopPropagation()}}><div className="pricing-modal-title"><h2>Price current design</h2><button autoFocus aria-label="Close pricing calculator" onClick={()=>setPricingOpen(false)}><X size={18}/></button></div><PricingCalculator design={{name:plan.name,stitches:plan.stitches,minutes:sewingEstimate/60,objects}}/></section></div>}{exportOpen&&plan&&<ExportCenter assignments={threadAssignments} plan={plan} width={width} height={height} format={format} setFormat={setFormat} machine={machines.find(m=>m.id===machine)?.name||""} blocked={outside||machineExceeded||incompatibleHoop||invalidField} busy={busy} onExport={save} onClose={()=>setExportOpen(false)}/>}{message&&<p role="status">{message}</p>}</>}

@@ -136,3 +136,42 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   expect(moves[0].dx).toBeGreaterThan(0);
 
 });
+
+test('stopping deep optimization keeps quick previews and ignores a late result', async ({page}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('studio-tour-seen','1');
+    const calls:{command:string;args:Record<string,unknown>}[]=[];
+    const plan={name:'Ornament',stitches:3000,trims:8,blocks:[{color:[88,52,108],runs:[[[0,0],[8,8]]]}]};
+    const variant=(strength:number,stitches:number)=>({strength,plan:{...plan,stitches},reason:null,quality:{coverage:97,density_peak:7}});
+    Object.assign(window,{optimizationCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>) {
+      if(command==='current_preview')return plan;
+      if(command==='editable_objects')return [];
+      if(command==='preview_simplification'){
+        calls.push({command,args});
+        if(args.previousId)return new Promise(resolve=>{
+          Object.assign(window,{finishDeep:()=>resolve({id:17,variants:[variant(5,1800)]})});
+        });
+        return {id:17,variants:[variant(2,2600)]};
+      }
+      if(command==='cancel_simplification')calls.push({command,args});
+      if(command==='apply_simplification'){calls.push({command,args});return {...plan,stitches:2600};}
+      return null;
+    }}});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await page.getByRole('button',{name:'Simplify',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Simplify design'});
+  await expect(dialog.getByText('2,600 stitches')).toBeVisible();
+  await dialog.getByRole('button',{name:'Deep optimization'}).click();
+  await expect(dialog.getByText('2,600 stitches')).toBeVisible();
+  const calls=()=>page.evaluate(()=>(window as unknown as {optimizationCalls:{command:string;args:Record<string,unknown>}[]}).optimizationCalls);
+  await expect.poll(async ()=>(await calls()).at(-1)?.args.previousId).toBe(17);
+  await dialog.getByRole('button',{name:'Stop search'}).click();
+  const requestId=(await calls())[1].args.requestId;
+  await expect.poll(async ()=>(await calls()).at(-1)).toEqual({command:'cancel_simplification',args:{requestId}});
+  await page.evaluate(()=>(window as unknown as {finishDeep:()=>void}).finishDeep());
+  await expect(dialog.getByText('1,800 stitches')).toHaveCount(0);
+  await dialog.getByRole('button',{name:'Apply selected design'}).click();
+  await expect.poll(async ()=>(await calls()).at(-1)).toEqual({command:'apply_simplification',args:{id:17,strength:2}});
+});
