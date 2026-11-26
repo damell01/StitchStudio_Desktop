@@ -690,7 +690,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {focusCanvas&&<button className="studio-exit-focus" onClick={()=>changeFocus(false)}><Minimize size={16}/> Exit focus</button>}
   <div className="studio-document">
     <Layers3 size={17} aria-hidden="true"/>
-    <h1 title={plan?.name || 'Untitled design'}>{plan?.name || 'Untitled design'}</h1>{plan&&<small className="document-recovery" title={recoveryStatus}>{busy?"Working…":recoveryStatus==="Recovery copy saved"?"Recovery saved":"Design open"}</small>}
+    <h1 title={plan?.name || 'Untitled design'}>{plan?.name || 'Untitled design'}</h1>
   </div>
   <div className="studio-command-group">
     <button className="studio-tool-icon" title="Open artwork" aria-label="Open artwork" disabled={busy} onClick={open}><FolderOpen size={18}/></button>
