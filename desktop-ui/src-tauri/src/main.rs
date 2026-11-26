@@ -1608,6 +1608,7 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
  let result=preview(&d);if d.stitch_count()!=w.current.as_ref().unwrap().stitch_count(){w.checkpoint_named("Repair fixed stitches");w.current=Some(d);}Ok(result)
 }
 fn place_design(workspace: &mut Workspace, matrix: [f64; 6]) -> Result<Preview, String> {
+    if matrix.iter().any(|v| !v.is_finite()) { return Err("Placement contains invalid coordinates".into()); }
     let [a, b, c, d, tx, ty] = matrix;
     let apply = |point: &mut zigzag::geom::P| {
         *point = zigzag::geom::P::new(a * point.x + c * point.y + tx, b * point.x + d * point.y + ty);
@@ -1621,6 +1622,7 @@ fn place_design(workspace: &mut Workspace, matrix: [f64; 6]) -> Result<Preview, 
     // Centering and mirroring preserve every stitch and command.
     for point in design.blocks.iter_mut().flat_map(|block| &mut block.runs).flat_map(|run| &mut run.pts) {
         apply(point);
+        if !point.x.is_finite() || !point.y.is_finite() { return Err("Placement exceeds the supported coordinate range".into()); }
     }
     let result = preview(&design);
     workspace.checkpoint_named("Change placement");
