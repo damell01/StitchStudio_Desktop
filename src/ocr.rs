@@ -221,6 +221,21 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
             let overlap_y=(b.max.y.min(y1)-b.min.y.max(y0)).max(0.0);
             anyhow::ensure!(overlap_x*overlap_y < (x1-x0)*(y1-y0)*0.06, "Text overlaps other artwork; original retained");
         }
+        // Compare the traced and reconstructed outline topology using the
+        // same normalized sampling grid as font recommendation.
+        let outline_mask=|doc:&crate::document::Document, ids:&[usize], bounds:crate::geom::Bounds|{
+            let mut mask=vec![0.0;MASK_W*MASK_H];
+            for y in 0..MASK_H {for x in 0..MASK_W {
+                let p=crate::geom::P::new(bounds.min.x+(x as f64+0.5)*bounds.width()/MASK_W as f64,
+                    bounds.min.y+(y as f64+0.5)*bounds.height()/MASK_H as f64);
+                if ids.iter().any(|&j|match &doc.shapes[j].geometry {
+                    crate::svg::Geometry::Fill{rings,rule}=>crate::geom::point_inside(rings,*rule,p),
+                    _=>false,
+                }) {mask[y*MASK_W+x]=1.0;}
+            }}
+            mask
+        };
+        let original_openings=enclosed_openings(&outline_mask(&candidate,&indices,ink.clone()));
         let color = candidate.shapes[indices[0]].color;
         anyhow::ensure!(indices.iter().all(|&i|candidate.shapes[i].color==color && !candidate.layer_properties(&candidate.shapes[i].id).is_some_and(|l|l.locked||l.hidden)), "Text region contains multiple colors or protected artwork; original retained");
         let center = (ink.center().x/10.0,ink.center().y/10.0);
@@ -248,7 +263,8 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
             for shape in candidate.shapes.iter_mut().filter(|s|s.id==id) {
                 let p=&mut shape.params;
                 p.spacing=Some(fabric.satin_spacing.clamp(0.38,0.45));
-                p.pull=Some(fabric.satin_pull.min(0.15));
+                p.pull=Some(fabric.satin_pull.min(if original_openings>0 {0.10} else {0.15}));
+                p.split=Some(3.0);
                 p.satin_underlay=Some(if fabric.id=="standard" && ink.height()<25.0 {0} else {crate::params::underlay::CENTER});
                 p.short_stitches=Some(true);
             }
@@ -261,6 +277,11 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
             (fitted.width()-ink.width()).abs()<= (ink.width()*0.15).max(5.0) &&
             (fitted.height()-ink.height()).abs()<= (ink.height()*0.15).max(3.0),
             "Reconstructed lettering does not fit the original region");
+        let id=&candidate.shapes[i].id;
+        let rebuilt:Vec<_>=candidate.shapes.iter().enumerate().filter(|(_,s)|&s.id==id).map(|(j,_)|j).collect();
+        let openings=enclosed_openings(&outline_mask(&candidate,&rebuilt,fitted));
+        anyhow::ensure!(openings>=original_openings.saturating_sub(1),
+            "Reconstructed lettering loses enclosed openings; original retained");
         let plan=candidate.plan();
         anyhow::ensure!(plan.per_shape.get(i).is_some_and(|&n|n>0),
             "Reconstructed lettering generated no stitches");
