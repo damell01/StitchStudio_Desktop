@@ -40,7 +40,7 @@ export function RecentProjects({onOpen}:{onOpen:()=>void}) {
   return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><ProjectThumbnail project={p}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><ProjectDates project={p} compact/><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
 }
 
-export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;initialTab?:'embroidery'|'projects'|'artwork' }) {
+export function Library({ onDone,onArtwork,onBulkImport,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;onBulkImport?:()=>void;initialTab?:'embroidery'|'projects'|'artwork' }) {
   const [tab, setTab] = useState<'embroidery' | 'projects' | 'artwork'>(initialTab);
   const [files, setFiles] = useState<string[]>([]);
   const [projects, setProjects] = useState<Project[]>(readProjectLibrary);
@@ -55,6 +55,7 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
 
   useEffect(() => {
     let active = true;
+    void invoke<Project[]>('approved_batch_projects').then(result=>{if(active)setProjects(addProjectFiles(result))}).catch(err=>{if(active)setError(String(err))});
     void invoke<string[]>('personal_designs')
       .then(result => { if (active) setFiles(result); })
       .catch(err => { if (active) setError(String(err)); });
@@ -116,7 +117,7 @@ export function Library({ onDone,onArtwork,initialTab='embroidery' }: { onDone: 
       {onArtwork&&<button aria-pressed={tab==='artwork'} onClick={()=>{setTab('artwork');setQuery('');}}>Artwork</button>}
     </div>
     {tab==='artwork'&&onArtwork?<CharacterGallery onArt={onArtwork}/>:<>
-    <div className="library-filters">
+    <div className="library-filters">{onBulkImport&&<button onClick={onBulkImport}><FilePlus size={16}/> Bulk digitize artwork</button>}
       <label className="library-search"><Search size={16} /><input aria-label="Search designs" placeholder="Search designs" value={query} onChange={event => setQuery(event.target.value)} /></label>
       {tab === 'embroidery' ? <>
         <button className="primary" disabled={busy} onClick={() => importDesigns('files')}><FilePlus size={16} /> Import design files</button>
