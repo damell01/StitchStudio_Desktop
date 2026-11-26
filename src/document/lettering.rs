@@ -512,7 +512,7 @@ impl TextSpec {
     fn layered_element(&self, id: &str, arc_id: &str, transform: Option<&str>) -> String {
         let base = self.element(id, arc_id, transform);
         let Some(effect) = self.effect.as_deref() else { return base; };
-        let mut layer = |tag: &str, color: [u8; 3], stroke: Option<f64>| {
+        let layer = |tag: &str, color: [u8; 3], stroke: Option<f64>| {
             let mut copy = self.clone();
             copy.color = color;
             copy.effect = None;
@@ -520,11 +520,11 @@ impl TextSpec {
             copy.bean = false;
             let effect_id = format!("tl-effect-{tag}-{id}_{}", if stroke.is_some() { "satin" } else { "fill" });
             let mut xml = copy.element(&effect_id, &format!("{arc_id}-{tag}"), transform);
-            xml = xml.replace(&format!(" data-tl-lettering=\\\"{}\\\"", xml_escape(&copy.data_attr())), "");
+            xml = xml.replace(&format!(" data-tl-lettering=\"{}\"", xml_escape(&copy.data_attr())), "");
             if let Some(width) = stroke {
                 let hex = format!("#{:02x}{:02x}{:02x}", color[0], color[1], color[2]);
-                xml = xml.replace(&format!("fill=\\\"{hex}\\\""),
-                    &format!("fill=\\\"none\\\" stroke=\\\"{hex}\\\" stroke-width=\\\"{}\\\"", crate::params::fmt_num(width)));
+                xml = xml.replace(&format!("fill=\"{hex}\""),
+                    &format!("fill=\"none\" stroke=\"{hex}\" stroke-width=\"{}\"", crate::params::fmt_num(width)));
             }
             xml
         };
@@ -532,9 +532,9 @@ impl TextSpec {
             "outline" => format!("{}{}{}",
                 layer("outer", self.effect_color, Some(self.outer_width)),
                 layer("inner", self.inner_color, Some(self.inner_width)), base),
-            "shadow" => format!("<g id=\\\"tl-effect-shadow-{id}\\\" transform=\\\"translate({} {})\\\">{}{}</g>",
+            "shadow" => format!("<g id=\"tl-effect-shadow-{id}\" transform=\"translate({} {})\">{}</g>{base}",
                 crate::params::fmt_num(self.shadow_x), crate::params::fmt_num(self.shadow_y),
-                layer("shadow", self.effect_color, None), "").replace("</g>", &format!("</g>{base}")),
+                layer("shadow", self.effect_color, None)),
             _ => base,
         }
     }
