@@ -22,13 +22,43 @@ function FontPicker({fonts,selected,choose}:{fonts:string[];selected:string;choo
     </dialog>
   </>;
 }
-const letteringEffects = [["satin","Standard satin"],["puff","Foam satin (experimental)"],["fill","Tatami fill"],["applique","Fabric appliqué"],["run","Running outline"],["bean","Bean stitch (triple pass)"],["ripple","Lightweight ripple"],["contour","Contour fill"],["cross","Cross stitch"],["meander","Quilted meander"],["blanket","Blanket edge"]] as const;
+const letteringEffects = [["satin","Standard satin"],["puff","Foam satin with end caps (test sew)"],["double_outline","Double satin outline"],["shadow","Offset shadow"],["gradient","Two-thread blended satin"],["fill","Tatami fill"],["applique","Fabric appliqué"],["run","Running outline"],["bean","Bean stitch (triple pass)"],["ripple","Lightweight ripple"],["contour","Contour fill"],["cross","Cross stitch"],["meander","Quilted meander"],["blanket","Blanket edge"]] as const;
 type Settings = {
   kind?:string;
   leading?:number;
+  effect_color?:number[];inner_color?:number[];
+  outer_width?:number;inner_width?:number;shadow_x?:number;shadow_y?:number;
   text:string; font:string; size:number; spacing:number; arc:number; bold:boolean;
   italic:boolean; color:number[]; align:string; h_scale?:number; v_scale?:number; kern?:[number,number][]; path?:string; path_offset?:number; path_flip?:boolean;
 };
+function colorHex(rgb:number[]|undefined, fallback:string) {
+  return rgb?.length===3?'#'+rgb.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join(''):fallback;
+}
+function rgbHex(hex:string) { return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)); }
+function EffectControls({settings,onChange}:{settings:Settings;onChange:(patch:Partial<Settings>)=>void}) {
+ const effect=settings.kind;
+ if(!['double_outline','shadow','gradient','puff'].includes(effect??''))return null;
+ return <div className="lettering-effect-controls" role="group" aria-label="Embroidery effect adjustments">
+  {effect==='puff'&&<small>Foam satin includes native end-cap securing stitches. Use suitable block lettering and sample-stitch with the foam and stabilizer you intend to use.</small>}
+  {effect==='double_outline'&&<>
+    <label>Outer outline thread<input type="color" value={colorHex(settings.effect_color,'#1c2337')} onChange={e=>onChange({effect_color:rgbHex(e.target.value)})}/></label>
+    <label>Outer outline width (mm)<input type="number" min=".5" max="6" step=".1" value={settings.outer_width??2.4} onChange={e=>onChange({outer_width:Number(e.target.value)})}/></label>
+    <label>Inner outline thread<input type="color" value={colorHex(settings.inner_color,'#f5f5f5')} onChange={e=>onChange({inner_color:rgbHex(e.target.value)})}/></label>
+    <label>Inner outline width (mm)<input type="number" min=".3" max="4" step=".1" value={settings.inner_width??1} onChange={e=>onChange({inner_width:Number(e.target.value)})}/></label>
+    <small>The inner border must be narrower than the outer border. Both are actual satin stitch layers.</small>
+  </>}
+  {effect==='shadow'&&<>
+    <label>Shadow thread<input type="color" value={colorHex(settings.effect_color,'#1c2337')} onChange={e=>onChange({effect_color:rgbHex(e.target.value)})}/></label>
+    <label>Right offset (mm)<input type="number" min="-10" max="10" step=".5" value={settings.shadow_x??1.5} onChange={e=>onChange({shadow_x:Number(e.target.value)})}/></label>
+    <label>Down offset (mm)<input type="number" min="-10" max="10" step=".5" value={settings.shadow_y??1.5} onChange={e=>onChange({shadow_y:Number(e.target.value)})}/></label>
+  </>}
+  {effect==='gradient'&&<>
+    <label>Second thread color<input type="color" value={colorHex(settings.effect_color,'#1c2337')} onChange={e=>onChange({effect_color:rgbHex(e.target.value)})}/></label>
+    <small>Two real thread colors overlap in an opened-density satin transition. This is thread blending, not printed color interpolation; verify the result in stitch preview and on fabric.</small>
+  </>}
+ </div>;
+}
+
 type StitchPlan = { stitches:number; blocks:{color:number[];runs:number[][][]}[] };
 
 function previewBounds(plan: StitchPlan) {
@@ -81,6 +111,7 @@ function LetteringPreview({settings,valid}:{settings:Settings;valid:boolean}) {
 
 export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) {
   const [kind,setKind]=useState('satin');
+  const [effectSettings,setEffectSettings]=useState({effect_color:[28,35,55],inner_color:[245,245,245],outer_width:2.4,inner_width:1,shadow_x:1.5,shadow_y:1.5});
   const [leading,setLeading]=useState(1.5);
   const [text,setText]=useState(monogram?'ABC':'Your name');
   const [fonts,setFonts]=useState<string[]>([]),[font,setFont]=useState('');
@@ -101,8 +132,8 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
     return ()=>{active=false;};
   },[]);
   const settings=useMemo(()=>({
-    kind,leading,text,font,size,spacing,arc,bold,italic,align,h_scale:hScale,v_scale:vScale,color:[1,3,5].map(i=>parseInt(color.slice(i,i+2),16))
-  }),[kind,leading,text,font,size,spacing,arc,bold,italic,align,color,hScale,vScale]);
+    ...effectSettings,kind,leading,text,font,size,spacing,arc,bold,italic,align,h_scale:hScale,v_scale:vScale,color:[1,3,5].map(i=>parseInt(color.slice(i,i+2),16))
+  }),[kind,leading,text,font,size,spacing,arc,bold,italic,align,color,hScale,vScale,effectSettings]);
   const valid=Boolean(font && text.trim() && size>=3 && size<=80 && spacing>=0 && spacing<=5 && Math.abs(arc)<=300 && hScale>=25 && hScale<=250 && vScale>=25 && vScale<=250);
   const xMm=offset?Number(x)*25.4:0, yMm=offset?Number(y)*25.4:0;
   const validPlacement=!offset || (x.trim()!=='' && y.trim()!=='' && Math.abs(xMm)<=500 && Math.abs(yMm)<=500);
@@ -113,7 +144,7 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
     setBusy(true);setError('');
     try {
       if(!insert && !await confirmAction('Start a new lettering design? Save the current project first if you want to keep it.'))return;
-      await invoke('create_lettering',{...settings,hScale:settings.h_scale,vScale:settings.v_scale,placement:insert?[xMm,yMm]:null});
+      await invoke('create_lettering',{...settings,hScale:settings.h_scale,vScale:settings.v_scale,effectColor:settings.effect_color,innerColor:settings.inner_color,outerWidth:settings.outer_width,innerWidth:settings.inner_width,shadowX:settings.shadow_x,shadowY:settings.shadow_y,placement:insert?[xMm,yMm]:null});
       onDone();
     } catch(e) {setError(String(e));}
     finally {submitLock.current=false;setBusy(false);}
@@ -127,6 +158,7 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
         : <><label>Text<textarea rows={3} value={text} maxLength={120} onChange={e=>setText(e.target.value)}/></label><div className="lettering-size-presets"><button onClick={()=>setText(text.toUpperCase())}>UPPERCASE</button><button onClick={()=>setText(text.toLowerCase())}>lowercase</button><button onClick={()=>setText(text.replace(/\p{L}[\p{L}\p{M}]*/gu,w=>w[0].toUpperCase()+w.slice(1).toLowerCase()))}>Title Case</button></div><small>{text.length}/120 characters · {text.split('\n').length} lines</small></>}
       <FontPicker fonts={fonts} selected={font} choose={setFont}/>
       <label>Embroidery effect<select value={kind} onChange={e=>setKind(e.target.value)}>{letteringEffects.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      <EffectControls settings={settings} onChange={patch=>setEffectSettings(old=>({...old,...patch}))}/>
       {kind==="applique"&&<small>Review placement, tack-down and finishing stages before exporting. Use a suitable broad font.</small>}
       <div className="lettering-size-presets" role="group" aria-label="Lettering layout presets">
         <button onClick={()=>{setBold(true);setItalic(false);setHScale(100);setVScale(100);setSpacing(.4);setArc(0)}}>Classic</button>
@@ -213,8 +245,8 @@ export function InlineLettering({uid,disabled,onBusy,onDone,baseline,pickingBase
  {name:'Slanted',values:{bold:false,italic:true,h_scale:100,v_scale:100,spacing:.3}},
  ].map(p=><button type="button" key={p.name} onClick={()=>setSettings(old=>({...old,...p.values}))}>{p.name}</button>)}
  </div>
- <label>Embroidery effect<select value={settings.kind??"satin"} onChange={e=>change("kind",e.target.value)}>{letteringEffects.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
- {settings.kind==="puff"&&<small>Experimental dense satin for foam. End caps are not generated automatically; test on scrap before production.</small>}<label>Line spacing (× capital height)<input type="number" min=".5" max="5" step=".1" value={settings.leading??1.5} onChange={e=>change("leading",Number(e.target.value))}/></label>
+ <label>Embroidery effect<select value={settings.kind??"satin"} onChange={e=>change("kind",e.target.value)}>{letteringEffects.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><EffectControls settings={settings} onChange={patch=>setSettings(old=>({...old,...patch}))}/>
+ <label>Line spacing (× capital height)<input type="number" min=".5" max="5" step=".1" value={settings.leading??1.5} onChange={e=>change("leading",Number(e.target.value))}/></label>
  <label>Find font<input type="search" placeholder="Search installed fonts…" value={fontQuery} onChange={e=>setFontQuery(e.target.value)}/></label><label>Font<select value={settings.font} onChange={e=>change('font',e.target.value)}>{filteredFonts.map(f=><option key={f}>{f}</option>)}</select></label>
  <div className="inline-text-sample" style={{fontFamily:settings.font,fontWeight:settings.bold?'bold':'normal',fontStyle:settings.italic?'italic':'normal',color:hex}}>{preview&&previewBox?<svg viewBox={previewBox.join(' ')} role="img" aria-label="Actual planned stitches">{preview.blocks.map((b,i)=><g key={i} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".24" strokeLinecap="round" strokeLinejoin="round">{b.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg>:settings.text}</div><small role="status">{previewPending?'Planning stitches…':preview?preview.stitches.toLocaleString()+' stitch points · '+(previewBox![2]-4).toFixed(1)+' × '+(previewBox![3]-4).toFixed(1)+' mm':'Font sample'}</small>
  <div className="lettering-size-presets" role="group" aria-label="Quick sizes">{[8,12,20,30].map(n=><button key={n} aria-pressed={settings.size===n} onClick={()=>change('size',n)}>{n} mm</button>)}</div><div className="inline-lettering-grid"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.1" value={settings.size} onChange={e=>change('size',Number(e.target.value))}/></label><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={settings.spacing} onChange={e=>change('spacing',Number(e.target.value))}/></label></div>
