@@ -143,11 +143,11 @@ mod tests {
 
     #[test]
     fn lettering_effects_survive_text_edit_and_sync() {
-        for kind in [Kind::Satin, Kind::Fill, Kind::Run, Kind::Ripple, Kind::Contour, Kind::Applique] {
+        for kind in [Kind::Satin, Kind::Fill, Kind::Run, Kind::Ripple, Kind::Contour, Kind::Applique, Kind::Cross, Kind::Meander, Kind::Blanket] {
             let mut doc = Document::empty();
             let spec = TextSpec { text: "AB".into(), size_mm: 25.0, kind, ..Default::default() };
             let plan = plan_text(&mut doc, &spec, [0.0,0.0], &mut zigzag::design::PlanCache::default()).unwrap();
-            assert!(plan.stitch_count() > 0);
+            assert!(plan.per_shape.iter().any(|&n| n > 0));
             let index = doc.shapes.iter().enumerate().find(|(i,_)|doc.lettering(*i).is_some()).unwrap().0;
             assert_eq!(doc.lettering(index).unwrap().kind, kind);
             let mut updated = doc.lettering(index).unwrap();
@@ -155,7 +155,7 @@ mod tests {
             doc.set_lettering(index,&updated).unwrap();
             doc.sync().unwrap();
             assert_eq!(doc.lettering(index).unwrap().kind,kind);
-            assert!(doc.plan().stitch_count()>0);
+            assert!(doc.plan().per_shape.iter().any(|&n| n > 0));
         }
     }
 
