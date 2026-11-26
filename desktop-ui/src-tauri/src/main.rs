@@ -574,7 +574,7 @@ fn audit_stitches(state: tauri::State<'_, Mutex<Workspace>>) -> Result<StitchAud
 fn optimized_density(source:&zigzag::document::Document, original:&Design)->Option<(zigzag::document::Document,Design)>{
  if source.settings.fabric!="standard" || original.stitch_count()==0 || original.stitch_count()>100_000{return None}
  let mut next=source.clone();let mut changed=false;
- let protected: std::collections::HashSet<_> = source.shapes.iter().filter(|s| source.layer_properties(&s.id).is_some_and(|l| l.locked || l.hidden) || s.params.stop == Some(true) || s.params.trim == Some(true)).map(|s| s.uid).collect();
+ let protected: std::collections::HashSet<_> = source.shapes.iter().enumerate().filter(|(i,s)| source.records_text(*i) || s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail") || source.layer_properties(&s.id).is_some_and(|l| l.locked || l.hidden) || s.params.stop == Some(true) || s.params.trim == Some(true)).map(|(_,s)| s.uid).collect();
  for shape in &mut next.shapes {
   if protected.contains(&shape.uid) { continue; }
   use zigzag::params::Kind;
@@ -591,6 +591,7 @@ fn optimized_density(source:&zigzag::document::Document, original:&Design)->Opti
   }
  }
  if !changed{return None}
+ next.sync().ok()?;
  let candidate=next.plan();let before=measure_stitches(original);let after=measure_stitches(&candidate);
  let a=original.bounds();let b=candidate.bounds();
  if candidate.stitch_count()>=original.stitch_count() || candidate.stitch_count()<original.stitch_count()*9/10
