@@ -2740,7 +2740,34 @@ async fn digitize_artwork(
                 }
             }
         }
-        let mut optimization = None;
+        let initial_count=design.stitch_count();
+        // Test a simpler tracing strategy at the same physical dimensions
+        // before spending time tuning an unnecessarily complicated plan.
+        // Never retrace approved lettering or discard an explicit palette.
+        if initial_count>15_000 && !has_lettering && cleanup && colors==0 && !thin_lines {
+            if let Some(raster)=&prepared {
+                let mut trial=options.clone();
+                trial.lines=true;
+                trial.line_width_mm=2.0;
+                trial.detail=detail.min(45.);
+                if let Ok(mut next)=raster.digitize(&name,&trial){
+                    next.settings.fabric=fabric.clone();
+                    let plan=next.plan();
+                    let old=design.bounds();let new=plan.bounds();
+                    let palette=|d:&Design|d.blocks.iter().map(|b|b.color).collect::<std::collections::HashSet<_>>();
+                    let audit=measure_stitches(&design);let candidate_audit=measure_stitches(&plan);
+                    if plan.stitch_count()>0&&plan.stitch_count()<design.stitch_count()*9/10
+                        &&plan.trim_count()<=design.trim_count()
+                        &&candidate_audit.long<=audit.long&&candidate_audit.zero<=audit.zero
+                        &&old.min.dist(new.min)<=10.&&old.max.dist(new.max)<=10.
+                        &&palette(&plan)==palette(&design)
+                        &&raster.preserves_fidelity(&document,&next)
+                        &&optimization_quality(&design,&plan,800.,3.).coverage>=85.
+                    {document=next;design=plan;}
+                }
+            }
+        }
+        let mut optimization = if design.stitch_count()<initial_count{Some([initial_count,design.stitch_count()])}else{None};
         // Prefer a production-efficient plan at the original requested size.
         // 10k is a soft goal, 15k a review threshold, never a destructive cap.
         if design.stitch_count() <= 100_000 {
@@ -2780,7 +2807,7 @@ async fn digitize_artwork(
                 }
             }
             if let Some((next,plan))=best {
-                optimization=Some([before,plan.stitch_count()]);
+                optimization=Some([initial_count,plan.stitch_count()]);
                 document=next;design=plan;
             }
         }
