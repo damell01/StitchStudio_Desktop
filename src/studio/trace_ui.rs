@@ -36,6 +36,7 @@ pub struct TraceUi {
     ocr: Option<Receiver<Result<Vec<RecognizedLine>, String>>>,
     recognized: Vec<RecognizedLine>,
     ocr_status: String,
+    ocr_started: bool,
     rebuilt: Option<Traced>,
     /// The options of the trace running now, and how far the request count is.
     running: Option<(u64, Receiver<Done>)>,
@@ -284,6 +285,27 @@ fn thumbnail(img: &Image, max: Vec2) -> egui::ColorImage {
     egui::ColorImage::from_rgba_unmultiplied([tw, th], &out)
 }
 
+impl TraceUi {
+    fn start_ocr(&mut self, ctx: &egui::Context) {
+        let image = self.image.clone();
+        let (tx, rx) = channel();
+        let repaint = ctx.clone();
+        self.ocr_started = true;
+        self.ocr = Some(rx);
+        self.recognized.clear();
+        self.rebuilt = None;
+        self.ocr_status = "Recognizing text locally…".into();
+        if let Some(Ok(r)) = &self.result {
+            self.preview = rasterize(&r.svg, PREVIEW).map(|img|
+                ctx.load_texture("trace-preview", img, egui::TextureOptions::LINEAR));
+        }
+        std::thread::spawn(move || {
+            let _ = tx.send(recognize(&image));
+            repaint.request_repaint();
+        });
+    }
+}
+
 impl Studio {
     /// Start tracing an image file (from Open, a drop or Place).
     pub fn open_image(&mut self, path: &Path, target: Target) {
@@ -328,6 +350,7 @@ impl Studio {
             ocr: None,
             recognized: Vec::new(),
             ocr_status: String::new(),
+            ocr_started: false,
             rebuilt: None,
             running: None,
             asked: 0,
@@ -424,9 +447,10 @@ impl Studio {
                 egui::TextureOptions::LINEAR,
             ));
         }
+        if !t.ocr_started { t.start_ocr(ctx); }
         if let Some(rx) = &t.ocr {
             match rx.try_recv() {
-                Ok(Ok(lines)) => { t.ocr_status = format!("{} text regions. Select and review each before replacing.", lines.len()); t.recognized = lines; t.ocr = None; }
+                Ok(Ok(lines)) => { t.ocr_status = if lines.is_empty() { "No lettering detected. You can still import the artwork.".into() } else { format!("{} text regions. Select and review each before replacing.", lines.len()) }; t.recognized = lines; t.ocr = None; }
                 Ok(Err(e)) => { t.ocr_status = e; t.ocr = None; }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => { t.ocr_status = "OCR worker stopped.".into(); t.ocr = None; }
                 Err(std::sync::mpsc::TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(100)),
@@ -555,18 +579,23 @@ impl Studio {
                 });
                 ui.separator();
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(t.ocr.is_none(), egui::Button::new("Recognize lettering (offline)")).clicked() {
-                        let image = t.image.clone();
-                        let (tx, rx) = channel();
-                        let repaint = ctx.clone();
-                        t.ocr = Some(rx); t.recognized.clear(); t.rebuilt = None;
-                        t.ocr_status = "Recognizing text locally…".into();
-                        std::thread::spawn(move || { let _ = tx.send(recognize(&image)); repaint.request_repaint(); });
+                    if ui.add_enabled(t.ocr.is_none(), egui::Button::new("Scan lettering again (offline)")).clicked() {
+                        t.start_ocr(ctx);
                     }
                     ui.label(&t.ocr_status);
                 });
                 if !t.recognized.is_empty() {
                     let mut changed = false;
+                    ui.horizontal(|ui| {
+                        if ui.button("Select confident text").clicked() {
+                            for line in &mut t.recognized { line.enabled = line.confidence >= 85.0; }
+                            changed = true;
+                        }
+                        if ui.button("Keep all original artwork").clicked() {
+                            for line in &mut t.recognized { line.enabled = false; }
+                            changed = true;
+                        }
+                    });
                     egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
                         for (i, line) in t.recognized.iter_mut().enumerate() {
                             ui.horizontal(|ui| {
@@ -581,7 +610,7 @@ impl Studio {
                         }
                     });
                     if changed { t.rebuilt = None; if let Some(Ok(r)) = &t.result { t.preview = rasterize(&r.svg, PREVIEW).map(|img| ctx.load_texture("trace-preview", img, egui::TextureOptions::LINEAR)); } }
-                    if ui.add_enabled(!busy && t.recognized.iter().any(|l| l.enabled), egui::Button::new("Preview editable lettering")).clicked() {
+                    if ui.add_enabled(!busy && t.traced.as_ref() == Some(&(t.opts.clone(), t.use_threads)) && t.recognized.iter().any(|l| l.enabled), egui::Button::new("Preview editable lettering")).clicked() {
                         if let Some(Ok(r)) = &t.result {
                             match reconstruct(r, &t.recognized, t.opts.width_mm / f64::from(t.image.size().0.max(1))) {
                                 Ok(r) => { t.preview = rasterize(&r.svg, PREVIEW).map(|img| ctx.load_texture("ocr-preview", img, egui::TextureOptions::LINEAR)); t.rebuilt = Some(r); t.show_original = false; t.ocr_status = "Lettering preview ready. Toggle Original to compare.".into(); }
@@ -607,7 +636,7 @@ impl Studio {
                                 egui::Button::new(egui::RichText::new(label).color(Color32::WHITE)).fill(accent),
                             )
                             .clicked()
-                            || (ready && ui.input(|i| i.key_pressed(Key::Enter)));
+                            || (ready && !ui.ctx().wants_keyboard_input() && ui.input(|i| i.key_pressed(Key::Enter)));
                         cancel = ui.button("Cancel").clicked();
                     },
                 );
