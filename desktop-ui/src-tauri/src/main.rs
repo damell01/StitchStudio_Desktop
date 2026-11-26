@@ -1582,6 +1582,7 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
  let mut d=w.current.clone().ok_or("Open artwork first")?;
  let mut total=0usize;
  for run in d.blocks.iter_mut().flat_map(|b|&mut b.runs){
+   if run.pts.iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) { return Err("Invalid stitch geometry: non-finite coordinate".into()); }
    let mut out=Vec::with_capacity(run.pts.len());
    for p in run.pts.iter().copied(){
      if let Some(last)=out.last().copied(){
@@ -1590,6 +1591,7 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
        // Preserve coincident penetrations: they may be intentional ties.
        let n=(distance/100.0).ceil().max(1.0);
        if !n.is_finite()||n>10000.0{return Err("Invalid stitch geometry".into())}
+       if total.saturating_add(out.len()).saturating_add(n as usize)>2_000_000{return Err("Repair exceeds stitch limit".into())}
        for k in 1..n as usize{let t=k as f64/n;out.push(zigzag::geom::P::new(last.x+(p.x-last.x)*t,last.y+(p.y-last.y)*t));}
      }
      out.push(p);
