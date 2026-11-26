@@ -18,8 +18,29 @@ shopt -s nullglob
 images=("$bundle"/dmg/*.dmg)
 if [[ ${#images[@]} -ne 1 ]]; then echo "Expected exactly one DMG in $bundle/dmg, found ${#images[@]}" >&2; ls -la "$bundle" "$bundle/dmg" || true; exit 1; fi
 echo "Checking ${images[0]} for $expected_arch"
-hdiutil attach "${images[0]}" -mountpoint "$mount" -readonly -nobrowse -quiet
-mounted=true
+# Resolve the path before invoking DiskImages services and verify the image
+# checksum independently. Hosted macOS runners can transiently fail to
+# attach an otherwise valid image; keep the actual diagnostic output.
+image="$(cd "$(dirname "${images[0]}")" && pwd -P)/$(basename "${images[0]}")"
+hdiutil verify "$image"
+for attempt in 1 2 3; do
+  echo "Mount attempt $attempt"
+  if hdiutil attach "$image" -mountpoint "$mount" -readonly -nobrowse -noautoopen -verbose; then
+    mounted=true
+    break
+  fi
+  if [[ -d "$mount/Stitch Studio.app" ]]; then
+    mounted=true
+    break
+  fi
+  sleep "$((attempt * 2))"
+done
+if [[ "$mounted" != true ]]; then
+  echo "DMG verified but could not be mounted; disk image service diagnostics:" >&2
+  hdiutil info || true
+  diskutil list || true
+  exit 1
+fi
 app="$work/Stitch Studio.app"
 ditto "$mount/Stitch Studio.app" "$app"
 
