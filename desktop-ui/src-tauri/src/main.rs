@@ -992,7 +992,7 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
             || (level == 5 && target > (spacing * 1.38).min(0.55) + 0.005));
         if target>spacing+0.005{shape.params.spacing=Some(target);changed=true;}
         if length>len+0.05{shape.params.len=Some(length);changed=true;}
-        if shape.params.start.is_none()&&shape.params.end.is_none(){
+        if shape.params.start.is_none()&&shape.params.end.is_none()&&shape.params.angle.is_none(){
             let angle=shape.params.angle.unwrap_or(0.0);
             if angle_offset!=0.0{shape.params.angle=Some((angle+angle_offset).rem_euclid(180.0));changed=true;}
         }
@@ -1083,7 +1083,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
             choices.push(v);
         }
     }
-    if !options.exhausted() && uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&!matches!(s.params.kind,Some(zigzag::params::Kind::Manual|zigzag::params::Kind::Applique))){
+    if !options.exhausted() && uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&!matches!(s.params.kind,Some(zigzag::params::Kind::Manual|zigzag::params::Kind::Applique))&&!source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)){
         // Reuse dependency-aware ordering, without moving overlapping layers.
         let mut doc=source.clone();doc.settings.hat_order=true;
         if doc.sync().is_ok(){
