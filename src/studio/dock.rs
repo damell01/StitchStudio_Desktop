@@ -1987,6 +1987,60 @@ impl Studio {
         if self.issues.is_empty() {
             caption(ui, "No problems found.");
         }
+        // Explicit opt-in production optimization. Only broad non-lettering
+        // fills on stable fabric are changed; all geometry stays editable.
+        let optimize_id = egui::Id::new("production-optimization");
+        let eligible: Vec<usize> = if self.doc.settings.fabric == "standard" && !self.doc.settings.hat_order {
+            self.doc.shapes.iter().enumerate().filter_map(|(i, shape)| {
+                let b = zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
+                (shape.params.kind.unwrap_or(Kind::Fill) == Kind::Fill
+                    && self.doc.lettering(i).is_none()
+                    && !b.is_empty() && b.width().min(b.height()) >= 120.0
+                    && shape.params.spacing.is_none() && shape.params.len.is_none()).then_some(i)
+            }).collect()
+        } else { Vec::new() };
+        let apply = |d: &mut zigzag::document::Document| {
+            for &i in &eligible {
+                d.shapes[i].params.spacing = Some(0.40);
+                d.shapes[i].params.len = Some(3.5);
+            }
+        };
+        if !eligible.is_empty() {
+            caption(ui, format!("Production optimization: {} broad fills eligible.", eligible.len()));
+            if ui.button("Preview faster stitching").clicked() {
+                let mut candidate = self.doc.clone();
+                apply(&mut candidate);
+                let before = self.doc.plan();
+                let after = candidate.plan();
+                let speed = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(
+                    egui::Id::new("production_spm"), || crate::app::SPM));
+                let old_time = before.estimated_seconds(speed, 3.0, 15.0).unwrap_or(0.0);
+                let new_time = after.estimated_seconds(speed, 3.0, 15.0).unwrap_or(0.0);
+                let summary = format!("Stitches: {} → {}\nTrims: {} → {}\nMinutes: {:.1} → {:.1}",
+                    before.stitch_count(), after.stitch_count(), before.trim_count(), after.trim_count(),
+                    old_time / 60.0, new_time / 60.0);
+                let useful = after.stitch_count() < before.stitch_count() && new_time < old_time
+                    && crate::density::DensityMap::of(&after).peak() <= crate::density::DensityMap::of(&before).peak() + 0.01;
+                ui.ctx().data_mut(|d| d.insert_temp(optimize_id, (self.doc.rev(), summary, useful)));
+            }
+            if let Some((rev, summary, useful)) = ui.ctx().data(|d| d.get_temp::<(u64,String,bool)>(optimize_id)) {
+                if rev == self.doc.rev() {
+                    ui.label(summary);
+                    if useful {
+                        if ui.button("Apply faster stitching").clicked() {
+                            match self.structural(|d| { apply(d); Ok(()) }) {
+                                Ok(()) => self.status = "Applied faster fill settings. Undo to restore.".into(),
+                                Err(e) => self.status = format!("Optimization failed: {e:#}"),
+                            }
+                            ui.ctx().data_mut(|d| d.remove::<(u64,String,bool)>(optimize_id));
+                        }
+                    } else {
+                        caption(ui, "No safe improvement found by the current stitch-count, time and density checks.");
+                    }
+                }
+            }
+            ui.separator();
+        }
         let repairs: Vec<_> = self.doc.shapes.iter().enumerate().filter_map(|(i, s)| {
             use zigzag::params::Kind;
             let p = &s.params;
