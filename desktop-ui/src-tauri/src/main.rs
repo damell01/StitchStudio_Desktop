@@ -2978,7 +2978,7 @@ async fn recognize_artwork_lettering(bytes: Vec<u8>, remove_background: bool, to
 async fn digitize_artwork(
     bytes: Vec<u8>, name: String, mime: String, width_mm: f64, colors: u32,
     remove_background: bool, detail: f64, fabric: String, cleanup: bool,
-    tolerance: u8, thin_lines: bool, speckle_mm: Option<f64>, optimization_strength: Option<u8>, thread_palette: Option<Vec<[u8; 3]>>, lettering: Option<Vec<zigzag::ocr::RecognizedLine>>, state: tauri::State<'_, Mutex<Workspace>>,
+    tolerance: u8, thin_lines: bool, speckle_mm: Option<f64>, optimization_strength: Option<u8>, production_speed: Option<f64>, production_trim_seconds: Option<f64>, thread_palette: Option<Vec<[u8; 3]>>, lettering: Option<Vec<zigzag::ocr::RecognizedLine>>, state: tauri::State<'_, Mutex<Workspace>>,
 ) -> Result<DigitizerReview, String> {
     if bytes.is_empty() || bytes.len() > 20_000_000 || !(5.0..=300.0).contains(&width_mm)
         || !(0.0..=100.0).contains(&detail) || !(colors == 0 || (2..=10).contains(&colors))
@@ -2986,6 +2986,9 @@ async fn digitize_artwork(
     {
         return Err("Invalid artwork settings or file size".into());
     }
+    let speed=production_speed.unwrap_or(800.0);
+    let trim=production_trim_seconds.unwrap_or(3.0);
+    if !(100.0..=1500.0).contains(&speed)||!(0.0..=30.0).contains(&trim){return Err("Invalid production speed or trim duration".into());}
     let optimization_strength=optimization_strength.unwrap_or(2);
     if optimization_strength>3{return Err("Invalid optimization strength".into());}
     let speckle_mm=speckle_mm.unwrap_or(1.0);
@@ -3088,7 +3091,7 @@ async fn digitize_artwork(
             }
         }
         let initial_count=design.stitch_count();
-        let original_estimated_seconds=optimization_seconds(&design,800.,3.);
+        let original_estimated_seconds=optimization_seconds(&design,speed,trim);
         let original_trims=design.trim_count();
         // Test a simpler tracing strategy at the same physical dimensions
         // before spending time tuning an unnecessarily complicated plan.
@@ -3111,7 +3114,7 @@ async fn digitize_artwork(
                         &&old.min.dist(new.min)<=10.&&old.max.dist(new.max)<=10.
                         &&palette(&plan)==palette(&design)
                         &&raster.preserves_fidelity(&document,&next)
-                        &&optimization_quality(&design,&plan,800.,3.).coverage>=85.
+                        &&optimization_quality(&design,&plan,speed,trim).coverage>=85.
                     {document=next;design=plan;}
                 }
             }
@@ -3122,12 +3125,12 @@ async fn digitize_artwork(
         if optimization_strength>0 && design.stitch_count() <= 100_000 {
             let before=design.stitch_count();
             let original=design.clone();
-            let score=|p:&Design|optimization_seconds(p,800.,3.);
+            let score=|p:&Design|optimization_seconds(p,speed,trim);
             let baseline=measure_stitches(&original);
             let baseline_seconds=score(&original);
             let budget=SimplifyBudget::new(std::time::Duration::from_secs(10));
             let opts=SimplifyOptions{quick:true,merge:true,auto_types:true,
-                target_stitches:Some(10_000),budget:Some(budget),..Default::default()};
+                target_stitches:Some(10_000),speed:Some(speed),trim_seconds:Some(trim),budget:Some(budget),..Default::default()};
             let mut best:Option<(zigzag::document::Document,Design)>=None;
             let eligible=|p:&Design|{
                 let a=original.bounds();let b=p.bounds();
@@ -3137,7 +3140,7 @@ async fn digitize_artwork(
                     &&audit.long<=baseline.long&&audit.zero<=baseline.zero
                     &&a.min.dist(b.min)<=5.&&a.max.dist(b.max)<=5.
                     &&original.blocks.iter().map(|b|b.color).eq(p.blocks.iter().map(|b|b.color))
-                    &&optimization_quality(&original,p,800.,3.).coverage>=90.
+                    &&optimization_quality(&original,p,speed,trim).coverage>=90.
             };
             // The aggressive pass comes first for expensive designs, so the
             // time budget is not spent entirely on marginal improvements.
@@ -3215,7 +3218,7 @@ async fn digitize_artwork(
             dst_stitches,
             color_changes,
             optimization,
-            estimated_seconds: optimization_seconds(&design,800.,3.),
+            estimated_seconds: optimization_seconds(&design,speed,trim),
             original_estimated_seconds,
             original_trims,
         };
