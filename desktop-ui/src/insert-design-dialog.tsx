@@ -82,9 +82,10 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
   const [source, setSource] = useState<Source>('templates');
   const [selection, setSelection] = useState<Selection | null>(null);
   const [approved,setApproved]=useState<Project[]>([]);
+  const [category,setCategory]=useState('all');
   const [files, setFiles] = useState<string[]>([]);
   const [query, setQuery] = useState('');
-  const approvedPage=usePagedList(approved.filter(p=>matchesName(p.name,query)).sort((a,b)=>compareNames(a.name,b.name)),query,12);
+  const approvedPage=usePagedList(approved.filter(p=>matchesName(p.name+' '+(p.category??'Uncategorized'),query)&&(category==='all'||(p.category??'Uncategorized')===category)).sort((a,b)=>compareNames(a.name,b.name)),JSON.stringify([query,category]),12);
   const [width, setWidth] = useState('2');
   const [x, setX] = useState('0');
   const [y, setY] = useState('0');
@@ -176,7 +177,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
           selectedId={selection?.source === 'templates' ? selection.template.id : undefined}
           onPreview={template => { setSelection({ source, template }); setError(''); }} />}
         {source === 'artwork' && <CharacterGallery onArt={art => { setSelection({ source, art }); setError(''); }} />}
-        {source==='approved'&&<><label className="studio-insert-search"><Search size={16}/><input placeholder="Search digitized designs" value={query} onChange={e=>setQuery(e.target.value)}/></label>{!approvedPage.total&&<p>{approved.length?'No matching designs.':'Approve artwork in Bulk Design Import to add reusable designs here.'}</p>}<div className="approved-insert-grid">{approvedPage.items.map(project=><button key={project.file} aria-pressed={selection?.source==='approved'&&selection.project.file===project.file} onClick={()=>setSelection({source:'approved',project})}><ApprovedPreview file={project.file}/><strong>{project.name}</strong><small>{project.stitches.toLocaleString()} stitches</small></button>)}</div><ListNavigation {...approvedPage}/></>}
+        {source==='approved'&&<><select aria-label="Design category" value={category} onChange={e=>{setCategory(e.target.value);setSelection(null)}}><option value="all">All categories</option>{Array.from(new Set(approved.map(p=>p.category??'Uncategorized'))).sort().map(c=><option key={c}>{c}</option>)}</select><label className="studio-insert-search"><Search size={16}/><input placeholder="Search digitized designs" value={query} onChange={e=>setQuery(e.target.value)}/></label>{!approvedPage.total&&<p>{approved.length?'No matching designs.':'Approve artwork in Bulk Design Import to add reusable designs here.'}</p>}<div className="approved-insert-grid">{approvedPage.items.map(project=><button key={project.file} aria-pressed={selection?.source==='approved'&&selection.project.file===project.file} onClick={()=>setSelection({source:'approved',project})}><ApprovedPreview file={project.file}/><strong>{project.name}</strong><small>{project.category??'Uncategorized'}</small><small>{project.stitches.toLocaleString()} stitches</small></button>)}</div><ListNavigation {...approvedPage}/></>}
         {source === 'layouts' && <>
           <label className="studio-insert-search"><Search size={16}/><input placeholder="Find a saved layout" aria-label="Search saved layouts"
             value={query} onChange={event=>setQuery(event.target.value)}/></label>
