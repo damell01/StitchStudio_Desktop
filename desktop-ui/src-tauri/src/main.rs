@@ -1612,6 +1612,32 @@ async fn insert_embroidery(x_mm:f64,y_mm:f64,file:Option<String>,app:tauri::AppH
  insert_editable_artwork(&mut workspace, &svg, &name, x_mm, y_mm, false).map(Some)
 }
 
+// Native vector insertion for bundled and user-supplied artwork. Size the visible
+// outline rather than the SVG viewport, retaining editable paths and thread colors.
+fn insert_vector_artwork(workspace:&mut Workspace,svg:&str,name:&str,width_mm:f64,x_mm:f64,y_mm:f64)->Result<Preview,String>{
+ if !(5.0..=250.0).contains(&width_mm)||![x_mm,y_mm].iter().all(|v|v.is_finite()&&v.abs()<=500.0){return Err("Invalid artwork dimensions or placement".into())}
+ let mut doc=editable_base(workspace,name)?;
+ let added=doc.add_svg(svg,zigzag::document::Placement{width_mm:Some(width_mm),center_mm:Some((x_mm,y_mm)),..Default::default()}).map_err(|e|e.to_string())?;
+ if added.is_empty(){return Err("Artwork contains no editable objects".into())}
+ for i in added{zigzag::design::auto_stitch_types(std::slice::from_mut(&mut doc.shapes[i]));}
+ let design=doc.plan();
+ if !(1..=2_000_000).contains(&design.stitch_count()) {return Err("Artwork produced no stitches or exceeds the design size limit".into())}
+ let result=preview(&design);
+ workspace.checkpoint_named("Insert vector artwork");
+ workspace.current=Some(design);workspace.source=Some(doc);
+ Ok(result)
+}
+#[tauri::command]
+async fn insert_svg_artwork(bytes:Vec<u8>,name:String,width_mm:f64,x_mm:f64,y_mm:f64,app:tauri::AppHandle)->Result<Preview,String>{
+ use tauri::Manager;
+ if bytes.is_empty()||bytes.len()>20_000_000{return Err("Invalid SVG artwork size".into())}
+ tauri::async_runtime::spawn_blocking(move||{
+  let svg=std::str::from_utf8(&bytes).map_err(|e|e.to_string())?;
+  let state=app.state::<Mutex<Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;
+  insert_vector_artwork(&mut w,svg,&name,width_mm,x_mm,y_mm)
+ }).await.map_err(|e|e.to_string())?
+}
+
 fn editable_base(workspace: &Workspace, name: &str) -> Result<zigzag::document::Document, String> {
     use zigzag::document::Document;
     if let Some(source) = &workspace.source { return Ok(source.clone()); }
@@ -2737,6 +2763,22 @@ mod tests {
     }
 
     #[test]
+    fn bundled_vector_insert_scales_visible_width_and_keeps_existing_objects() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 500 500"><rect x="100" y="100" width="200" height="100" fill="purple"/></svg>"#;
+        let mut workspace = Workspace::default();
+        insert_vector_artwork(&mut workspace, svg, "First", 30.0, -30.0, 0.0).unwrap();
+        let before = workspace.source.as_ref().unwrap().shapes[0].uid;
+        insert_vector_artwork(&mut workspace, svg, "Second", 40.0, 30.0, 0.0).unwrap();
+        let doc=workspace.source.as_ref().unwrap();
+        assert_eq!(doc.shapes.len(),2);
+        assert_eq!(doc.shapes[0].uid,before);
+        let b=zigzag::svg::shapes_bounds(&doc.shapes[1..]);
+        assert!((b.width()-400.0).abs()<1.0);
+        assert!((b.center().x-300.0).abs()<1.0);
+        assert_eq!(workspace.undo.last().unwrap().1.as_ref().unwrap().shapes.len(),1);
+    }
+
+    #[test]
     fn inserting_vector_artwork_keeps_existing_source_objects() {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm" viewBox="0 0 20 20"><rect id="square" x="5" y="5" width="10" height="10" fill="purple"/></svg>"#;
         let mut workspace = Workspace::default();
@@ -2820,7 +2862,7 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
 async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,preview_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,preview_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
