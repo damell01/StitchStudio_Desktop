@@ -333,6 +333,19 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
     return {...native(title,detail,'compose_assistant_design',{composition,apply:true}),
       comparison:{before,after,beforeMinutes:minutes(before),afterMinutes:minutes(after)}};
   };
+  if (intent.kind === 'recolor' && intent.previous && intent.color) {
+    const targets=objects.filter(o=>!o.locked&&!o.hidden&&o.color.join(',')===intent.previous?.join(','));
+    if(targets.length && !invalidField && !incompatibleHoop && !machineExceeded) {
+      return compositionProposal({name:'Recolor artwork',field:[width,height],motifs:[],lettering:[],
+        edits:targets.map(o=>({type:'recolor',uid:o.uid,color:intent.color}))},
+        'Recolor editable artwork','Preview thread changes on '+targets.length+' unlocked matching objects.');
+    }
+  }
+  if (intent.kind === 'moveSelected' && movementIds.length && !invalidField && !incompatibleHoop && !machineExceeded) {
+    return compositionProposal({name:'Move selection',field:[width,height],motifs:[],lettering:[],
+      edits:movementIds.map(uid=>({type:'move',uid,delta:[intent.dx??0,intent.dy??0]}))},
+      'Move selection','Preview the new placement of '+movementIds.length+' selected objects.');
+  }
   if (intent.kind === 'motif' && intent.text && intent.position && intent.width) {
     const position = intent.position;
     const anchorObjects = movementIds.length && intent.relative !== 'hoop' && intent.relative !== 'design' ? objects.filter(object=>movementIds.includes(object.uid)) : [];
