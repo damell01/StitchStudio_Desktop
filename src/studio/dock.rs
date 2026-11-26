@@ -2952,18 +2952,49 @@ impl Studio {
                     .selected_text(fabric.name)
                     .width(170.0)
                     .show_ui(ui, |ui| {
-                        for f in FABRICS {
+                        ui.label(egui::RichText::new("Garment presets").strong().small());
+                        for f in FABRICS.iter().skip(4) {
                             ui.selectable_value(
                                 &mut self.doc.settings.fabric,
                                 f.id.to_string(),
                                 f.name,
-                            )
-                            .on_hover_text(f.about);
+                            ).on_hover_text(f.about);
+                        }
+                        ui.separator();
+                        ui.label(egui::RichText::new("General and headwear").strong().small());
+                        for f in FABRICS.iter().take(4) {
+                            ui.selectable_value(
+                                &mut self.doc.settings.fabric,
+                                f.id.to_string(),
+                                f.name,
+                            ).on_hover_text(f.about);
                         }
                     })
                     .response
                     .labelled_by(lid)
                     .on_hover_text(fabric.about);
+            });
+            fm.row("Garment guide", |ui, _| {
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new(fabric.about).small());
+                    ui.label(egui::RichText::new(format!(
+                        "Fill {:.2} mm · Satin {:.2} mm · Pull {:.2} mm · Underlay {:.2} mm",
+                        fabric.fill_spacing, fabric.satin_spacing, fabric.satin_pull,
+                        fabric.fill_underlay_spacing,
+                    )).small().weak());
+                    let advice = match fabric.id {
+                        "t-shirt" | "polo" => "Try a cut-away stabilizer; test on the actual knit.",
+                        "sweatshirt" => "Try a cut-away stabilizer; use topping on textured fabric.",
+                        "towel" | "fleece" => "Use water-soluble topping to hold stitches above the pile.",
+                        "blanket" => "Test stretch and pile first; choose topping and stabilizer accordingly.",
+                        "performance" => "Avoid stretching while hooping; use a light, stable backing.",
+                        "patch" => "Test the border, backing and edge finishing before production.",
+                        "denim" => "Test needle and backing against heavy woven fabric.",
+                        "knit" => "Use supportive backing and test stretch recovery.",
+                        _ => "Test the selected material and stabilizer before sewing the final garment.",
+                    };
+                    ui.label(egui::RichText::new(advice).small().weak());
+                });
             });
             fm.row("Hoop", |ui, lid| {
                 egui::ComboBox::from_id_salt("hoop")
