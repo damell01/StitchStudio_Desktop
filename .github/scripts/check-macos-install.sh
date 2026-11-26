@@ -25,7 +25,8 @@ image="$(cd "$(dirname "${images[0]}")" && pwd -P)/$(basename "${images[0]}")"
 hdiutil verify "$image"
 for attempt in 1 2 3; do
   echo "Mount attempt $attempt"
-  if hdiutil attach "$image" -mountpoint "$mount" -readonly -nobrowse -noautoopen -verbose; then
+  # Accept the embedded license for this unattended CI smoke test only.
+  if hdiutil attach "$image" -mountpoint "$mount" -readonly -nobrowse -noautoopen -verbose <<< 'Y'; then
     mounted=true
     break
   fi
