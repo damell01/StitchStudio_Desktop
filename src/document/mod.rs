@@ -1341,6 +1341,19 @@ mod tests {
     }
 
     #[test]
+    fn garment_presets_survive_svg_save_and_reload() {
+        for id in ["t-shirt", "sweatshirt", "polo", "towel", "blanket",
+                   "denim", "performance", "fleece", "patch"] {
+            let mut doc = Document::empty();
+            doc.settings.fabric = id.to_string();
+            let saved = doc.to_svg().unwrap();
+            let reopened = Document::from_svg(&saved, "garment", None).unwrap();
+            assert_eq!(reopened.settings.fabric, id);
+            assert_eq!(reopened.plan_options().fabric.id, id);
+        }
+    }
+
+    #[test]
     fn preview_color_is_saved_with_the_design() {
         let mut d = Document::empty();
         assert!(
