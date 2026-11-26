@@ -79,6 +79,7 @@ function LetteringPreview({settings,valid}:{settings:Settings;valid:boolean}) {
 export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) {
   const [text,setText]=useState(monogram?'ABC':'Your name');
   const [fonts,setFonts]=useState<string[]>([]),[font,setFont]=useState('');
+  const [hScale,setHScale]=useState(100),[vScale,setVScale]=useState(100);
   const [size,setSize]=useState(12),[spacing,setSpacing]=useState(.4),[arc,setArc]=useState(0);
   const [bold,setBold]=useState(true),[italic,setItalic]=useState(false),[color,setColor]=useState('#6945a2'),[align,setAlign]=useState('center');
   const [offset,setOffset]=useState(false),[x,setX]=useState('0'),[y,setY]=useState('0');
@@ -95,9 +96,9 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
     return ()=>{active=false;};
   },[]);
   const settings=useMemo(()=>({
-    text,font,size,spacing,arc,bold,italic,align,color:[1,3,5].map(i=>parseInt(color.slice(i,i+2),16))
-  }),[text,font,size,spacing,arc,bold,italic,align,color]);
-  const valid=Boolean(font && text.trim() && size>=3 && size<=80 && spacing>=0 && spacing<=5 && Math.abs(arc)<=300);
+    text,font,size,spacing,arc,bold,italic,align,h_scale:hScale,v_scale:vScale,color:[1,3,5].map(i=>parseInt(color.slice(i,i+2),16))
+  }),[text,font,size,spacing,arc,bold,italic,align,color,hScale,vScale]);
+  const valid=Boolean(font && text.trim() && size>=3 && size<=80 && spacing>=0 && spacing<=5 && Math.abs(arc)<=300 && hScale>=25 && hScale<=250 && vScale>=25 && vScale<=250);
   const xMm=offset?Number(x)*25.4:0, yMm=offset?Number(y)*25.4:0;
   const validPlacement=!offset || (x.trim()!=='' && y.trim()!=='' && Math.abs(xMm)<=500 && Math.abs(yMm)<=500);
 
@@ -118,7 +119,7 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
       <h2>{monogram?'Your initials':'Your lettering'}</h2><p className="muted">Choose your text, font and stitch size.</p>
       {monogram
         ? <label>Initials<input value={text} maxLength={3} onChange={e=>setText(e.target.value.toUpperCase())}/></label>
-        : <label>Text<textarea rows={2} value={text} maxLength={120} onChange={e=>setText(e.target.value)}/></label>}
+        : <><label>Text<textarea rows={3} value={text} maxLength={120} onChange={e=>setText(e.target.value)}/></label><div className="lettering-size-presets"><button onClick={()=>setText(text.toUpperCase())}>UPPERCASE</button><button onClick={()=>setText(text.toLowerCase())}>lowercase</button><button onClick={()=>setText(text.replace(/\p{L}[\p{L}\p{M}]*/gu,w=>w[0].toUpperCase()+w.slice(1).toLowerCase()))}>Title Case</button></div><small>{text.length}/120 characters · {text.split('\n').length} lines</small></>}
       <FontPicker fonts={fonts} selected={font} choose={setFont}/>
       <div className="lettering-size-presets" role="group" aria-label="Letter height presets">{[8,12,20,30,50].map(n=><button key={n} aria-pressed={size===n} onClick={()=>setSize(n)}>{n} mm</button>)}</div><label>Capital height (mm)<input type="number" min="3" max="80" value={size} onChange={e=>setSize(Number(e.target.value))}/></label>
       <div className="lettering-style">
@@ -126,7 +127,7 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
         <label><input type="checkbox" checked={italic} onChange={e=>setItalic(e.target.checked)}/> Italic</label>
         <label>Thread color<input type="color" value={color} onChange={e=>setColor(e.target.value)}/></label>
       </div>
-      <details className="lettering-controls"><summary>Spacing and layout</summary>
+      <details className="lettering-controls"><summary>Spacing and layout</summary><label>Letter width (%)<input type="number" min="25" max="250" value={hScale} onChange={e=>setHScale(Number(e.target.value))}/></label><label>Letter height scale (%)<input type="number" min="25" max="250" value={vScale} onChange={e=>setVScale(Number(e.target.value))}/></label><button onClick={()=>{setHScale(100);setVScale(100)}}>Reset proportions</button>
         <label>Letter spacing (mm)<input type="number" min="0" max="5" step=".1" value={spacing} onChange={e=>setSpacing(Number(e.target.value))}/></label>
         <label>Arc radius (mm)<input type="number" min="-300" max="300" value={arc} onChange={e=>setArc(Number(e.target.value))}/><small>Use zero for a straight line and a negative radius for a lower arc.</small></label>
         <label>Alignment<select value={align} onChange={e=>setAlign(e.target.value)}>
