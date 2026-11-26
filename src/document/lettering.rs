@@ -660,8 +660,15 @@ fn parse_effect_color(value: &str) -> Option<[u8; 3]> {
 
 fn set_lettering_stitches(p: &mut crate::params::Params, spec: &TextSpec) {
     p.kind = Some(spec.kind);
-    p.foam_caps = Some(spec.puff && spec.kind == Kind::Satin);
-    if spec.puff && spec.kind == Kind::Satin { apply_puff_preset(p); }
+    let foam = spec.puff && spec.kind == Kind::Satin;
+    if !foam && p.foam_caps == Some(true) {
+        // Leaving foam mode must not retain its unusually dense top stitches.
+        p.spacing = None;
+        p.satin_underlay = None;
+        p.short_stitches = None;
+    }
+    p.foam_caps = Some(foam);
+    if foam { apply_puff_preset(p); }
     if spec.kind == Kind::Run { p.repeats = Some(if spec.bean { 3 } else { 1 }); }
     if spec.kind == Kind::Satin && spec.effect.as_deref() == Some("gradient") {
         p.colors = Some(vec![spec.color, spec.effect_color]);
