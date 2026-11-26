@@ -286,7 +286,17 @@ impl Document {
         Ok(d)
     }
 
-    /// The document's revision: it changes whenever its SVG does.
+    /// Move the whole document relative to the hoop without rewriting its artwork.
+    pub fn translate_all(&mut self, delta: P) {
+        if delta.x == 0.0 && delta.y == 0.0 {
+            return;
+        }
+        self.offset = self.offset - delta;
+        translate(&mut self.shapes, delta);
+        self.rev = next_rev();
+    }
+
+    /// The document's revision changes when its artwork or placement changes.
     pub fn rev(&self) -> u64 {
         self.rev
     }

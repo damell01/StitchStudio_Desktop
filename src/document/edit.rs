@@ -281,10 +281,18 @@ impl Document {
         }
         drop(by_id);
         drop(doc);
-        edits.sort_by_key(|e| std::cmp::Reverse(e.0.start));
-        for (r, t) in edits {
-            self.xml.replace_range(r, &t);
+        // Whole-design resizes often update hundreds of transforms. Build
+        // the source in one pass instead of shifting the SVG tail per edit.
+        edits.sort_unstable_by_key(|(range, _)| range.start);
+        let mut transformed = String::with_capacity(self.xml.len());
+        let mut cursor = 0;
+        for (range, replacement) in edits {
+            transformed.push_str(&self.xml[cursor..range.start]);
+            transformed.push_str(&replacement);
+            cursor = range.end;
         }
+        transformed.push_str(&self.xml[cursor..]);
+        self.xml = transformed;
         let map = self.uid_map(&HashMap::new());
         self.import(&map)?;
         let angles: HashMap<usize, f64> = angles.into_iter().collect();

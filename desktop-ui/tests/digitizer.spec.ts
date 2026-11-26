@@ -38,7 +38,11 @@ test.beforeEach(async ({ page }) => {
             color_changes: 0,
           };
         }
-        if (command === 'compare_digitizer_draft') return [];
+        if (command === 'compare_digitizer_draft') {
+          if (args?.quick !== false) return [];
+          const plan = { name:'Artwork', stitches:40, trims:0, blocks:[{color:[66,42,90],runs:[[[0,0],[3,3]]]}] };
+          return [{strength:5,plan,reason:null,quality:{coverage:96,density_peak:2,seconds:4}}];
+        }
         if (command === 'apply_digitizer_draft') current = draft;
         if (command === 'current_preview') return current;
         return ['character_list', 'editable_objects'].includes(command) ? [] : null;
@@ -108,4 +112,14 @@ test('a single-page PDF renders to artwork and starts digitizing', async ({ page
   await page.evaluate(() => (window as unknown as { stitchTestRelease: () => void }).stitchTestRelease());
   await expect(page.getByRole('button', { name: 'Open in design studio' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Original artwork' })).toBeVisible();
+});
+
+test('deep optimization exposes and recommends the faster eligible stitch plan', async ({ page }) => {
+  await page.getByRole('button', {name:'Choose or drop an image'}).click();
+  await expect.poll(() => page.evaluate(() => typeof (window as unknown as {stitchTestRelease:unknown}).stitchTestRelease)).toBe('function');
+  await page.evaluate(() => (window as unknown as {stitchTestRelease:() => void}).stitchTestRelease());
+  await page.getByRole('button', {name:'Deep optimization'}).click();
+  const alternative = page.getByRole('button', {name:/Fast Stitch/});
+  await expect(alternative).toHaveAttribute('aria-pressed', 'true');
+  await expect(alternative).toContainText('33% fewer stitches');
 });

@@ -428,37 +428,101 @@ async fn resize_artwork_selection(uids:Vec<usize>,sx:f64,sy:f64,x:f64,y:f64,app:
 
 // Fit the sewn design, not its current distance from the hoop origin.
 #[tauri::command]
-async fn maximize_in_hoop(width_mm:f64,height_mm:f64,margin_mm:f64,stretch:bool,app:tauri::AppHandle)->Result<Preview,String>{
+async fn maximize_in_hoop(
+    width_mm: f64, height_mm: f64, margin_mm: f64, stretch: bool, app: tauri::AppHandle,
+) -> Result<Preview, String> {
     use tauri::Manager;
-    if ![width_mm,height_mm,margin_mm].iter().all(|v|v.is_finite())||margin_mm<0.0||width_mm<=2.0*margin_mm||height_mm<=2.0*margin_mm||width_mm>1000.0||height_mm>1000.0{return Err("Invalid hoop or margin".into())}
-    tauri::async_runtime::spawn_blocking(move||{
-        let state=app.state::<Mutex<Workspace>>();
-        let mut w=state.lock().map_err(|e|e.to_string())?;
-        let original=w.current.as_ref().ok_or("Open a design first")?;
-        let b=original.bounds();
-        if b.is_empty()||b.width()<=0.01||b.height()<=0.01{return Err("Design needs nonzero width and height".into())}
-        let tw=(width_mm-2.0*margin_mm)*10.0;let th=(height_mm-2.0*margin_mm)*10.0;
-        let mut sx=tw/b.width();let mut sy=th/b.height();
-        if !stretch{let scale=sx.min(sy);sx=scale;sy=scale;}
-        if ![sx,sy].iter().all(|v|(0.1..=10.0).contains(v)){return Err("Fit requires a resize outside the supported 10–1000% range.".into())}
-        let c=b.center();
-        let mut doc=editable_base(&w,"Hoop fit")?;
-        let ids:Vec<_>=(0..doc.shapes.len()).collect();
-        transform_for_resize(&mut doc, &ids, [sx, 0.0, 0.0, sy, -c.x * sx, -c.y * sy], sx, sy)?;
-        let mut design=doc.plan_cached(&mut w.plan_cache);
-        // Regeneration can change the sewn extents. Center again and shrink
-        // if necessary, preserving density by replanning rather than scaling stitches.
-        for _ in 0..3{
-            let b=design.bounds();if b.is_empty()||design.stitch_count()>2_000_000{return Err("Invalid regenerated design".into())}
-            let c=b.center();let correction=(tw/b.width().max(0.01)).min(th/b.height().max(0.01)).min(1.0);
-            if correction>=0.99999&&c.len()<0.05{break}
-            transform_for_resize(&mut doc, &ids, [correction, 0.0, 0.0, correction, -c.x * correction, -c.y * correction], correction, correction)?;
-            design=doc.plan_cached(&mut w.plan_cache);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|error| error.to_string())?;
+        fit_workspace_in_hoop(&mut workspace, width_mm, height_mm, margin_mm, stretch)
+    }).await.map_err(|error| error.to_string())?
+}
+
+fn fit_workspace_in_hoop(
+    workspace: &mut Workspace, width_mm: f64, height_mm: f64, margin_mm: f64, stretch: bool,
+) -> Result<Preview, String> {
+    const EDGE_TOLERANCE: f64 = 0.1; // 0.01 mm in design units.
+    if ![width_mm, height_mm, margin_mm].iter().all(|v| v.is_finite())
+        || margin_mm < 0.0 || width_mm <= 2.0 * margin_mm || height_mm <= 2.0 * margin_mm
+        || width_mm > 1000.0 || height_mm > 1000.0
+    {
+        return Err("Invalid hoop or margin".into());
+    }
+    let original = workspace.current.as_ref().ok_or("Open a design first")?;
+    let bounds = original.bounds();
+    if bounds.is_empty() || bounds.width() <= 0.01 || bounds.height() <= 0.01 {
+        return Err("Design needs nonzero width and height".into());
+    }
+    let target_width = (width_mm - 2.0 * margin_mm) * 10.0;
+    let target_height = (height_mm - 2.0 * margin_mm) * 10.0;
+    let mut sx = target_width / bounds.width();
+    let mut sy = target_height / bounds.height();
+    if !stretch {
+        sx = sx.min(sy);
+        sy = sx;
+    }
+    if ![sx, sy].iter().all(|v| (0.1..=10.0).contains(v)) {
+        return Err("Fit requires a resize outside the supported 10–1000% range.".into());
+    }
+
+    let already_sized = ((sx - 1.0) * bounds.width()).abs() <= EDGE_TOLERANCE
+        && ((sy - 1.0) * bounds.height()).abs() <= EDGE_TOLERANCE;
+    let (mut design, mut source) = if already_sized {
+        if bounds.center().len() <= EDGE_TOLERANCE / 2.0 {
+            return Ok(preview(original));
         }
-        let b=design.bounds();
-        if b.is_empty()||design.stitch_count()==0||design.stitch_count()>2_000_000||b.min.x < -tw/2.0-0.1||b.max.x>tw/2.0+0.1||b.min.y < -th/2.0-0.1||b.max.y>th/2.0+0.1{return Err("Regenerated stitches could not fit the requested margin. Original retained.".into())}
-        let result=preview(&design);w.checkpoint_named(if stretch{"Stretch to hoop"}else{"Maximize in hoop"});w.source=Some(doc);w.current=Some(design);Ok(result)
-    }).await.map_err(|e|e.to_string())?
+        (original.clone(), workspace.source.clone())
+    } else {
+        let mut document = editable_base(workspace, "Hoop fit")?;
+        let indices: Vec<_> = (0..document.shapes.len()).collect();
+        let center = bounds.center();
+        transform_for_resize(&mut document, &indices, [
+            sx, 0.0, 0.0, sy, -center.x * sx, -center.y * sy,
+        ], sx, sy)?;
+        let mut design = document.plan_cached(&mut workspace.plan_cache);
+        // Compensation and row spacing can change the sewn span. Only run
+        // the stitch planner again when the sewn span actually needs shrinking.
+        for _ in 0..3 {
+            validate_resized_design(&design)?;
+            let bounds = design.bounds();
+            if bounds.width() <= target_width + EDGE_TOLERANCE
+                && bounds.height() <= target_height + EDGE_TOLERANCE
+            {
+                break;
+            }
+            let correction = (target_width / bounds.width().max(0.01))
+                .min(target_height / bounds.height().max(0.01));
+            let center = bounds.center();
+            transform_for_resize(&mut document, &indices, [
+                correction, 0.0, 0.0, correction, -center.x * correction, -center.y * correction,
+            ], correction, correction)?;
+            design = document.plan_cached(&mut workspace.plan_cache);
+        }
+        (design, Some(document))
+    };
+
+    validate_resized_design(&design)?;
+    let bounds = design.bounds();
+    if bounds.width() > target_width + EDGE_TOLERANCE
+        || bounds.height() > target_height + EDGE_TOLERANCE
+    {
+        return Err("Regenerated stitches could not fit the requested margin. Original retained.".into());
+    }
+    let shift = -bounds.center();
+    if shift.x != 0.0 || shift.y != 0.0 {
+        if let Some(document) = &mut source {
+            document.translate_all(shift);
+        }
+        for point in design.blocks.iter_mut().flat_map(|block| &mut block.runs).flat_map(|run| &mut run.pts) {
+            *point = *point + shift;
+        }
+    }
+    let result = preview(&design);
+    workspace.checkpoint_named(if stretch { "Stretch to hoop" } else { "Maximize in hoop" });
+    workspace.source = source;
+    workspace.current = Some(design);
+    Ok(result)
 }
 
 #[derive(serde::Serialize)]
@@ -851,6 +915,7 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
     use zigzag::{params::Kind,svg::Geometry};
     let mut doc=source.clone();let fabric=doc.plan_options().fabric;
     let mut changed=false;
+    let mut longer_fill=false;
     for i in 0..doc.shapes.len(){
         if doc.records_text(i){continue}
         let shape=&mut doc.shapes[i];
@@ -861,8 +926,22 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
         if b.is_empty()||b.width().min(b.height())<25.0||base.per_shape.get(i).copied().unwrap_or(0)<80{continue}
         let spacing=shape.params.fill_spacing(&fabric);
         let len=shape.params.fill_len(&fabric);
-        let target=(spacing*if level==3{1.38}else{1.18}).min(if level==3{0.55}else{0.48});
-        let length=(len*1.3).min(4.5);
+        // A second maximum candidate keeps the row density but uses longer
+        // penetrations along broad fills. Small details keep the usual cap.
+        let broad_fill = level >= 4 && b.width().min(b.height()) >= 100.0
+            && base.per_shape.get(i).copied().unwrap_or(0) >= 250;
+        let target = if broad_fill && level == 5 {
+            // The explicit Fast Stitch preview can trade some broad-fill
+            // density for speed after the footprint and command checks.
+            (spacing * 1.55).min(0.58)
+        } else if level >= 3 {
+            (spacing * 1.38).min(0.55)
+        } else {
+            (spacing * 1.18).min(0.48)
+        };
+        let length=if broad_fill {(len*1.55).min(5.0)}else{(len*1.3).min(4.5)};
+        longer_fill |= broad_fill && (length > (len * 1.3).min(4.5) + 0.05
+            || (level == 5 && target > (spacing * 1.38).min(0.55) + 0.005));
         if target>spacing+0.005{shape.params.spacing=Some(target);changed=true;}
         if length>len+0.05{shape.params.len=Some(length);changed=true;}
         if shape.params.start.is_none()&&shape.params.end.is_none(){
@@ -870,7 +949,7 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
             if angle_offset!=0.0{shape.params.angle=Some((angle+angle_offset).rem_euclid(180.0));changed=true;}
         }
     }
-    if !changed{return None}
+    if !changed || (level>=4 && !longer_fill && angle_offset==0.0) {return None}
     doc.sync().ok()?;let plan=doc.plan();
     Some((doc,plan))
 }
@@ -916,7 +995,12 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     let mut choices=Vec::new();
     let mut mode=options.clone();mode.target_minutes=None;mode.solid=true;mode.merge=true;mode.auto_types=true;
     if let Ok(v)=choose_simplification(source,original,3,uids,false,&mode){choices.push(v);}
-    for angle in [0.,30.,60.,90.,120.,150.] {if let Some(v)=economical_fill_candidate(source,original,uids,3,angle){choices.push(v);}}
+    for angle in [0.,30.,60.,90.,120.,150.] {
+        if let Some(v)=economical_fill_candidate(source,original,uids,5,angle)
+            .or_else(|| economical_fill_candidate(source,original,uids,3,angle)) {
+            choices.push(v);
+        }
+    }
     if uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&!matches!(s.params.kind,Some(zigzag::params::Kind::Manual|zigzag::params::Kind::Applique))){
         // Reuse dependency-aware ordering, without moving overlapping layers.
         let mut doc=source.clone();doc.settings.hat_order=true;
@@ -929,6 +1013,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     let audit=measure_stitches(original);let bounds=original.bounds();
     choices.retain(|(_,d)|{let b=d.bounds();let q=measure_stitches(d);
         d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&score(d)<score(original)&&q.long<=audit.long&&q.zero<=audit.zero
+        &&d.trim_count()<=original.trim_count()
         &&bounds.min.dist(b.min)<=5.&&bounds.max.dist(b.max)<=5.
         &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
         &&optimization_quality(original,d,speed,trim).coverage>=85.
@@ -973,6 +1058,9 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let mut candidates=Vec::new();
         if options.quick {
             if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}
+            if strength==3 && original.stitch_count()>=12_000 {
+                if let Some(v)=economical_fill_candidate(source,original,uids,4,0.0){candidates.push(v);}
+            }
         }else{
         if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
         if options.solid||options.merge||options.auto_types||options.lighter_underlay{
@@ -988,7 +1076,9 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         }
         if strength>=2{
             for angle in [0.0,45.0,90.0]{
-                if let Some(v)=economical_fill_candidate(source,original,uids,strength,angle){candidates.push(v);}
+                let level=if strength==3{4}else{strength};
+                if let Some(v)=economical_fill_candidate(source,original,uids,level,angle)
+                    .or_else(|| economical_fill_candidate(source,original,uids,strength,angle)) {candidates.push(v);}
             }
         }
         if strength==3&&options.solid{
@@ -2950,6 +3040,78 @@ fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).inv
 
 #[cfg(test)]
 mod fixed_resize_tests {
+    #[test]
+    fn broad_fill_alternative_uses_fewer_stitches_with_the_same_row_spacing() {
+        use zigzag::document::Document;
+        let mut source = Document::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="40mm" viewBox="0 0 80 40"><rect x="4" y="4" width="72" height="32" fill="red"/></svg>"#,
+            "Wide fill", None,
+        ).unwrap();
+        source.shapes[0].params.len = Some(2.2);
+        source.sync().unwrap();
+        let original = source.plan();
+        let (standard, previous) = super::economical_fill_candidate(&source, &original, None, 3, 0.0).unwrap();
+        let (longer, improved) = super::economical_fill_candidate(&source, &original, None, 4, 0.0).unwrap();
+        let (_, fast) = super::economical_fill_candidate(&source, &original, None, 5, 0.0).unwrap();
+        assert_eq!(standard.shapes[0].params.spacing, longer.shapes[0].params.spacing);
+        assert!(improved.stitch_count() < previous.stitch_count());
+        assert!(fast.stitch_count() < improved.stitch_count());
+        assert!(improved.trim_count() <= previous.trim_count());
+        assert!(super::optimization_quality(&original, &improved, 800., 3.).coverage >= 90.0);
+        assert!(super::optimization_quality(&original, &fast, 800., 3.).coverage >= 90.0);
+    }
+
+    #[test]
+    fn hoop_fit_at_target_size_only_moves_the_existing_stitch_plan() {
+        use zigzag::{design::{Block, Run}, document::Document, geom::P};
+
+        let source = Document::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="40mm" viewBox="0 0 40 40"><rect x="5" y="5" width="30" height="30" fill="red"/></svg>"#,
+            "Hoop fit", None,
+        ).unwrap();
+        let points = vec![P::new(-60., -30.), P::new(140., 120.), P::new(100., 10.)];
+        // A saved plan can include edits that cannot be reproduced from its artwork.
+        let original = super::Design { name: "Hoop fit".into(), blocks: vec![Block {
+            color: [255, 0, 0], runs: vec![Run { pts: points.clone(), trim_before: true }],
+        }], ..Default::default() };
+        let before_xml = source.to_svg().unwrap();
+        let before_offset = source.offset;
+        let mut workspace = super::Workspace { current: Some(original), source: Some(source), ..Default::default() };
+        super::fit_workspace_in_hoop(&mut workspace, 24., 24., 2., false).unwrap();
+        let shift = P::new(-40., -45.);
+        let run = &workspace.current.as_ref().unwrap().blocks[0].runs[0];
+        assert_eq!(run.pts, points.into_iter().map(|point| point + shift).collect::<Vec<_>>());
+        assert!(run.trim_before);
+        let source = workspace.source.as_ref().unwrap();
+        assert_eq!(source.to_svg().unwrap(), before_xml);
+        assert_eq!(source.offset, before_offset - shift);
+        let restored = Document::restore_svg(&before_xml, &source.name, source.offset).unwrap();
+        assert_eq!(zigzag::svg::shapes_bounds(&restored.shapes).center(), zigzag::svg::shapes_bounds(&source.shapes).center());
+        // Repeating an already centered fit does not consume an undo slot.
+        super::fit_workspace_in_hoop(&mut workspace, 24., 24., 2., false).unwrap();
+        assert_eq!(workspace.undo.len(), 1);
+    }
+
+    #[test]
+    fn hoop_fit_regenerates_editable_stitches_at_the_larger_size() {
+        use zigzag::document::Document;
+        let source = Document::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="30mm" viewBox="0 0 40 30"><ellipse cx="20" cy="15" rx="15" ry="8" fill="red"/></svg>"#,
+            "Hoop fit", None,
+        ).unwrap();
+        let original = source.plan();
+        let original_stitches = original.stitch_count();
+        let mut workspace = super::Workspace { current: Some(original), source: Some(source), ..Default::default() };
+        super::fit_workspace_in_hoop(&mut workspace, 74., 54., 2., true).unwrap();
+        let design = workspace.current.as_ref().unwrap();
+        let bounds = design.bounds();
+        assert!(bounds.center().len() < 0.001);
+        assert!(bounds.width() > 680.0 && bounds.width() <= 700.1);
+        assert!(bounds.height() > 480.0 && bounds.height() <= 500.1);
+        assert!(design.stitch_count() > original_stitches * 2);
+        assert_eq!(workspace.undo.len(), 1);
+    }
+
  use super::*;use zigzag::geom::P;
  #[test] fn simplify_needle_path_removes_collinear_penetrations(){let p:Vec<_>=(0..40).map(|i|P::new(i as f64*5.,0.)).collect();let q=simplify_needle_path(&p,35.,0.6);assert!(q.len()<p.len()/2);assert_eq!(q.first(),p.first());assert_eq!(q.last(),p.last());assert!(q.windows(2).all(|w|w[0].dist(w[1])<=35.));}
  #[test] fn simplify_needle_path_protects_zigzags(){let p:Vec<_>=(0..40).map(|i|P::new(i as f64*3.,if i%2==0{0.}else{20.})).collect();assert_eq!(simplify_needle_path(&p,35.,0.6),p);}
