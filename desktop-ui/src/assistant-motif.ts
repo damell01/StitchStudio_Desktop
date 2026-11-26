@@ -28,6 +28,8 @@ const colors = new Map<string, number[]>([
   ['teal',[0,128,128]], ['orange',[217,123,57]], ['gray',[128,128,128]],
 ]);
 
+export const motifColor = (name: string) => colors.get(name.trim().toLowerCase());
+
 function key(name: string) {
   return name.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 }

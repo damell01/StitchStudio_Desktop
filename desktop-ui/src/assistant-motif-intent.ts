@@ -22,7 +22,6 @@ const positions: [RegExp, MotifPosition][] = [
 export function parseMotifRequest(input: string): AssistantIntent | null {
   const add = input.match(/^(?:add|insert|place|put|draw) (.+)$/i);
   if (!add) return null;
-  if (/^(?:(?:the )?(?:text|lettering|name) )?"/i.test(add[1]) && /^(?:(?:the )?(?:text|lettering|name) )?"[^"]+"(?: (?:at|size) [d.]+ ?(?:mm|cm|inches|inch|in)(?: tall)?)?$/i.test(add[1])) return null;
   let text = add[1].toLowerCase().replace(/\s+/g, ' ');
   if (/\b(?:and (?:add|insert|place|put|draw|resize|recolor|rotate)|then)\b/.test(text)) return null;
   const applique = /(?<![\p{L}])appliqu[eé](?![\p{L}])/u.test(text);

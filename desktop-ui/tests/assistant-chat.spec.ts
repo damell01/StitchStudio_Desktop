@@ -13,7 +13,7 @@ test('the offline assistant previews requests and runs only the confirmed change
     Object.assign(window,{assistantCalls:calls,__TAURI_INTERNALS__:{
       async invoke(command:string,args:Record<string,unknown>) {
         calls.push({command,args});
-        if (command==='current_preview'||command==='replace_design_color') return plan;
+        if (command==='current_preview'||command==='replace_design_color'||command==='compose_assistant_design') return plan;
         if (command==='editable_objects') return [
           {uid:8,label:'Bow outline',kind:'satin',color:[0,0,0],bounds:[-11,-6,22,12]},
           {uid:9,label:'Bow center',locked:true,kind:'fill',color:[105,69,162],bounds:[-3,-3,6,6]},
@@ -42,7 +42,7 @@ test('the offline assistant previews requests and runs only the confirmed change
   const callsOf = (...commands:string[]) => page.evaluate(allowed => (window as unknown as {
     assistantCalls:{command:string; args:Record<string,unknown>}[];
   }).assistantCalls.filter(call => allowed.includes(call.command)), commands);
-  const mutations = () => callsOf('center_design','replace_design_color','apply_simplification');
+  const mutations = async () => (await callsOf('center_design','replace_design_color','apply_simplification','compose_assistant_design')).filter(call=>call.command!=='compose_assistant_design'||call.args.apply);
   async function ask(text:string) {
     await prompt.fill(text);
     await prompt.press('Enter');
@@ -56,11 +56,11 @@ test('the offline assistant previews requests and runs only the confirmed change
   await expect(conversation).toContainText('Change skipped.');
 
   await ask('Could you replace black with navy blue?');
-  await expect(proposal).toContainText('#000000 → #000080');
+  await expect(proposal).toContainText('1 unlocked matching objects');
   expect(await mutations()).toEqual([]);
   await dialog.getByRole('button',{name:'Apply change'}).click();
-  await expect(conversation).toContainText('Replace thread color applied.');
-  expect(await mutations()).toEqual([{command:'replace_design_color',args:{previous:[0,0,0],color:[0,0,128]}}]);
+  await expect(conversation).toContainText('Recolor editable artwork applied.');
+  expect(await mutations()).toMatchObject([{command:'compose_assistant_design',args:{apply:true,composition:{edits:[{type:'recolor',uid:8,color:[0,0,128]}]}}}]);
 
   await dialog.getByRole('button',{name:'Review stitches'}).click();
   await expect(conversation).toContainText('1 over 12 mm');
@@ -155,7 +155,7 @@ test('reviews motif placement around lettering and resolves imported characters 
       async invoke(command:string,args:Record<string,unknown>) {
         calls.push({command,args});
         if (command==='current_preview') return plan;
-        if (command==='preview_assistant_motif'||command==='insert_assistant_motif') return proposal;
+        if (command==='compose_assistant_design') return proposal;
         if (command==='editable_objects') return [
           {uid:3,label:'Lettering',kind:'satin',groups:['tl-lettering-1'],color:[0,0,0],bounds:[-11,-6,22,12]},
         ];
@@ -180,13 +180,13 @@ test('reviews motif placement around lettering and resolves imported characters 
   await prompt.press('Enter');
   await expect(review).toContainText('2 copies');
   await expect(review.getByRole('img',{name:'Proposed stitch paths'})).toBeVisible();
-  expect((await calls()).filter(call=>call.command==='insert_assistant_motif')).toHaveLength(0);
-  const preview = (await calls()).find(call=>call.command==='preview_assistant_motif')!;
-  expect(preview.args.motif).toMatchObject({position:'topCorners',anchor:[-11,-6,22,12],color:[145,119,184],applique:false});
+  expect((await calls()).filter(call=>call.command==='compose_assistant_design'&&call.args.apply)).toHaveLength(0);
+  const preview = (await calls()).find(call=>call.command==='compose_assistant_design'&&!call.args.apply)!;
+  expect(preview.args.composition).toMatchObject({motifs:[{position:'topCorners',anchor:[-11,-6,22,12],color:[145,119,184],applique:false}]});
   expect((await calls()).some(call=>call.command==='interpret_with_local_model')).toBe(false);
   await review.getByRole('button',{name:'Apply change'}).click();
   await expect(dialog.getByRole('log')).toContainText('Add design motif applied');
-  expect((await calls()).find(call=>call.command==='insert_assistant_motif')?.args).toEqual(preview.args);
+  expect((await calls()).find(call=>call.command==='compose_assistant_design'&&call.args.apply)?.args).toEqual({...preview.args,apply:true});
 
   await prompt.fill('Add Bluey above the design as appliqué');
   await prompt.press('Enter');
@@ -194,5 +194,34 @@ test('reviews motif placement around lettering and resolves imported characters 
   const trace = (await calls()).find(call=>call.command==='trace_assistant_motif');
   expect(trace?.args).toMatchObject({group:'My imported artwork',file:'Bluey.png',width:30});
   await review.getByRole('button',{name:'Skip',exact:true}).click();
-  expect((await calls()).filter(call=>call.command==='insert_assistant_motif')).toHaveLength(1);
+  expect((await calls()).filter(call=>call.command==='compose_assistant_design'&&call.args.apply)).toHaveLength(1);
+});
+
+test('creates a whole editable design from a single assistant prompt after approval', async ({page}) => {
+  await page.addInitScript(()=>{
+    localStorage.setItem('studio-tour-seen','1');
+    const requests:unknown[]=[];
+    const plan={name:'Little Seed',stitches:1234,trims:3,blocks:[{color:[105,69,162],runs:[[[0,0],[10,14]]]}]};
+    Object.assign(window,{compositionRequests:requests,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>){
+      if(command==='editable_objects')return [];
+      if(command==='lettering_fonts')return ['Arial'];
+      if(command==='assistant_compose'){requests.push(args);return plan;}
+      return null;
+    }}});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await page.getByRole('button',{name:'Offline design assistant'}).click();
+  const dialog=page.getByRole('dialog',{name:'Design assistant'});
+  await dialog.getByRole('button',{name:'Create a name patch'}).click();
+  const proposal=dialog.getByRole('region',{name:'Proposed change'});
+  await expect(proposal).toContainText('Little Seed');
+  await expect(proposal).toContainText('scalloped border');
+  const requests=()=>page.evaluate(()=>(window as unknown as {compositionRequests:unknown[]}).compositionRequests);
+  expect(await requests()).toMatchObject([{apply:false,composition:{width:expect.any(Number),
+    lettering:{text:'Little Seed'},accents:[{position:'above'}],frame:{style:'scalloped'}}}]);
+  await proposal.getByRole('button',{name:'Apply change'}).click();
+  await expect(dialog.getByRole('log')).toContainText('Create embroidery design applied.');
+  const [preview,apply]=(await requests()) as {apply:boolean;composition:unknown}[];
+  expect(apply).toEqual({apply:true,composition:preview.composition});
 });

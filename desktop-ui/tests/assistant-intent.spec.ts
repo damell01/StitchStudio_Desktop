@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {assistantIntent} from '../src/assistant-intent';
+import {parseComposition} from '../src/assistant-composition';
 
 test('recognizes supported editing commands',()=>{
   const cases = [
@@ -89,4 +90,13 @@ test('recognizes paired motifs, physical units, and named artwork',()=>{
   });
   expect(assistantIntent('Add a 4 mm heart as applique')).toBeNull();
   expect(assistantIntent('Add a bow then change it to red')).toBeNull();
+});
+
+test('plans a complete named patch from a single brief',()=>{
+  const request = parseComposition('Create a 4-inch patch with “Little Seed”, a lavender bow above it, and a scalloped border.');
+  expect(request).toMatchObject({text:'Little Seed',width:101.6,frame:{style:'scalloped'},
+    accents:[{kind:'motif',text:'lavender bow',position:'above'}]});
+  expect(parseComposition('Make a badge with "Red, Gold and Blue" and a star')).toMatchObject({
+    text:'Red, Gold and Blue',accents:[{text:'star'}],
+  });
 });

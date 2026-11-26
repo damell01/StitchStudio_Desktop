@@ -108,3 +108,43 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .studio-soft-area-tools { display:flex; align-items:center; gap:6px; padding:5px 10px; flex-wrap:wrap; }
 .studio-soft-area-tools button[aria-pressed=true] { background:var(--workspace-soft); color:var(--workspace-accent); }
 .studio-soft-area-tools span { font-size:12px; }
+
+.canvas-drawing-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.canvas-drawing-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+.canvas-drawing-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid var(--border, #ded3ed);
+  border-radius: 7px;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+.canvas-drawing-menu summary::-webkit-details-marker { display: none; }
+.canvas-drawing-options {
+  display: grid;
+  gap: 3px;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 8;
+  min-width: 154px;
+  padding: 5px;
+  border: 1px solid var(--border, #ded3ed);
+  border-radius: 9px;
+  background: var(--panel, #fff);
+  box-shadow: 0 8px 20px #38224a24;
+}
+.studio-camera-bottom .canvas-drawing-options { top: auto; bottom: calc(100% + 6px); }
+.canvas-drawing-options button { justify-content: flex-start; }
+.design-canvas[data-mode="draw"] { cursor: crosshair; touch-action: none; }
+.canvas-drawing-overlay text { paint-order: stroke; stroke: #fffdf8; stroke-width: .8px; }

@@ -10,7 +10,7 @@ use zigzag::{
 
 #[derive(Clone, Copy, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum Position {
+pub(super) enum Position {
     Center,
     Above,
     Below,
@@ -51,10 +51,10 @@ pub(super) struct Motif {
     svg: String,
     color: Option<[u8; 3]>,
     width: f64,
-    position: Position,
+    pub(super) position: Position,
     applique: bool,
-    anchor: [f64; 4],
-    field: [f64; 2],
+    pub(super) anchor: [f64; 4],
+    pub(super) field: [f64; 2],
 }
 
 impl Motif {
@@ -79,7 +79,7 @@ impl Motif {
         Ok(())
     }
 
-    fn add_to(&self, doc: &mut Document) -> Result<(), String> {
+    pub(super) fn add_to(&self, doc: &mut Document) -> Result<(), String> {
         self.validate()?;
         let [anchor_x, anchor_y, anchor_w, anchor_h] = self.anchor;
         for &(horizontal, vertical) in self.position.offsets() {
@@ -174,9 +174,9 @@ fn prepare(workspace: &Workspace, motif: &Motif) -> Result<Document, String> {
     Ok(document)
 }
 
-fn validate_plan(
+pub(super) fn validate_plan(
     workspace: &Workspace,
-    motif: &Motif,
+    field: [f64; 2],
     design: &zigzag::design::Design,
 ) -> Result<(), String> {
     validate_resized_design(design)?;
@@ -186,9 +186,7 @@ fn validate_plan(
             .iter()
             .flat_map(|block| &block.runs)
             .flat_map(|run| &run.pts)
-            .all(|point| {
-                point.x.abs() <= motif.field[0] * 5.0 && point.y.abs() <= motif.field[1] * 5.0
-            })
+            .all(|point| point.x.abs() <= field[0] * 5.0 && point.y.abs() <= field[1] * 5.0)
     };
     if workspace.current.as_ref().is_none_or(fits) && !fits(design) {
         return Err("The generated stitches extend outside the usable hoop area.".into());
@@ -206,7 +204,7 @@ pub(super) async fn preview_assistant_motif(
         let mut workspace = state.lock().map_err(|error| error.to_string())?;
         let document = prepare(&workspace, &motif)?;
         let design = document.plan_cached(&mut workspace.plan_cache);
-        validate_plan(&workspace, &motif, &design)?;
+        validate_plan(&workspace, motif.field, &design)?;
         Ok(preview(&design))
     })
     .await
@@ -223,7 +221,7 @@ pub(super) async fn insert_assistant_motif(
         let mut workspace = state.lock().map_err(|error| error.to_string())?;
         let document = prepare(&workspace, &motif)?;
         let design = document.plan_cached(&mut workspace.plan_cache);
-        validate_plan(&workspace, &motif, &design)?;
+        validate_plan(&workspace, motif.field, &design)?;
         let result = preview(&design);
         if workspace.current.is_none() {
             workspace.current = Some(Document::empty().plan());
@@ -267,7 +265,6 @@ pub(super) async fn trace_assistant_motif(
     .map_err(|error| error.to_string())?
 }
 
-
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Composition {
@@ -275,96 +272,169 @@ pub(super) struct Composition {
     field: [f64; 2],
     motifs: Vec<Motif>,
     lettering: Vec<CompositionText>,
-    #[serde(default)] edits: Vec<CompositionEdit>,
-    #[serde(default)] optimize: bool,
+    #[serde(default)]
+    edits: Vec<CompositionEdit>,
+    #[serde(default)]
+    optimize: bool,
 }
 #[derive(serde::Deserialize)]
-#[serde(tag="type", rename_all="camelCase")]
+#[serde(tag = "type", rename_all = "camelCase")]
 enum CompositionEdit {
-    Recolor { uid: usize, color: [u8;3] },
-    Move { uid: usize, delta: [f64;2] },
-    Lettering { uid: usize, settings: super::lettering_edit::LetteringSettings },
+    Recolor {
+        uid: usize,
+        color: [u8; 3],
+    },
+    Move {
+        uid: usize,
+        delta: [f64; 2],
+    },
+    Lettering {
+        uid: usize,
+        settings: super::lettering_edit::LetteringSettings,
+    },
 }
 #[derive(serde::Deserialize)]
 struct CompositionText {
     settings: super::lettering_edit::LetteringSettings,
     center: [f64; 2],
 }
-fn prepare_composition(workspace: &Workspace, composition: Composition) -> Result<(Document, [f64; 2]), String> {
-    if composition.name.trim().is_empty() || composition.name.len()>160
-        || !composition.field.iter().all(|v| (10.0..=1200.0).contains(v))
-        || composition.motifs.len()+composition.lettering.len()+composition.edits.len()>24
-        || composition.motifs.is_empty() && composition.lettering.is_empty() && composition.edits.is_empty() && !composition.optimize {
+fn prepare_composition(
+    workspace: &Workspace,
+    composition: Composition,
+) -> Result<(Document, [f64; 2]), String> {
+    if composition.name.trim().is_empty()
+        || composition.name.len() > 160
+        || !composition
+            .field
+            .iter()
+            .all(|v| (10.0..=1200.0).contains(v))
+        || composition.motifs.len() + composition.lettering.len() + composition.edits.len() > 24
+        || composition.motifs.is_empty()
+            && composition.lettering.is_empty()
+            && composition.edits.is_empty()
+            && !composition.optimize
+    {
         return Err("Choose a valid composition with up to 24 elements.".into());
     }
-    let mut doc=editable_base(workspace,&composition.name)?;
+    let mut doc = editable_base(workspace, &composition.name)?;
     for edit in composition.edits {
-        let uid=match &edit { CompositionEdit::Recolor{uid,..}|CompositionEdit::Move{uid,..}|CompositionEdit::Lettering{uid,..}=>*uid };
-        let index=doc.shapes.iter().position(|s|s.uid==uid).ok_or("Assistant object no longer exists.")?;
-        if doc.layer_properties(&doc.shapes[index].id).is_some_and(|l|l.locked||l.hidden) {
+        let uid = match &edit {
+            CompositionEdit::Recolor { uid, .. }
+            | CompositionEdit::Move { uid, .. }
+            | CompositionEdit::Lettering { uid, .. } => *uid,
+        };
+        let index = doc
+            .shapes
+            .iter()
+            .position(|s| s.uid == uid)
+            .ok_or("Assistant object no longer exists.")?;
+        if doc
+            .layer_properties(&doc.shapes[index].id)
+            .is_some_and(|l| l.locked || l.hidden)
+        {
             return Err("Unlock and show the object before editing it.".into());
         }
         match edit {
-            CompositionEdit::Recolor{color,..}=>{
-                if let Some(mut spec)=doc.lettering(index) {
-                    spec.color=color;doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
-                }else{doc.shapes[index].color=color;doc.sync().map_err(|e|e.to_string())?;}
+            CompositionEdit::Recolor { color, .. } => {
+                if let Some(mut spec) = doc.lettering(index) {
+                    spec.color = color;
+                    doc.set_lettering(index, &spec).map_err(|e| e.to_string())?;
+                } else {
+                    doc.shapes[index].color = color;
+                    doc.sync().map_err(|e| e.to_string())?;
+                }
             }
-            CompositionEdit::Move{delta,..}=>{
-                if !delta.iter().all(|v|v.is_finite()&&v.abs()<=500.0){return Err("Invalid move distance.".into());}
-                doc.transform(&[index],[1.,0.,0.,1.,delta[0]*10.,delta[1]*10.]).map_err(|e|e.to_string())?;
+            CompositionEdit::Move { delta, .. } => {
+                if !delta.iter().all(|v| v.is_finite() && v.abs() <= 500.0) {
+                    return Err("Invalid move distance.".into());
+                }
+                doc.transform(&[index], [1., 0., 0., 1., delta[0] * 10., delta[1] * 10.])
+                    .map_err(|e| e.to_string())?;
             }
-            CompositionEdit::Lettering{settings,..}=>{
-                if doc.lettering(index).is_none(){return Err("Selected object is not editable lettering.".into());}
-                doc.set_lettering(index,&settings.spec()?).map_err(|e|e.to_string())?;
+            CompositionEdit::Lettering { settings, .. } => {
+                if doc.lettering(index).is_none() {
+                    return Err("Selected object is not editable lettering.".into());
+                }
+                doc.set_lettering(index, &settings.spec()?)
+                    .map_err(|e| e.to_string())?;
             }
         }
     }
     for text in composition.lettering {
-        if !text.center.iter().all(|v| v.is_finite() && v.abs()<=500.0) {
+        if !text
+            .center
+            .iter()
+            .all(|v| v.is_finite() && v.abs() <= 500.0)
+        {
             return Err("Invalid lettering position.".into());
         }
-        let spec=text.settings.spec()?;
-        doc.add_lettering(&spec,(text.center[0],text.center[1])).map_err(|e|e.to_string())?;
+        let spec = text.settings.spec()?;
+        doc.add_lettering(&spec, (text.center[0], text.center[1]))
+            .map_err(|e| e.to_string())?;
     }
     for mut motif in composition.motifs {
-        motif.field=composition.field;
-        if motif.anchor == [0.0;4] && !doc.shapes.is_empty() && !matches!(motif.position,Position::Center) {
-            let bounds=shapes_bounds(&doc.shapes);
+        motif.field = composition.field;
+        if motif.anchor == [0.0; 4]
+            && !doc.shapes.is_empty()
+            && !matches!(motif.position, Position::Center)
+        {
+            let bounds = shapes_bounds(&doc.shapes);
             if !bounds.is_empty() {
-                motif.anchor=[bounds.min.x/10.0,bounds.min.y/10.0,(bounds.max.x-bounds.min.x)/10.0,(bounds.max.y-bounds.min.y)/10.0];
+                motif.anchor = [
+                    bounds.min.x / 10.0,
+                    bounds.min.y / 10.0,
+                    (bounds.max.x - bounds.min.x) / 10.0,
+                    (bounds.max.y - bounds.min.y) / 10.0,
+                ];
             }
         }
         motif.validate()?;
         motif.add_to(&mut doc)?;
     }
     if composition.optimize {
-        let original=doc.plan();
-        if let Some((optimized,_))=super::optimized_density(&doc,&original) {doc=optimized;}
+        let original = doc.plan();
+        if let Some((optimized, _)) = super::optimized_density(&doc, &original) {
+            doc = optimized;
+        }
     }
-    Ok((doc,composition.field))
+    Ok((doc, composition.field))
 }
 #[tauri::command]
-pub(super) async fn compose_assistant_design(composition: Composition, apply: bool, app: tauri::AppHandle) -> Result<Preview,String> {
+pub(super) async fn compose_assistant_design(
+    composition: Composition,
+    apply: bool,
+    app: tauri::AppHandle,
+) -> Result<Preview, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let state=app.state::<Mutex<Workspace>>();
-        let mut workspace=state.lock().map_err(|e|e.to_string())?;
-        let (doc,field)=prepare_composition(&workspace,composition)?;
-        let design=doc.plan_cached(&mut workspace.plan_cache);
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|e| e.to_string())?;
+        let (doc, field) = prepare_composition(&workspace, composition)?;
+        let design = doc.plan_cached(&mut workspace.plan_cache);
         validate_resized_design(&design)?;
-        if design.blocks.iter().flat_map(|b| &b.runs).flat_map(|r| &r.pts)
-            .any(|p|p.x.abs()>field[0]*5.0 || p.y.abs()>field[1]*5.0) {
-            return Err("Composition exceeds the hoop. Reduce its size or adjust placement.".into());
+        if design
+            .blocks
+            .iter()
+            .flat_map(|b| &b.runs)
+            .flat_map(|r| &r.pts)
+            .any(|p| p.x.abs() > field[0] * 5.0 || p.y.abs() > field[1] * 5.0)
+        {
+            return Err(
+                "Composition exceeds the hoop. Reduce its size or adjust placement.".into(),
+            );
         }
-        let result=preview(&design);
+        let result = preview(&design);
         if apply {
-            if workspace.current.is_none() {workspace.current=Some(Document::empty().plan());}
+            if workspace.current.is_none() {
+                workspace.current = Some(Document::empty().plan());
+            }
             workspace.checkpoint_named("Create assistant composition");
-            workspace.current=Some(design);
-            workspace.source=Some(doc);
+            workspace.current = Some(design);
+            workspace.source = Some(doc);
         }
         Ok(result)
-    }).await.map_err(|e|e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

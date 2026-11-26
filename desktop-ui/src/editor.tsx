@@ -1,3 +1,5 @@
+import {compositionPrompt,parseComposition} from './assistant-composition';
+import {DrawingControls,DrawingOverlay,useCanvasDrawing} from './canvas-drawing';
 import {resolveMotif} from './assistant-motif';
 import {localModelEnabled} from './agent-settings';
 import {DesignIssuesDialog,PathToolsDialog,TestSwatchesDialog} from './stitch-tools';
@@ -147,6 +149,25 @@ assistantContext.current = {plan, width, height, machine, hoop, objects};
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 const editLock=useRef(false);const [inlineWork,setInlineWork]=useState('');
 async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return {plan:null,error:'The editor is busy. Try again when it finishes.'};editLock.current=true;setInlineWork(command==='maximize_in_hoop'?'Fitting design and regenerating stitches…':command==='resize_artwork_selection'?'Regenerating stitches at new size…':command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null);return {plan:next,error:null}}catch(e){const error=String(e);setMessage(error);return {plan:null,error}}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview([1,1]);setRotationPreview(0);setBusy(false)}}
+const drawing=useCanvasDrawing((tool,points)=>{
+  void edit('draw_canvas_shape',{tool,points,field:[width,height]});
+});
+function drawingPoint(position: DOMPoint): [number,number] {
+  if(drawing.tool!=='measure'&&!snap)return [position.x,position.y];
+  const bounds=objects.flatMap(object=>!object.hidden&&object.bounds?[object.bounds]:[]);
+  const nearest=(value:number,candidates:number[])=>{
+    let result=value;
+    let distance=1.1;
+    for(const candidate of candidates){
+      const delta=Math.abs(value-candidate);
+      if(delta<distance){distance=delta;result=candidate;}
+    }
+    return distance===1.1?Math.round(value):result;
+  };
+  return [nearest(position.x,bounds.flatMap(([x,,w])=>[x,x+w/2,x+w])),
+    nearest(position.y,bounds.flatMap(([,y,,h])=>[y,y+h/2,y+h]))];
+}
+
 useEffect(()=>{if(!plan||busy)return;const save=()=>{invoke('recovery_save',{width,height,format,threadAssignments}).then(()=>setRecoveryStatus('Recovery copy saved')).catch(e=>setRecoveryStatus('Recovery save failed: '+String(e)))};const timer=setTimeout(save,1500);return()=>clearTimeout(timer)},[plan,width,height,format,busy,threadAssignments]);
 async function recover(){if(plan&&!await confirmAction('Replace the current design with the recovery copy?'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string;thread_assignments?:ThreadAssignments}|null>('recovery_open');if(p){setThreadAssignments(p.thread_assignments??{});setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null);setMessage('Recovery copy opened. Save as a project to keep it.')}else setMessage('No recovery copy found.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 const [solidOnly,setSolidOnly]=useState(false);
@@ -241,6 +262,65 @@ async function applySimplify(){if(!simplifyReview||busy||editLock.current)return
 
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
 async function prepareAssistant(input: string): Promise<string | AssistantProposal> {
+  const composing=compositionPrompt(input);
+  const native = (
+    title: string, detail: string, command: string, args: Record<string, unknown>,
+    afterApply?: () => void,
+  ): AssistantProposal => ({
+    title,
+    detail,
+    async apply() {
+      const current = assistantContext.current;
+      const uids = Array.isArray(args.uids) ? args.uids : [];
+      const stale = current.plan !== plan || current.width !== width || current.height !== height ||
+        current.hoop !== hoop || current.machine !== machine || uids.some(uid =>
+          !current.objects.some(object => object.uid === uid && !object.locked && !object.hidden));
+      if (stale) return 'The design or sewing field changed while this request was open. Ask again to review the current design.';
+      const result = await edit(command, args);
+      if (!result.plan) return result.error;
+      const affected=Array.isArray(args.uids)?args.uids.filter((uid):uid is number=>typeof uid==='number'):command==='compose_assistant_design'?(args.composition as {edits?:{uid:number}[]})?.edits?.map(e=>e.uid)??[]:[];
+      assistantLastTarget.current=affected.length?{plan:result.plan,uids:[...new Set(affected)]}:null;
+      afterApply?.();
+      return title + ' applied. ' + result.plan.stitches.toLocaleString() + ' stitch points · ' +
+        result.plan.trims + ' trims. Use Undo to reverse this edit.';
+    },
+  });
+
+  // Multi-object requests use one native preview and one undo checkpoint.
+  if (composing) {
+    const request = parseComposition(input);
+    if(typeof request==='string') return request;
+    if (invalidField || incompatibleHoop || machineExceeded) return 'Choose a compatible hoop and sewing field first.';
+    let lettering;
+    if (request.text) {
+      const fonts = await invoke<string[]>('lettering_fonts');
+      const font = fonts?.find(name=>name==='Arial') ?? fonts?.[0];
+      if (!font) return 'Install a lettering font to create this design.';
+      const letters = Math.max(...request.text.split('\n').map(line=>Array.from(line).length),1);
+      const size = Math.max(4, Math.min(14, (request.width ?? 90) * .63 / (letters * .72)));
+      lettering = {text:request.text,font,size,spacing:.4,arc:0,bold:true,italic:false,color:request.textColor,align:'center'};
+    }
+    const accents = [];
+    for (const [index, accent] of request.accents.entries()) {
+      const artwork = await resolveMotif(accent.text!,accent.width!);
+      if ('message' in artwork) return artwork.message;
+      const position = accent.position==='center' && lettering ? index===0 ? 'above' : 'below' : accent.position;
+      accents.push({name:artwork.name,svg:artwork.svg,color:artwork.color??null,width:accent.width,
+        position,applique:!!accent.applique,field:[width,height],anchor:[0,0,0,0]});
+    }
+    const composition = {lettering,accents,frame:request.frame,width:request.width,field:[width,height]};
+    const after = await invoke<Plan>('assistant_compose',{composition,apply:false});
+    const before = plan ?? {name:'Blank design',stitches:0,trims:0,blocks:[]};
+    const minutes = (candidate:Plan) => candidate.stitches / sewingSpm + candidate.trims * trimSeconds / 60;
+    const elements = [request.text ? '“'+request.text+'”' : '', ...accents.map(accent=>accent.name),
+      request.frame ? request.frame.style+' border' : ''].filter(Boolean);
+    const detail = elements.join(' · ') + (request.width ? ' · '+Number(request.width.toFixed(2))+' mm wide' : '') +
+      (before.stitches ? '. Inserts the new design in clear space within the current hoop.' : '. Centers the design in the current hoop.');
+    return {...native('Create embroidery design',detail,'assistant_compose',{composition,apply:true}),
+      comparison:{before,after,beforeMinutes:minutes(before),afterMinutes:minutes(after)}};
+  }
+
+
   // Contextual commands are resolved against the live selection, not a stale chat transcript.
   const follow=input.trim().match(/^(?:make (?:that|it|the selection) (?:a little )?(smaller|larger|bigger)|(?:try|use|make it) (?:another color|a different color))$/i);
   if(follow){
@@ -346,6 +426,7 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
         return result.plan?'Lettering updated. Use Undo to reverse this edit.':result.error;
       }};
   }
+
   if (!intent) {
     return 'I couldn’t match that request to an editor action. Try a quick action, or describe one edit with a measurement or color.';
   }
@@ -378,30 +459,6 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
     return 'Selected ' + matches.length + (matches.length === 1 ? ' matching object.' : ' matching objects.');
   }
 
-  const native = (
-    title: string, detail: string, command: string, args: Record<string, unknown>,
-    afterApply?: () => void,
-  ): AssistantProposal => ({
-    title,
-    detail,
-    async apply() {
-      const current = assistantContext.current;
-      const uids = Array.isArray(args.uids) ? args.uids : [];
-      const stale = current.plan !== plan || current.width !== width || current.height !== height ||
-        current.hoop !== hoop || current.machine !== machine || uids.some(uid =>
-          !current.objects.some(object => object.uid === uid && !object.locked && !object.hidden));
-      if (stale) return 'The design or sewing field changed while this request was open. Ask again to review the current design.';
-      const result = await edit(command, args);
-      if (!result.plan) return result.error;
-      const affected=Array.isArray(args.uids)?args.uids.filter((uid):uid is number=>typeof uid==='number'):command==='compose_assistant_design'?(args.composition as {edits?:{uid:number}[]})?.edits?.map(e=>e.uid)??[]:[];
-      assistantLastTarget.current=affected.length?{plan:result.plan,uids:[...new Set(affected)]}:null;
-      afterApply?.();
-      return title + ' applied. ' + result.plan.stitches.toLocaleString() + ' stitch points · ' +
-        result.plan.trims + ' trims. Use Undo to reverse this edit.';
-    },
-  });
-
-  // Multi-object requests use one native preview and one undo checkpoint.
   const compositionProposal = async (composition: Record<string,unknown>, title:string, detail:string): Promise<AssistantProposal> => {
     const after=await invoke<Plan>('compose_assistant_design',{composition,apply:false});
     const before=plan ?? {name:'Blank design',stitches:0,trims:0,blocks:[]};
@@ -757,6 +814,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const target=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;
   let object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))&&!lockedObjects.includes(item.uid)):undefined;
   const position=pointerPosition(event);
+  if(position&&drawing.tool&&drawing.down(event,drawingPoint(position)))return;
   if(canvasMode==='solid'&&event.button===0&&position){
     marqueeGesture.current={pointer:event.pointerId,x:position.x,y:position.y,clientX:event.clientX,clientY:event.clientY,add:false,initial:[]};
     setMarquee({x:position.x,y:position.y,w:0,h:0});
@@ -819,6 +877,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const position=pointerPosition(event);
   if(!position)return;
+  if(drawing.tool&&drawing.move(event,drawingPoint(position)))return;
   const box=marqueeGesture.current;
   if(box?.pointer===event.pointerId){setMarquee({x:Math.min(box.x,position.x),y:Math.min(box.y,position.y),w:Math.abs(position.x-box.x),h:Math.abs(position.y-box.y)});return;}
   if(!event.buttons&&canvasMode==='select'){const element=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;setHoverUid(element?Number(element.getAttribute('data-artwork-uid')):null);}
@@ -848,6 +907,10 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 }
 
 function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boolean) {
+  if(drawing.tool){
+    const point=commit?pointerPosition(event):null;
+    if(drawing.end(event,point?drawingPoint(point):null,commit))return;
+  }
   setGuides({x:null,y:null});
   const box=marqueeGesture.current;
   if(box?.pointer===event.pointerId){
@@ -989,6 +1052,7 @@ async function projectSave(){setBusy(true);try{const project=await invoke<Projec
 async function projectOpen(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string;thread_assignments?:ThreadAssignments}|null>('open_project');if(p){setThreadAssignments(p.thread_assignments??{});setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 async function save(companions=false,images?:{sheet?:number[];preview?:number[]}){if(outside||machineExceeded||incompatibleHoop||invalidField||!plan?.stitches){const reason='Select a compatible hoop with valid dimensions and fit the design before exporting.';setMessage(reason);throw new Error(reason)}setBusy(true);try{if(await invoke<boolean>('export_design',{format,width,height,companions,assignments:threadAssignments,sheetPng:images?.sheet,previewPng:images?.preview}))toast((companions||images?.sheet||images?.preview)?'Embroidery file and companion documents saved. Test sew before production.':'Embroidery file saved. Test sew before production.')}catch(e){setMessage(String(e));throw e}finally{setBusy(false)}}
 useEffect(()=>{const key=(e:KeyboardEvent)=>{if (document.querySelector('dialog[open]')||busy) return;
+if(e.key==='Escape'&&drawing.tool){drawing.pick(null);return;}
 if(e.key==='Escape'&&canvasMode==='solid'){setCanvasMode('select');setMarquee(null);marqueeGesture.current=null;return;}
 if(e.key==='Escape'&&focusCanvas){changeFocus(false);return;}
 if(e.key==='Escape'&&window.innerWidth<dockBreakpoint&&(left||right)){setLeft(false);setRight(false);return;}
@@ -1202,13 +1266,14 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     }}><GripHorizontal size={16}/></button>
   <button className="studio-hoop-shortcut" title="Change machine or hoop dimensions" onClick={()=>setHoopOpen(true)}><SquareDashed size={16}/><strong>{(width/25.4).toFixed(2)} × {(height/25.4).toFixed(2)} in</strong></button>
   
-  <button className="studio-selection-mode" title="Select and move the entire design" aria-label="Move whole design" aria-pressed={canvasMode==='design'} onClick={()=>{selectObject(null);setCanvasMode('design');setActiveGroup(designGroups.length===1?designGroups[0].key:null);setPlaying(false);setPlayhead(null)}}><Group size={17}/><span className="camera-label">Design</span></button>
-  <button className="studio-selection-mode" title="Select individual objects; Shift-click to select several" aria-label="Select objects" aria-pressed={canvasMode==='select'} onClick={()=>{setCanvasMode('select');setPlaying(false);setPlayhead(null)}}><MousePointer2 size={17}/><span className="camera-label">Objects</span></button>
+  <DrawingControls drawing={drawing} disabled={busy}/>
+  <button className="studio-selection-mode" title="Select and move the entire design" aria-label="Move whole design" aria-pressed={canvasMode==='design'} onClick={()=>{drawing.pick(null);selectObject(null);setCanvasMode('design');setActiveGroup(designGroups.length===1?designGroups[0].key:null);setPlaying(false);setPlayhead(null)}}><Group size={17}/><span className="camera-label">Design</span></button>
+  <button className="studio-selection-mode" title="Select individual objects; Shift-click to select several" aria-label="Select objects" aria-pressed={canvasMode==='select'} onClick={()=>{drawing.pick(null);setCanvasMode('select');setPlaying(false);setPlayhead(null)}}><MousePointer2 size={17}/><span className="camera-label">Objects</span></button>
   <button className="studio-selection-mode" title="Draw a box or oval to preview a solid fill" aria-label="Solid area"
-    disabled={!objects.length||busy} aria-pressed={canvasMode==='solid'} onClick={()=>{setPlaying(false);setPlayhead(null);setCanvasMode(canvasMode==='solid'?'select':'solid')}}>
+    disabled={!objects.length||busy} aria-pressed={canvasMode==='solid'} onClick={()=>{drawing.pick(null);setPlaying(false);setPlayhead(null);setCanvasMode(canvasMode==='solid'?'select':'solid')}}>
     <SquareDashed size={16}/><span className="camera-label">Solid area</span>
   </button>
-  <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>setCanvasMode('pan')}><Hand size={17}/></button>
+  <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>{drawing.pick(null);setCanvasMode('pan')}}><Hand size={17}/></button>
   <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>
   <button className="camera-zoom-value" title="Reset zoom to 100%" aria-label="Reset zoom to 100%" onClick={()=>{setZoom(100);setPan([0,0])}}>{Math.round(zoom)}%</button>
   <button className="studio-tool-icon" title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(value=>Math.min(400,value+25))}><ZoomIn size={17}/></button>
@@ -1240,7 +1305,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={16}/></button>
 </div>}</div>}
 <div className="workspace-canvas">
-<svg aria-label="Stitch preview; drag empty space to select objects in Objects mode, or use Pan to move the canvas" data-mode={canvasMode}
+<svg aria-label="Stitch preview; drag empty space to select objects in Objects mode, or use Pan to move the canvas" data-mode={drawing.tool?'draw':canvasMode}
  onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerLeave={()=>setHoverUid(null)}
  onPointerUp={event=>finishCanvasGesture(event,true)}
  onPointerCancel={event=>finishCanvasGesture(event,false)}
@@ -1251,6 +1316,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   width={designBounds.width+4} height={designBounds.height+4} rx={1}
   fill="transparent" pointerEvents="all" stroke="#8543aa" strokeWidth="1.5"
   vectorEffect="non-scaling-stroke" strokeDasharray="5 4"><title>Drag to move the whole design</title></rect>}</g>
+<DrawingOverlay drawing={drawing}/>
 {canvasMode==='design'&&independentGroups&&designGroups.map((group,i)=>{const b=group.bounds;if(!b)return null;return <g key={group.key} transform={activeGroup===group.key?'translate('+objectOffset.join(' ')+')':undefined}><rect data-design-group={group.key} x={b[0]-1} y={b[1]-1} width={b[2]+2} height={b[3]+2} fill="transparent" pointerEvents="all" stroke={activeGroup===group.key?'#754bb0':'#b49acb'} strokeDasharray="5 4" vectorEffect="non-scaling-stroke"><title>Move design {i+1}</title></rect></g>})}
 {canvasMode==='design'&&designGroups.filter(g=>g.key===activeGroup&&g.bounds&&g.bounds[2]>.01&&g.bounds[3]>.01).map(g=>{const [x,y,w,h]=g.bounds!;const cx=x+w/2,cy=y+h/2;const [sx,sy]=groupScalePreview;const tx=cx-w*sx/2+objectOffset[0],ty=cy-h*sy/2+objectOffset[1];return <g key={'resize-'+g.key} transform={`rotate(${rotationPreview} ${cx} ${cy})`}>{(sx!==1||sy!==1||rotationPreview!==0||objectOffset.some(v=>v!==0))&&<g pointerEvents="none" transform={`translate(${objectOffset.join(' ')}) translate(${cx} ${cy}) scale(${sx} ${sy}) translate(${-cx} ${-cy})`}>{g.members.filter(o=>o.path).map(o=><path key={o.uid} d={o.path} fill={o.fill_rule?'rgb('+o.color.join(',')+')':'none'} fillRule={o.fill_rule} stroke={'rgb('+o.color.join(',')+')'} strokeWidth={o.stroke_width||.3} opacity=".55"/>)}</g>}<rect x={tx} y={ty} width={w*sx} height={h*sy} fill="none" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" pointerEvents="none"/>{[0,1,2,3].map(i=><circle key={i} cx={tx+(i%2)*w*sx} cy={ty+Math.floor(i/2)*h*sy} r={Math.max(.65,1.2*100/zoom)} fill="white" stroke="#754bb0" vectorEffect="non-scaling-stroke" data-group-resize={i} style={{cursor:i===0||i===3?'nwse-resize':'nesw-resize'}}><title>Drag to resize and recalculate stitches · Shift keeps proportions</title></circle>)}<line x1={tx+w*sx/2} x2={tx+w*sx/2} y1={ty} y2={ty-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke" pointerEvents="none"/><circle cx={tx+w*sx/2} cy={ty-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" style={{cursor:'grab'}}><title>Rotate design · Shift snaps to 15°</title></circle></g>})}
 {snap&&<g pointerEvents="none" stroke="#a84bc5" strokeDasharray="4 3" strokeWidth="1" vectorEffect="non-scaling-stroke">{guides.x!==null&&<line x1={guides.x} x2={guides.x} y1={-height/2} y2={height/2} vectorEffect="non-scaling-stroke"/>}{guides.y!==null&&<line x1={-width/2} x2={width/2} y1={guides.y} y2={guides.y} vectorEffect="non-scaling-stroke"/>}</g>}
@@ -1283,7 +1349,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
    <title>{handle.dx&&handle.dy?'Drag corner to stretch · Shift keeps proportions':'Drag side to resize'}</title>
  </circle>)}
 <line x1={selected.bounds[0]+selected.bounds[2]/2} x2={selected.bounds[0]+selected.bounds[2]/2} y1={selected.bounds[1]} y2={selected.bounds[1]-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke"/><circle cx={selected.bounds[0]+selected.bounds[2]/2} cy={selected.bounds[1]-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" pointerEvents={busy?'none':'all'} style={{cursor:'grab'}}><title>Rotate object · Shift snaps to 15°</title></circle>
-</g>}</svg>{!plan&&<div className="workspace-empty">
+</g>}</svg>{!plan?.stitches&&!drawing.tool&&<div className="workspace-empty">
   <SquareDashed size={31}/>
   <strong>Start with a design</strong>
   <p>Open artwork or insert a library template.</p>

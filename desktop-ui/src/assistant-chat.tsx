@@ -35,6 +35,7 @@ const actions = [
   {label: 'Center in hoop', prompt: 'Center design', Icon: Scan},
   {label: 'Compare simpler stitches', prompt: 'Simplify design', Icon: Sparkles},
   {label: 'Recommend a hoop', prompt: 'Recommend a hoop', Icon: ArrowDownUp},
+  {label: 'Create a name patch', prompt: 'Create a 3-inch patch with "Little Seed", a lavender bow above it, and a scalloped border', Icon: Sparkles},
   {label: 'Add a bow', prompt: 'Add a small bow at the hoop center', Icon: Sparkles},
   {label: 'Explain underlay', prompt: 'Explain underlay', Icon: CircleHelp},
 ];
