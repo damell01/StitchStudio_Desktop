@@ -1,6 +1,8 @@
 <img src="packaging/macos/AppIcon-dark.png" alt="ZigZag dark mode app icon" width="160" height="160">
 
-# ZigZag
+# Stitch Studio Desktop
+
+Stitch Studio Desktop is a modified distribution of the Apache-2.0 licensed ZigZag project. Upstream attribution and license terms remain applicable. See [LICENSE](LICENSE).
 
 **[Visit zigzag.diy](https://zigzag.diy/)**
 
@@ -20,7 +22,7 @@ https://github.com/user-attachments/assets/94812f25-82f4-429f-85db-5e20c1d5e723
 
 ## Download for Mac
 
-**[Download ZigZag.dmg](https://github.com/simpsoka/zigzag/releases/latest/download/ZigZag.dmg)**
+**[Download ZigZag.dmg](https://github.com/damell01/StitchStudio_Desktop/releases/latest)**
 
 For Apple Silicon and Intel Macs, macOS 11 or later. Open the DMG, then drag
 ZigZag into Applications. The release is signed and notarized by Apple.
@@ -28,7 +30,7 @@ No Rust installation is needed.
 
 ## Download for Windows
 
-**[Download ZigZag for Windows](https://github.com/simpsoka/zigzag/releases/latest)**
+**[Download ZigZag for Windows](https://github.com/damell01/StitchStudio_Desktop/releases/latest)**
 — the `ZigZag-<version>-x86_64-windows.zip` asset on the latest release.
 
 For 64-bit Windows 10 (version 1709 or later) and Windows 11. Unzip it and
@@ -36,7 +38,7 @@ double-click **ZigZag.exe**. Windows SmartScreen warns on apps without a
 Microsoft-trusted signature the first time they run; click *More info* →
 *Run anyway*. No Rust installation is needed.
 
-[Release notes and checksums](https://github.com/simpsoka/zigzag/releases/latest)
+[Release notes and checksums](https://github.com/damell01/StitchStudio_Desktop/releases/latest)
 · [Publishing a release](RELEASE.md)
 
 ```
