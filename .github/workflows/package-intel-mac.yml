@@ -3,7 +3,7 @@ name: Package Intel Mac installer
 on:
   push:
     branches: [Dev]
-    paths: [.github/workflows/package-intel-mac.yml]
+    paths: [.github/workflows/package-intel-mac.yml, .github/scripts/check-macos-install.sh]
     tags: ['stitch-intel-test-*']
   workflow_dispatch:
 
@@ -39,7 +39,7 @@ jobs:
           test "$(uname -m)" = x86_64
           npm run tauri build -- --bundles app dmg -- --locked
       - name: Check the installer and Intel app executable
-        run: bash ../.github/scripts/check-macos-install.sh src-tauri/target/release/bundle
+        run: bash ../.github/scripts/check-macos-install.sh src-tauri/target/release/bundle x86_64
       - uses: actions/upload-artifact@v4
         with:
           name: Stitch-Studio-Mac-Intel
