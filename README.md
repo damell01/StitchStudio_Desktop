@@ -2,6 +2,9 @@
 
 The React and Tauri desktop application lives in `desktop-ui`. For Windows PowerShell and macOS terminal commands, see the [desktop build and packaging guide](docs/DESKTOP.md). The [implementation tracker](docs/IMPLEMENTATION_TRACKER.md) records tested workflows and open acceptance work.
 
+**Set up automatic updates.** The [DBell Creations updater setup guide](packaging/update-host/README.md) has the Windows commands to generate the keys, a GitHub secrets and variables checklist, and the steps to publish your first signed installer to Hostinger.
+
+
 <img src="packaging/macos/AppIcon-dark.png" alt="ZigZag dark mode app icon" width="160" height="160">
 
 # ZigZag

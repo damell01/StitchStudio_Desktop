@@ -4,7 +4,7 @@ The Windows and macOS installers are needed once. Install a feed-enabled release
 
 ## Connect the Hostinger account
 
-Use the existing production domain at `www.dbellcreations.com`. The GitHub release workflow can install the endpoint directly over SSH on the first publish. Your website repo and normal website deployment can continue handling the rest of the site.
+The PHP endpoint is in the [production website repository](https://github.com/damell01/DBELLCREATIONS_PRODSITE/tree/main/stitch-updates). The live route returns **503** until the private access-key hash is configured, **401** without a key once configured, and **204** with a valid key until a release is published. The release workflow can create the missing private folder and hash on the first automatic publish.
 
 In hPanel, enable SSH, authorize a deployment public key, and record the SSH username, hostname, port and verified server host key. In File Manager, locate the domain folder that contains `public_html`. For `HOSTINGER_FEED_DIR`, use the absolute path to that domain folder followed by `/stitch-studio-private/feed`. Configure the GitHub values below. The publishing script creates the private feed and the two public endpoint files when needed. It keeps any existing site files and checks the feed before publishing a release.
 
@@ -12,8 +12,12 @@ In hPanel, enable SSH, authorize a deployment public key, and record the SSH use
 
 1. In hPanel File Manager, open the domain directory that contains `public_html`. Create `stitch-studio-private` beside `public_html`. Inside it create a `feed` folder. Keep the private folder outside the document root of every domain.
 2. Create `public_html/stitch-updates`. Upload `index.php` and `.htaccess` from this directory. Enable hidden files in File Manager so you can see `.htaccess`.
-3. Generate the access key on Windows using the PowerShell commands below. Upload only `access-key.sha256` to `stitch-studio-private`. Give the 64-character access key only to the people allowed to install updates. Keep it out of source control and URLs.
-4. Open `https://www.dbellcreations.com/stitch-updates/latest.json` without credentials. It must return **401**. An authenticated request returns **204** until the first release is uploaded. Use the `www` address directly so the app never sends its access key across a redirect.
+3. Generate or locate the access key using the steps below. Upload only `access-key.sha256` to `stitch-studio-private`. Give the 64-character access key only to the people allowed to install updates. Keep it out of source control and URLs.
+4. Open `https://www.dbellcreations.com/stitch-updates/latest.json` without credentials. It must return **401**. Use the `www` address directly so the app never sends its access key across a redirect.
+
+## Generate or locate the keys on Windows
+
+Run this from the Stitch Studio repo in PowerShell. If you already have signing keys for an installed feed-enabled build, reuse that key pair and password. Keep the files in your private release folder and back them up before publishing.
 
 ```powershell
 $stitchRelease = Join-Path $env:LOCALAPPDATA 'StitchStudioRelease'
@@ -24,11 +28,13 @@ npm.cmd ci
 npm.cmd run tauri signer generate -- --write-keys (Join-Path $stitchRelease 'update-signing.key')
 ```
 
-The three keys have different jobs. `update-signing.key` signs releases. `artifact.key` encrypts the packages built by GitHub. `update-access.key` grants access to the Hostinger downloads. Back them up privately. Keep the same signing key and URL for later releases so existing installations can update.
+If you plan to publish automatically and need a new deployment key, run `ssh-keygen -t ed25519 -C stitch-studio-deploy -f (Join-Path $stitchRelease 'hostinger-deploy')`. Use a dedicated deployment key for this workflow. Authorize `hostinger-deploy.pub` in hPanel. The deployment job needs a key it can open without an interactive passphrase. Get the verified server host key from Hostinger and save the corresponding OpenSSH known-hosts entry as `hostinger-known-hosts`. For a custom SSH port, the host field in that entry uses `[hostname]:port`.
+
+The three release keys have different jobs. `update-signing.key` signs releases. `artifact.key` encrypts the packages built by GitHub. `update-access.key` grants access to the Hostinger downloads. Back them up privately. Keep the same signing key and URL for later releases so existing installations can update.
 
 ## Configure GitHub once
 
-In **Settings → Secrets and variables → Actions**, add the following. An authenticated repository administrator must set these values.
+Open **Settings → Secrets and variables → Actions** in **StitchStudio_Desktop**. Use **New repository secret** for each secret and the **Variables** tab for each variable. Paste file contents into the matching value field. GitHub stores secret values write-only. [Actions settings](https://github.com/damell01/StitchStudio_Desktop/settings/secrets/actions)
 
 | Type | Name | Value |
 | --- | --- | --- |
@@ -36,6 +42,16 @@ In **Settings → Secrets and variables → Actions**, add the following. An aut
 | Secret | `TAURI_SIGNING_PRIVATE_KEY` | Contents of `update-signing.key` |
 | Secret | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password used to create the signing key |
 | Secret | `STITCH_ARTIFACT_KEY` | Contents of `artifact.key` |
+| Secret | `STITCH_FEED_ACCESS_KEY` | Contents of `update-access.key`, a single 64-character line |
+| Secret | `HOSTINGER_SSH_KEY` | Contents of `hostinger-deploy`, including the private-key header and footer |
+| Secret | `HOSTINGER_KNOWN_HOSTS` | Contents of `hostinger-known-hosts` |
+| Variable | `HOSTINGER_UPDATE_DEPLOY` | `1` to publish automatically |
+| Variable | `HOSTINGER_SSH_HOST` | Hostinger SSH username and hostname as `user@hostname` |
+| Variable | `HOSTINGER_SSH_PORT` | SSH port shown in hPanel |
+| Variable | `HOSTINGER_FEED_DIR` | Absolute domain directory followed by `/stitch-studio-private/feed` |
+
+For the manual File Manager route, enter the first four values for signing and leave deployment disabled. Use the remaining values when you want GitHub to publish to Hostinger automatically.
+
 
 The workflow defaults to the dbellcreations.com address. For another hostname, override `STITCH_UPDATE_FEED` and `STITCH_UPDATE_ASSETS`, with the latter ending in a slash. Both must use the same HTTPS origin. Apple's Developer ID and notarization are separate from updater signing. Configure the Apple certificate and notarization credentials named in the workflow to distribute Mac builds without the unsigned-app prompt.
 
@@ -63,7 +79,7 @@ Remove-Item Env:STITCH_ARTIFACT_KEY
 
 Using hPanel, upload the version directory to `stitch-studio-private/feed`. Upload `latest.json` **after** every payload is in place. Reuse the `latest.json` address for every release and give each release a higher version. Keep the version directories immutable. For the first manual install, the three initial installers are inside the platform directories. Windows uses the `.exe`, and Macs use the architecture-specific `.dmg`.
 
-For automatic publishing, enable SSH in hPanel and add an authorized deployment public key. Set Actions variables `HOSTINGER_UPDATE_DEPLOY=1`, `HOSTINGER_SSH_HOST` (SSH user and host), `HOSTINGER_SSH_PORT`, and `HOSTINGER_FEED_DIR` (absolute path to `stitch-studio-private/feed`). Add secrets `HOSTINGER_SSH_KEY` (deployment private key), `HOSTINGER_KNOWN_HOSTS` (verified Hostinger SSH host key), and `STITCH_FEED_ACCESS_KEY` (contents of `update-access.key`). The release job checks that the feed requires authorization, uploads to a private staging folder, publishes the packages first, and then makes the new manifest live. No public release is created.
+With automatic publishing set up, the workflow checks the endpoint, uploads to private staging, publishes the payloads, and switches the live manifest. The first installer comes from the workflow artifact or the private feed. Once installed and paired, use **Settings → App updates** for later versions.
 
 ## Publish from your terminal
 
