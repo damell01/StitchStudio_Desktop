@@ -275,6 +275,14 @@ pub(super) struct Composition {
     field: [f64; 2],
     motifs: Vec<Motif>,
     lettering: Vec<CompositionText>,
+    #[serde(default)] edits: Vec<CompositionEdit>,
+}
+#[derive(serde::Deserialize)]
+#[serde(tag="type", rename_all="camelCase")]
+enum CompositionEdit {
+    Recolor { uid: usize, color: [u8;3] },
+    Move { uid: usize, delta: [f64;2] },
+    Lettering { uid: usize, settings: super::lettering_edit::LetteringSettings },
 }
 #[derive(serde::Deserialize)]
 struct CompositionText {
@@ -284,11 +292,33 @@ struct CompositionText {
 fn prepare_composition(workspace: &Workspace, composition: Composition) -> Result<(Document, [f64; 2]), String> {
     if composition.name.trim().is_empty() || composition.name.len()>160
         || !composition.field.iter().all(|v| (10.0..=1200.0).contains(v))
-        || composition.motifs.len()+composition.lettering.len()>24
-        || composition.motifs.is_empty() && composition.lettering.is_empty() {
+        || composition.motifs.len()+composition.lettering.len()+composition.edits.len()>24
+        || composition.motifs.is_empty() && composition.lettering.is_empty() && composition.edits.is_empty() {
         return Err("Choose a valid composition with up to 24 elements.".into());
     }
     let mut doc=editable_base(workspace,&composition.name)?;
+    for edit in composition.edits {
+        let uid=match &edit { CompositionEdit::Recolor{uid,..}|CompositionEdit::Move{uid,..}|CompositionEdit::Lettering{uid,..}=>*uid };
+        let index=doc.shapes.iter().position(|s|s.uid==uid).ok_or("Assistant object no longer exists.")?;
+        if doc.layer_properties(&doc.shapes[index].id).is_some_and(|l|l.locked||l.hidden) {
+            return Err("Unlock and show the object before editing it.".into());
+        }
+        match edit {
+            CompositionEdit::Recolor{color,..}=>{
+                if let Some(mut spec)=doc.lettering(index) {
+                    spec.color=color;doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+                }else{doc.shapes[index].color=color;doc.sync().map_err(|e|e.to_string())?;}
+            }
+            CompositionEdit::Move{delta,..}=>{
+                if !delta.iter().all(|v|v.is_finite()&&v.abs()<=500.0){return Err("Invalid move distance.".into());}
+                doc.transform(&[index],[1.,0.,0.,1.,delta[0]*10.,delta[1]*10.]).map_err(|e|e.to_string())?;
+            }
+            CompositionEdit::Lettering{settings,..}=>{
+                if doc.lettering(index).is_none(){return Err("Selected object is not editable lettering.".into());}
+                doc.set_lettering(index,&settings.spec()?).map_err(|e|e.to_string())?;
+            }
+        }
+    }
     for mut motif in composition.motifs {
         motif.field=composition.field;
         motif.add_to(&mut doc)?;
