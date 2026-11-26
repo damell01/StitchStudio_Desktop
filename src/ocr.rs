@@ -112,6 +112,14 @@ fn source_mask(rect:[f64;4],w:u32,h:u32,rgb:&[u8])->Vec<f64>{
         }}
         mask[y*MASK_W+x]=ink/4.0;
     }}
+    // Normalize local contrast and infer polarity from the region border.
+    // White lettering on dark artwork must not be matched as negative ink.
+    let border:Vec<_>=(0..MASK_H).flat_map(|y|(0..MASK_W).filter(move |&x|x==0||y==0||x+1==MASK_W||y+1==MASK_H).map(move |x|y*MASK_W+x)).map(|i|mask[i]).collect();
+    let background=border.iter().sum::<f64>()/border.len().max(1) as f64;
+    if background>0.5 {for v in &mut mask{*v=1.0-*v;}}
+    let floor=mask.iter().copied().fold(f64::INFINITY,f64::min);
+    let ceiling=mask.iter().copied().fold(0.0_f64,f64::max);
+    if ceiling-floor>0.05 {for v in &mut mask{*v=((*v-floor)/(ceiling-floor)).clamp(0.0,1.0);}}
     mask
 }
 fn mask_distance(a:&[f64],b:&[f64])->f64{
@@ -236,6 +244,15 @@ mod tests {
     use super::*;
     fn line(text:&str,x:f64,y:f64,w:f64,h:f64)->RecognizedLine {
         RecognizedLine{text:text.into(),confidence:-1.0,rect:[x,y,x+w,y+h],font:String::new(),enabled:false}
+    }
+    #[test]
+    fn font_mask_handles_reversed_text_polarity() {
+        let mut dark=vec![255u8;64*24*3];
+        for y in 4..20 {for x in 25..39 {let i=(y*64+x)*3;dark[i..i+3].fill(0);}}
+        let light:Vec<_>=dark.iter().map(|v|255-*v).collect();
+        let a=source_mask([0.,0.,64.,24.],64,24,&dark);
+        let b=source_mask([0.,0.,64.,24.],64,24,&light);
+        assert!(mask_distance(&a,&b)<0.001);
     }
     #[test]
     fn tracked_letters_group_without_joining_adjacent_rows() {
