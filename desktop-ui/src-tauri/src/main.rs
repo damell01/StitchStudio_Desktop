@@ -1591,8 +1591,17 @@ async fn optimize_editable_design(app:tauri::AppHandle)->Result<Preview,String>{
 #[tauri::command]
 fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  let mut w=state.lock().map_err(|e|e.to_string())?;
- // Do not silently flatten editable source artwork or discard its metadata.
- if w.source.is_some(){return Err("This design contains editable artwork. Adjust its stitch settings and regenerate it instead of repairing fixed stitches.".into())}
+ // Repair editable artwork through its source, never by flattening the plan.
+ if let Some(source)=w.source.clone(){
+   let original=w.current.as_ref().ok_or("Open artwork first")?;
+   let (doc,design)=optimized_density(&source,original)
+     .ok_or("No safe automatic density repair found. Adjust individual stitch settings for other issues.")?;
+   validate_resized_design(&design)?;
+   let result=preview(&design);
+   w.checkpoint_named("Repair editable artwork density");
+   w.source=Some(doc);w.current=Some(design);
+   return Ok(result)
+ }
  let mut d=w.current.clone().ok_or("Open artwork first")?;
  let mut total=0usize;
  for run in d.blocks.iter_mut().flat_map(|b|&mut b.runs){
