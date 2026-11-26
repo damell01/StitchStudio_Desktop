@@ -234,6 +234,16 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
             }
         }
         candidate.sync()?;
+        // Check the reconstructed region before committing it. A font
+        // substitution must not collapse the original line dimensions.
+        let fitted=shapes_bounds(std::slice::from_ref(&candidate.shapes[i]));
+        anyhow::ensure!(!fitted.is_empty() &&
+            (fitted.width()-ink.width()).abs()<= (ink.width()*0.15).max(5.0) &&
+            (fitted.height()-ink.height()).abs()<= (ink.height()*0.15).max(3.0),
+            "Reconstructed lettering does not fit the original region");
+        let plan=candidate.plan();
+        anyhow::ensure!(plan.per_shape.get(i).is_some_and(|&n|n>0),
+            "Reconstructed lettering generated no stitches");
     }
     *doc = candidate;
     Ok(())
