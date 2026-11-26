@@ -577,10 +577,21 @@ fn satin_pieces_strip(
                     satin::strip(&rails, t0, t1)
                 };
                 let w = mean_width(&rails);
+                let width_mm = w / 10.0;
+                // Narrow satin columns (including glyph strokes) need less
+                // thread buildup. Preserve explicit overrides and stronger
+                // support on stretch fabrics and caps.
+                let spacing = if whole && p.spacing.is_none() && f.id == "standard" && width_mm < 1.2 {
+                    p.satin_spacing_for(f, width_mm).max(0.52)
+                } else { p.satin_spacing_for(f, width_mm) };
+                let underlay = if whole && p.underlay_on() && p.satin_underlay.is_none()
+                    && f.id == "knit" && (0.8..1.5).contains(&width_mm) {
+                    underlay::CENTER
+                } else { p.satin_underlay_for(width_mm) };
                 let sp = SatinParams {
-                    spacing: mm(p.satin_spacing_for(f, w / 10.0)),
+                    spacing: mm(spacing),
                     pull: mm(p.satin_pull(f)),
-                    underlay: p.satin_underlay_for(w / 10.0),
+                    underlay,
                     run_len: mm(2.5),
                     short_stitches: p.short_stitches_on(),
                     split: p.satin_split().map(mm),
