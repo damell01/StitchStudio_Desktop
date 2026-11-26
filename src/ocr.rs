@@ -194,6 +194,7 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
             anyhow::ensure!(overlap_x*overlap_y < (x1-x0)*(y1-y0)*0.06, "Text overlaps other artwork; original retained");
         }
         let color = candidate.shapes[indices[0]].color;
+        anyhow::ensure!(indices.iter().all(|&i|candidate.shapes[i].color==color && !candidate.layer_properties(&candidate.shapes[i].id).is_some_and(|l|l.locked||l.hidden)), "Text region contains multiple colors or protected artwork; original retained");
         let center = (ink.center().x/10.0,ink.center().y/10.0);
         let small = ink.height() < 40.0;
         let mut spec = TextSpec { text: line.text.clone(), font: line.font.clone(), color,
@@ -212,12 +213,17 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
             candidate.set_lettering(i,&spec)?;
         }
         if small {
-            // Avoid heavy foundations and excessive pull on small satin letters.
-            let p=&mut candidate.shapes[i].params;
-            p.spacing=Some(0.45);
-            p.pull=Some(0.0);
-            p.satin_underlay=Some(0);
-            p.short_stitches=Some(true);
+            // Small text needs a light foundation, not a blanket removal
+            // of underlay on stretchy or textured fabric.
+            let fabric=candidate.plan_options().fabric;
+            let id=candidate.shapes[i].id.clone();
+            for shape in candidate.shapes.iter_mut().filter(|s|s.id==id) {
+                let p=&mut shape.params;
+                p.spacing=Some(fabric.satin_spacing.clamp(0.38,0.45));
+                p.pull=Some(fabric.satin_pull.min(0.15));
+                p.satin_underlay=Some(if fabric.id=="standard" && ink.height()<25.0 {0} else {crate::params::underlay::CENTER});
+                p.short_stitches=Some(true);
+            }
         }
         candidate.sync()?;
     }
