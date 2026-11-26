@@ -1595,10 +1595,21 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
  if let Some(source)=w.source.clone(){
    let original=w.current.as_ref().ok_or("Open artwork first")?;
    let (doc,design)=optimized_density(&source,original)
-     .ok_or("No safe automatic density repair found. Adjust individual stitch settings for other issues.")?;
+     .or_else(|| {
+       let mut regenerated=source.clone();
+       regenerated.sync().ok()?;
+       let plan=regenerated.plan();
+       validate_resized_design(&plan).ok()?;
+       let before=measure_stitches(original);let after=measure_stitches(&plan);
+       if after.long<before.long && after.short<=before.short && after.zero<=before.zero
+         && plan.trim_count()<=original.trim_count()
+         && original.blocks.iter().map(|b|b.color).eq(plan.blocks.iter().map(|b|b.color))
+         && optimization_quality(original,&plan,800.,3.).coverage>=95.0 {Some((regenerated,plan))}else{None}
+     })
+     .ok_or("No safe automatic repair found. Adjust individual stitch settings for other issues.")?;
    validate_resized_design(&design)?;
    let result=preview(&design);
-   w.checkpoint_named("Repair editable artwork density");
+   w.checkpoint_named("Repair editable artwork");
    w.source=Some(doc);w.current=Some(design);
    return Ok(result)
  }
