@@ -22,7 +22,9 @@ function FontPicker({fonts,selected,choose}:{fonts:string[];selected:string;choo
     </dialog>
   </>;
 }
+const letteringEffects = [["satin","Standard satin"],["fill","Tatami fill"],["applique","Fabric appliqué"],["run","Running outline"],["ripple","Lightweight ripple"],["contour","Contour fill"]] as const;
 type Settings = {
+  kind?:string;
   text:string; font:string; size:number; spacing:number; arc:number; bold:boolean;
   italic:boolean; color:number[]; align:string; h_scale?:number; v_scale?:number; kern?:[number,number][]; path?:string; path_offset?:number; path_flip?:boolean;
 };
@@ -77,6 +79,7 @@ function LetteringPreview({settings,valid}:{settings:Settings;valid:boolean}) {
 }
 
 export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) {
+  const [kind,setKind]=useState('satin');
   const [text,setText]=useState(monogram?'ABC':'Your name');
   const [fonts,setFonts]=useState<string[]>([]),[font,setFont]=useState('');
   const [hScale,setHScale]=useState(100),[vScale,setVScale]=useState(100);
@@ -96,8 +99,8 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
     return ()=>{active=false;};
   },[]);
   const settings=useMemo(()=>({
-    text,font,size,spacing,arc,bold,italic,align,h_scale:hScale,v_scale:vScale,color:[1,3,5].map(i=>parseInt(color.slice(i,i+2),16))
-  }),[text,font,size,spacing,arc,bold,italic,align,color,hScale,vScale]);
+    kind,text,font,size,spacing,arc,bold,italic,align,h_scale:hScale,v_scale:vScale,color:[1,3,5].map(i=>parseInt(color.slice(i,i+2),16))
+  }),[kind,text,font,size,spacing,arc,bold,italic,align,color,hScale,vScale]);
   const valid=Boolean(font && text.trim() && size>=3 && size<=80 && spacing>=0 && spacing<=5 && Math.abs(arc)<=300 && hScale>=25 && hScale<=250 && vScale>=25 && vScale<=250);
   const xMm=offset?Number(x)*25.4:0, yMm=offset?Number(y)*25.4:0;
   const validPlacement=!offset || (x.trim()!=='' && y.trim()!=='' && Math.abs(xMm)<=500 && Math.abs(yMm)<=500);
@@ -121,6 +124,8 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
         ? <label>Initials<input value={text} maxLength={3} onChange={e=>setText(e.target.value.toUpperCase())}/></label>
         : <><label>Text<textarea rows={3} value={text} maxLength={120} onChange={e=>setText(e.target.value)}/></label><div className="lettering-size-presets"><button onClick={()=>setText(text.toUpperCase())}>UPPERCASE</button><button onClick={()=>setText(text.toLowerCase())}>lowercase</button><button onClick={()=>setText(text.replace(/\p{L}[\p{L}\p{M}]*/gu,w=>w[0].toUpperCase()+w.slice(1).toLowerCase()))}>Title Case</button></div><small>{text.length}/120 characters · {text.split('\n').length} lines</small></>}
       <FontPicker fonts={fonts} selected={font} choose={setFont}/>
+      <label>Embroidery effect<select value={kind} onChange={e=>setKind(e.target.value)}>{letteringEffects.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      {kind==="applique"&&<small>Review placement, tack-down and finishing stages before exporting. Use a suitable broad font.</small>}
       <div className="lettering-size-presets" role="group" aria-label="Lettering layout presets">
         <button onClick={()=>{setBold(true);setItalic(false);setHScale(100);setVScale(100);setSpacing(.4);setArc(0)}}>Classic</button>
         <button onClick={()=>{setBold(true);setItalic(false);setHScale(85);setVScale(110);setSpacing(.6);setArc(0)}}>Tall block</button>
@@ -205,6 +210,7 @@ export function InlineLettering({uid,disabled,onBusy,onDone,baseline,pickingBase
  {name:'Slanted',values:{bold:false,italic:true,h_scale:100,v_scale:100,spacing:.3}},
  ].map(p=><button type="button" key={p.name} onClick={()=>setSettings(old=>({...old,...p.values}))}>{p.name}</button>)}
  </div>
+ <label>Embroidery effect<select value={settings.kind??"satin"} onChange={e=>change("kind",e.target.value)}>{letteringEffects.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
  <label>Find font<input type="search" placeholder="Search installed fonts…" value={fontQuery} onChange={e=>setFontQuery(e.target.value)}/></label><label>Font<select value={settings.font} onChange={e=>change('font',e.target.value)}>{filteredFonts.map(f=><option key={f}>{f}</option>)}</select></label>
  <div className="inline-text-sample" style={{fontFamily:settings.font,fontWeight:settings.bold?'bold':'normal',fontStyle:settings.italic?'italic':'normal',color:hex}}>{preview&&previewBox?<svg viewBox={previewBox.join(' ')} role="img" aria-label="Actual planned stitches">{preview.blocks.map((b,i)=><g key={i} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".24" strokeLinecap="round" strokeLinejoin="round">{b.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg>:settings.text}</div><small role="status">{previewPending?'Planning stitches…':preview?preview.stitches.toLocaleString()+' stitch points · '+(previewBox![2]-4).toFixed(1)+' × '+(previewBox![3]-4).toFixed(1)+' mm':'Font sample'}</small>
  <div className="lettering-size-presets" role="group" aria-label="Quick sizes">{[8,12,20,30].map(n=><button key={n} aria-pressed={settings.size===n} onClick={()=>change('size',n)}>{n} mm</button>)}</div><div className="inline-lettering-grid"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.1" value={settings.size} onChange={e=>change('size',Number(e.target.value))}/></label><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={settings.spacing} onChange={e=>change('spacing',Number(e.target.value))}/></label></div>
