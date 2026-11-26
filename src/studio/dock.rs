@@ -2952,13 +2952,22 @@ impl Studio {
                     .selected_text(fabric.name)
                     .width(170.0)
                     .show_ui(ui, |ui| {
-                        for f in FABRICS {
+                        ui.label(egui::RichText::new("Garment presets").strong().small());
+                        for f in FABRICS.iter().skip(4) {
                             ui.selectable_value(
                                 &mut self.doc.settings.fabric,
                                 f.id.to_string(),
                                 f.name,
-                            )
-                            .on_hover_text(f.about);
+                            ).on_hover_text(f.about);
+                        }
+                        ui.separator();
+                        ui.label(egui::RichText::new("General and headwear").strong().small());
+                        for f in FABRICS.iter().take(4) {
+                            ui.selectable_value(
+                                &mut self.doc.settings.fabric,
+                                f.id.to_string(),
+                                f.name,
+                            ).on_hover_text(f.about);
                         }
                     })
                     .response
