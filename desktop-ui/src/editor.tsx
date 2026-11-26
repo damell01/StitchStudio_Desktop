@@ -251,6 +251,27 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
       }
     } catch {}
   }
+  const textChange=input.trim().match(/^(?:change|replace|rename)\s+(?:the\s+)?(?:selected\s+)?(?:lettering|text|name)\s+to\s+["“]?(.+?)["”]?$/i);
+  if (textChange) {
+    const candidates=objects.filter(o=>!o.locked&&!o.hidden&&(!movementIds.length||movementIds.includes(o.uid)));
+    const matches=await Promise.all(candidates.map(async o=>({uid:o.uid,settings:await invoke<Record<string,unknown>|null>('lettering_settings',{uid:o.uid})})));
+    const texts=matches.filter(o=>o.settings!==null);
+    if(texts.length!==1)return 'Select exactly one editable lettering object to change its text.';
+    if(invalidField||incompatibleHoop||machineExceeded)return 'Choose a compatible hoop first.';
+    const target=texts[0];
+    const composition={name:'Edit lettering',field:[width,height],motifs:[],lettering:[],edits:[{type:'lettering',uid:target.uid,settings:{...target.settings,text:textChange[1]}}]};
+    const after=await invoke<Plan>('compose_assistant_design',{composition,apply:false});
+    const before=plan ?? {name:'Blank design',stitches:0,trims:0,blocks:[]};
+    const minutes=(p:Plan)=>p.stitches/sewingSpm+p.trims*trimSeconds/60+Math.max(0,p.blocks.length-1)*changeSeconds/60;
+    return {title:'Update existing lettering',detail:'Replace text with “'+textChange[1]+'” while keeping its lettering settings.',
+      comparison:{before,after,beforeMinutes:minutes(before),afterMinutes:minutes(after)},
+      async apply(){
+        const current=assistantContext.current;
+        if(current.plan!==plan||current.width!==width||current.height!==height||current.hoop!==hoop||current.machine!==machine||!current.objects.some(o=>o.uid===target.uid&&!o.locked&&!o.hidden))return 'The design changed. Ask again to preview the current lettering.';
+        const result=await edit('compose_assistant_design',{composition,apply:true});
+        return result.plan?'Lettering updated. Use Undo to reverse this edit.':result.error;
+      }};
+  }
   if (!intent) {
     return 'I couldn’t match that request to an editor action. Try a quick action, or describe one edit with a measurement or color.';
   }
