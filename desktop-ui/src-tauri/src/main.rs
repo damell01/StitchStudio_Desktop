@@ -2285,12 +2285,15 @@ fn apply_stitch_properties(uid:Option<usize>,fabric:String,spacing:f64,length:f6
 }
 #[derive(serde::Deserialize)]
 struct SpecialtySettings {
+ satin_underlay:Option<u8>,style:Option<String>,colors:Option<Vec<[u8;3]>>,sett:Option<Vec<([u8;3],f64)>>,
  width:Option<f64>,split:Option<f64>,repeats:Option<u32>,cell:Option<f64>,
  spiral:Option<bool>,border:Option<bool>,short_stitches:Option<bool>,
  start:Option<f64>,end:Option<f64>,
 }
 #[tauri::command]
 fn set_specialty_settings(uids:Vec<usize>,settings:SpecialtySettings,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String>{
+ let style=match settings.style.as_deref(){Some(s)=>Some(zigzag::stitch::satin::SatinStyle::parse(s).ok_or("Unknown satin style")?),None=>None};
+ if settings.satin_underlay.is_some_and(|v|v>7)||settings.colors.as_ref().is_some_and(|v|v.len()>8)||settings.sett.as_ref().is_some_and(|v|v.len()>12||v.iter().any(|(_,w)|!(0.5..=20.0).contains(w))){return Err("Invalid specialty pattern".into())}
  if settings.width.is_some_and(|v|!(0.2..=20.0).contains(&v))
  ||settings.split.is_some_and(|v|!(0.0..=12.0).contains(&v))
  ||settings.repeats.is_some_and(|v|v!=1&&v!=3)
@@ -2307,6 +2310,10 @@ fn set_specialty_settings(uids:Vec<usize>,settings:SpecialtySettings,state:tauri
  }
  for i in indices {
  let p=&mut doc.shapes[i].params;
+ if let Some(v)=settings.satin_underlay{p.satin_underlay=Some(v);p.underlay=Some(v!=0);}
+ if let Some(v)=style.clone(){p.style=Some(v);}
+ if let Some(v)=&settings.colors{p.colors=if v.is_empty(){None}else{Some(v.clone())};}
+ if let Some(v)=&settings.sett{p.sett=if v.is_empty(){None}else{Some(v.clone())};}
  if settings.width.is_some(){p.width=settings.width;}
  if settings.split.is_some(){p.split=settings.split;}
  if settings.repeats.is_some(){p.repeats=settings.repeats;}
