@@ -111,7 +111,7 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
     setBusy(true);setError('');
     try {
       if(!insert && !await confirmAction('Start a new lettering design? Save the current project first if you want to keep it.'))return;
-      await invoke('create_lettering',{...settings,placement:insert?[xMm,yMm]:null});
+      await invoke('create_lettering',{...settings,hScale:settings.h_scale,vScale:settings.v_scale,placement:insert?[xMm,yMm]:null});
       onDone();
     } catch(e) {setError(String(e));}
     finally {submitLock.current=false;setBusy(false);}
