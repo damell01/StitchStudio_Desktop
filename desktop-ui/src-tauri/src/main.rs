@@ -698,6 +698,7 @@ struct SimplifyOptions {
     solid:bool, merge:bool, auto_types:bool, lighter_underlay:bool,
     target_minutes:Option<f64>, speed:Option<f64>, trim_seconds:Option<f64>, quick:bool,
     solid_only: bool,
+    solid_color: Option<[u8; 3]>,
 }
 fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptions,uids:Option<&[usize]>,texture_radius:f64)->Result<(),String>{
     use zigzag::{params::Kind,svg::Geometry,boolean::{self,PathOp},geom::FillRule};
@@ -1024,12 +1025,12 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     choices.into_iter().next().ok_or("No faster eligible stitch plan found".into())
 }
 /// Join selected shading fragments into a fill at the same layer position.
-fn solid_selected_fill(source: &zigzag::document::Document, uids: &[usize], radius: f64)
+fn solid_selected_fill(source: &zigzag::document::Document, uids: &[usize], radius: f64, color: Option<[u8; 3]>)
     -> Option<(zigzag::document::Document, usize)>
 {
     use zigzag::{boolean, geom::FillRule, params::Kind, svg::Geometry};
 
-    if !(2..=96).contains(&uids.len()) { return None; }
+    if uids.is_empty() || uids.len() > 96 || (uids.len() < 2 && color.is_none()) { return None; }
     let indices: Vec<_> = source.shapes.iter().enumerate()
         .filter_map(|(index, shape)| uids.contains(&shape.uid).then_some(index)).collect();
     if indices.len() != uids.len() { return None; }
@@ -1038,7 +1039,7 @@ fn solid_selected_fill(source: &zigzag::document::Document, uids: &[usize], radi
     let mut areas = Vec::new();
     for &index in &indices {
         let shape = &source.shapes[index];
-        if shape.color != first.color || shape.groups != first.groups || source.records_text(index)
+        if (color.is_none() && shape.color != first.color) || shape.groups != first.groups || source.records_text(index)
             || shape.groups.iter().any(|group| group.starts_with("tl-lettering-") || group == "tl-small-ink-detail")
             || source.layer_properties(&shape.id).is_some_and(|layer| layer.hidden || layer.locked)
             || source.shapes.iter().filter(|part| part.id == shape.id).count() != 1
@@ -1080,7 +1081,7 @@ fn solid_selected_fill(source: &zigzag::document::Document, uids: &[usize], radi
     let holes = |regions: &[Vec<zigzag::geom::Polyline>]| regions.iter().flat_map(|rings| rings.iter().skip(1))
         .filter(|ring| boolean::ring_area(ring) >= 100.0).count();
     let old_area = area(&before);
-    if after.is_empty() || after.len() >= before.len() || old_area <= 0.0
+    if after.is_empty() || (color.is_none() && after.len() >= before.len()) || old_area <= 0.0
         || !(old_area * 0.95..=old_area * 1.8).contains(&area(&after)) || holes(&after) < holes(&before)
     { return None; }
 
@@ -1092,7 +1093,9 @@ fn solid_selected_fill(source: &zigzag::document::Document, uids: &[usize], radi
     }).collect();
     if removed.len() + 1 != indices.len() { return None; }
     document.delete_many(&removed).ok()?;
-    document.shapes.iter_mut().find(|shape| shape.uid == fill_uid)?.params.kind = Some(Kind::Fill);
+    let shape = document.shapes.iter_mut().find(|shape| shape.uid == fill_uid)?;
+    shape.params.kind = Some(Kind::Fill);
+    if let Some(color) = color { shape.color = color; }
     document.sync().ok()?;
     Some((document, fill_uid))
 }
@@ -1104,10 +1107,14 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
     let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
     let seconds=|d:&Design|optimization_seconds(d,speed,trim);
     for radius in [8.0,12.0,16.0]{
-        let joined = uids.and_then(|ids| solid_selected_fill(source, ids, radius));
+        let joined = uids.and_then(|ids| solid_selected_fill(source, ids, radius, options.solid_color));
         let (doc, joined_uid) = match joined {
             Some((doc, uid)) => (doc, Some([uid])),
-            None => { let Some(doc) = rebuild_solid_artwork(source, uids, radius) else { continue }; (doc, None) }
+            None => {
+                if options.solid_color.is_some() { continue; }
+                let Some(doc) = rebuild_solid_artwork(source, uids, radius) else { continue };
+                (doc, None)
+            }
         };
         let fill_scope = joined_uid.as_ref().map(|ids| ids.as_slice()).or(uids);
         let plan=doc.plan();
@@ -1122,7 +1129,7 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
             if p.stitch_count()==0||p.stitch_count()>200_000||p.stitch_count()>original.stitch_count().saturating_mul(2)
                 ||p.stitch_count()<original.stitch_count()/3||audit.long>old_audit.long||audit.zero>old_audit.zero
                 ||old_bounds.min.dist(b.min)>8.0||old_bounds.max.dist(b.max)>8.0
-                ||!original.blocks.iter().map(|b|b.color).eq(p.blocks.iter().map(|b|b.color)){continue}
+                ||(options.solid_color.is_none() && !original.blocks.iter().map(|b|b.color).eq(p.blocks.iter().map(|b|b.color))){continue}
             // Stronger visual reconstruction takes precedence over absolute
             // stitch savings. At equal strength choose the fastest plan.
             candidates.push((radius,d,p));
@@ -3135,7 +3142,7 @@ mod fixed_resize_tests {
         ).unwrap();
         let selected: Vec<_> = source.shapes[..2].iter().map(|shape| shape.uid).collect();
         let letter = &source.shapes[2];
-        let (solid, uid) = super::solid_selected_fill(&source, &selected, 8.0).unwrap();
+        let (solid, uid) = super::solid_selected_fill(&source, &selected, 8.0, None).unwrap();
         assert_eq!(solid.shapes.len(), 2);
         assert_eq!(solid.shapes[1].uid, letter.uid);
         assert_eq!(solid.shapes[1].color, letter.color);
@@ -3143,13 +3150,33 @@ mod fixed_resize_tests {
         let Geometry::Fill { rings, rule } = &bow.geometry else { panic!("expected a fill") };
         assert!(!point_inside(rings, *rule, P::new(120.0, 90.0) - source.offset));
         assert!(point_inside(rings, *rule, P::new(222.0, 90.0) - source.offset));
-        assert!(super::solid_selected_fill(&source, &[selected[0], letter.uid], 8.0).is_none());
+        assert!(super::solid_selected_fill(&source, &[selected[0], letter.uid], 8.0, None).is_none());
         let original = source.plan();
         let (_, variant) = super::choose_silhouette(
             &source, &original, Some(&selected), &super::SimplifyOptions::default(),
         ).unwrap();
         assert!(variant.stitch_count() < original.stitch_count());
         assert!(variant.trim_count() < original.trim_count());
+    }
+
+    #[test]
+    fn explicit_solid_color_combines_different_shades_without_recoloring_other_artwork() {
+        use zigzag::document::Document;
+        let source = Document::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="30mm" viewBox="0 0 40 30">
+              <rect id="bow" x="2" y="2" width="20" height="14" fill="red"/>
+              <rect id="shading" x="22" y="4" width="4" height="10" fill="orange"/>
+              <rect id="letter" x="4" y="20" width="4" height="7" fill="blue"/>
+            </svg>"#, "Bow shading", None,
+        ).unwrap();
+        let selected: Vec<_> = source.shapes[..2].iter().map(|shape| shape.uid).collect();
+        let thread = [32, 80, 170];
+        let (solid, _) = super::solid_selected_fill(&source, &selected, 8.0, Some(thread)).unwrap();
+        assert_eq!(solid.shapes.len(), 2);
+        assert_eq!(solid.shapes[0].color, thread);
+        assert_eq!(solid.shapes[1].uid, source.shapes[2].uid);
+        assert_eq!(solid.shapes[1].color, source.shapes[2].color);
+        assert!(solid.plan().blocks.iter().any(|block| block.color == thread));
     }
 
     #[test]

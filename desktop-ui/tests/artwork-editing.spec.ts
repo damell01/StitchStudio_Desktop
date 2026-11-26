@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-test('solid fill previews only the selected artwork until the user applies it', async ({page}) => {
+for (const mode of ['selection','oval'] as const) {
+test('solid fill from '+mode+' previews only the chosen artwork until applied', async ({page}) => {
   await page.addInitScript(() => {
     localStorage.setItem('studio-tour-seen','1');
     const plan = {name:'Bow logo', stitches:120, trims:8, blocks:[{color:[88,52,108],runs:[[[-16,-5],[-5,4]]]}]};
@@ -22,16 +23,41 @@ test('solid fill previews only the selected artwork until the user applies it', 
   });
   await page.goto('/');
   await page.getByRole('button',{name:/Blank design/}).last().click();
-  await page.locator('.design-canvas [data-artwork-uid="10"]').click();
-  await page.getByRole('button',{name:'Make selection solid'}).click();
+  if (mode === 'selection') {
+    await page.locator('.design-canvas [data-artwork-uid="10"]').click();
+    await page.getByRole('button',{name:'Make selection solid'}).click();
+  } else {
+    await page.getByRole('button',{name:'Solid area',exact:true}).click();
+    await page.getByRole('button',{name:'Oval',exact:true}).click();
+    const [start,end] = await page.locator('svg.design-canvas').evaluate(svg => {
+      const matrix = (svg as SVGSVGElement).getScreenCTM()!;
+      return [new DOMPoint(-24,-13),new DOMPoint(3,12)].map(point => {
+        const {x,y} = point.matrixTransform(matrix);
+        return {x,y};
+      });
+    });
+    await page.mouse.move(start.x,start.y);
+    await page.mouse.down();
+    await page.mouse.move(end.x,end.y,{steps:5});
+    await page.mouse.up();
+  }
   const dialog=page.getByRole('dialog',{name:'Simplify design'});
   await expect(dialog.getByText('65 stitches')).toBeVisible();
   const calls=()=>page.evaluate(()=>(window as unknown as {solidCalls:unknown[]}).solidCalls);
   expect(await calls()).toEqual([['preview_simplification',expect.objectContaining({uids:[10],options:expect.objectContaining({solidOnly:true})})]]);
+  if (mode === 'oval') {
+    await dialog.getByLabel('Fill thread color').fill('#2050aa');
+    await expect.poll(async ()=>(await calls()).at(-1)).toEqual(
+      ['preview_simplification',expect.objectContaining({uids:[10],options:expect.objectContaining({solidColor:[32,80,170]})})],
+    );
+    await expect(dialog.getByText('65 stitches')).toBeVisible();
+  }
   await dialog.getByRole('button',{name:'Apply selected design'}).click();
   await expect(dialog).toBeHidden();
   expect((await calls()).at(-1)).toEqual(['apply_simplification',{id:71,strength:4}]);
 });
+
+}
 
 test('canvas selection edits the chosen vector and the pan tool only changes the camera', async ({page}) => {
   await page.addInitScript(() => {

@@ -104,3 +104,7 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
   touch-action: none;
 }
 .editor-workspace .studio-camera.studio-camera-docked .camera-dock-grip:active { cursor: grabbing; }
+
+.studio-soft-area-tools { display:flex; align-items:center; gap:6px; padding:5px 10px; flex-wrap:wrap; }
+.studio-soft-area-tools button[aria-pressed=true] { background:var(--workspace-soft); color:var(--workspace-accent); }
+.studio-soft-area-tools span { font-size:12px; }
