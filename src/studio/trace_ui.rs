@@ -90,7 +90,7 @@ fn recognize(image: &Image) -> Result<Vec<RecognizedLine>, String> {
     input_result.map_err(|e| e.to_string())?;
     let mut lines = parse_ocr(&String::from_utf8_lossy(&output.stdout), zigzag::document::default_font());
     let fonts = zigzag::document::font_families();
-    for line in &mut lines { line.font = recommend_font(line, &fonts); }
+    for line in &mut lines { line.font = recommend_font(line, &fonts, image); }
     Ok(lines)
 }
 
@@ -158,23 +158,70 @@ fn parse_ocr(tsv: &str, font: String) -> Vec<RecognizedLine> {
     result
 }
 
-fn recommend_font(line: &RecognizedLine, fonts: &[String]) -> String {
+// Compare the original ink silhouette with rendered font candidates, in
+// addition to proportions. The source is sampled locally, never uploaded.
+fn ink_mask(image: &Image, rect: [f64;4]) -> Option<Vec<f64>> {
+    let (w,h) = image.size();
+    let sample = |x: f64,y: f64| {
+        let x = x.floor().clamp(0.0, f64::from(w.saturating_sub(1))) as usize;
+        let y = y.floor().clamp(0.0, f64::from(h.saturating_sub(1))) as usize;
+        let p = &image.rgba()[(y*w as usize+x)*4..][..4];
+        let a = f64::from(p[3])/255.0;
+        [f64::from(p[0])*a+255.0*(1.0-a), f64::from(p[1])*a+255.0*(1.0-a), f64::from(p[2])*a+255.0*(1.0-a)]
+    };
+    let [x0,y0,x1,y1] = rect;
+    if w == 0 || h == 0 || x1 <= x0 || y1 <= y0 { return None; }
+    let corners = [sample(x0,y0),sample(x1-1.0,y0),sample(x0,y1-1.0),sample(x1-1.0,y1-1.0)];
+    let bg = [0,1,2].map(|i| {
+        let mut v = corners.map(|p| p[i]);
+        v.sort_by(f64::total_cmp);
+        (v[1]+v[2])/2.0
+    });
+    let mut mask = Vec::with_capacity(32*16);
+    for y in 0..16 { for x in 0..32 {
+        let p = sample(x0+(x as f64+0.5)*(x1-x0)/32.0,y0+(y as f64+0.5)*(y1-y0)/16.0);
+        let delta = (0..3).map(|i| (p[i]-bg[i]).powi(2)).sum::<f64>().sqrt();
+        mask.push((delta/100.0).clamp(0.0,1.0));
+    }}
+    let coverage = mask.iter().sum::<f64>()/mask.len() as f64;
+    (coverage > 0.03 && coverage < 0.85).then_some(mask)
+}
+
+fn recommend_font(line: &RecognizedLine, fonts: &[String], image: &Image) -> String {
     use zigzag::{document::{Document, TextSpec}, svg::shapes_bounds};
     let aspect = (line.rect[2]-line.rect[0])/(line.rect[3]-line.rect[1]);
+    let source = ink_mask(image,line.rect);
     let mut best = (f64::INFINITY, line.font.clone());
-    // A small, common installed-font shortlist avoids measuring hundreds
-    // of fonts on the OCR worker. Match proportions, not font identity.
     for font in std::iter::once(&line.font).chain(fonts.iter().filter(|f|
         ["Arial", "Arial Narrow", "Helvetica", "Times New Roman", "Georgia",
          "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Liberation Serif",
-         "Poppins", "Inter", "Verdana", "Courier New"].contains(&f.as_str()))) {
+         "Poppins", "Inter", "Verdana", "Courier New", "Tahoma", "Trebuchet MS"].contains(&f.as_str()))) {
         let mut doc = Document::empty();
         let spec = TextSpec { text: line.text.clone(), font: font.clone(),
             spacing_mm: 0.0, ..TextSpec::default() };
         if let Ok(i) = doc.add_lettering(&spec, (0.0,0.0)) {
             let b = shapes_bounds(std::slice::from_ref(&doc.shapes[i]));
             if b.width() > 0.0 && b.height() > 0.0 {
-                let score = ((b.width()/b.height())/aspect).ln().abs();
+                let mut score = ((b.width()/b.height())/aspect).ln().abs();
+                // Geometry occupancy signature: compare glyph contours with
+                // the observed ink, normalized to the same bounding box.
+                if let (Some(mask), zigzag::svg::Geometry::Fill { rings, .. }) = (&source, &doc.shapes[i].geometry) {
+                    let mut error = 0.0;
+                    for y in 0..16 { for x in 0..32 {
+                        let px = b.min.x+(x as f64+0.5)*b.width()/32.0;
+                        let py = b.min.y+(y as f64+0.5)*b.height()/16.0;
+                        let mut inside = false;
+                        for ring in rings {
+                            for (a,c) in ring.iter().zip(ring.iter().cycle().skip(1)).take(ring.len()) {
+                                if (a.y > py) != (c.y > py) && px < (c.x-a.x)*(py-a.y)/(c.y-a.y)+a.x {
+                                    inside = !inside;
+                                }
+                            }
+                        }
+                        error += (mask[y*32+x] - if inside { 1.0 } else { 0.0 }).abs();
+                    }}
+                    score += 2.0*error/512.0;
+                }
                 if score < best.0 { best = (score, font.clone()); }
             }
         }
