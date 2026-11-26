@@ -78,6 +78,8 @@ jobs:
       - if: runner.os == 'Windows' && !needs.release-request.outputs.version
         run: npm run tauri build -- --bundles nsis -- --locked
       - if: runner.os == 'macOS' && !needs.release-request.outputs.version
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
         run: npm run tauri build -- --bundles app dmg -- --locked
       - if: needs.release-request.outputs.version != ''
         name: Package signed updater and installer
@@ -100,6 +102,9 @@ jobs:
           for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
             if [[ -z "${!name}" ]]; then unset "$name"; fi
           done
+          if [[ "$RUNNER_OS" == macOS && -z "${APPLE_SIGNING_IDENTITY:-}" && -z "${APPLE_CERTIFICATE:-}" ]]; then
+            export APPLE_SIGNING_IDENTITY=-
+          fi
           npm run package:update -- "$UPDATE_VERSION"
       - if: runner.os == 'macOS'
         run: ditto -c -k --keepParent 'src-tauri/target/release/bundle/macos/Stitch Studio.app' src-tauri/target/release/bundle/Stitch-Studio-macOS.zip

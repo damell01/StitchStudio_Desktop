@@ -35,6 +35,8 @@ jobs:
           workspaces: desktop-ui/src-tauri -> target
       - run: npm ci
       - name: Build the Intel DMG
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
         run: |
           test "$(uname -m)" = x86_64
           npm run tauri build -- --bundles app dmg -- --locked
