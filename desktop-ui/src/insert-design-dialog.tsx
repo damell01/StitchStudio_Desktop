@@ -89,6 +89,19 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
   const [query, setQuery] = useState('');
   const approvedPage=usePagedList(approved.filter(p=>matchesName(p.name+' '+(p.category??'Uncategorized'),query)&&(category==='all'||(p.category??'Uncategorized')===category)).sort((a,b)=>compareNames(a.name,b.name)),JSON.stringify([query,category]),12);
   const [width, setWidth] = useState('2');
+  const [artAspect,setArtAspect]=useState<number|null>(null);
+  const selectedArt=selection?.source==='artwork'?selection.art:null;
+  useEffect(()=>{
+    setArtAspect(null);
+    if(!selectedArt)return;
+    let active=true;
+    const url=URL.createObjectURL(new Blob([new Uint8Array(selectedArt.bytes)],{type:selectedArt.mime}));
+    const image=new window.Image();
+    image.onload=()=>{if(active&&image.naturalWidth>0&&image.naturalHeight>0)setArtAspect(image.naturalHeight/image.naturalWidth)};
+    image.src=url;
+    return()=>{active=false;URL.revokeObjectURL(url)};
+  },[selectedArt]);
+
   const [x, setX] = useState('0');
   const [y, setY] = useState('0');
   const [offset, setOffset] = useState(false);
@@ -256,17 +269,19 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
               <input type="number" value={width} min=".2" max="9.84" step="any" disabled={busy}
                 onChange={event => setWidth(event.target.value)} aria-invalid={!widthValid}/>
               {!widthValid && <small>Enter a width from 5 to 250 mm.</small>}
+              {artAspect!==null&&widthValid&&<small>Estimated height: {(Number(width)*artAspect).toFixed(2)} in</small>}
             </label>}
         {anchorBounds&&widthValid&&<div className="studio-insert-files" role="group" aria-label="Placement relative to existing design">
           <strong>Place relative to existing design</strong>
           {(['above','below','left','right','center'] as const).map(side=><button key={side} disabled={busy} onClick={()=>{
             const [ax,ay,aw,ah]=anchorBounds;
             const radius=widthMm/2+3;
+            const verticalRadius=widthMm*(artAspect??1)/2+3;
             const cx=side==='left'?ax-radius:side==='right'?ax+aw+radius:ax+aw/2;
-            const cy=side==='above'?ay-radius:side==='below'?ay+ah+radius:ay+ah/2;
+            const cy=side==='above'?ay-verticalRadius:side==='below'?ay+ah+verticalRadius:ay+ah/2;
             setOffset(true);setX((cx/MM_PER_INCH).toFixed(3));setY((cy/MM_PER_INCH).toFixed(3));
           }}>{side==='center'?'Overlay center':side[0].toUpperCase()+side.slice(1)+' design'}</button>)}
-          <small>Suggested spacing uses the chosen width; check tall artwork after insertion.</small>
+          <small>Suggested spacing uses artwork proportions when available. Check placement after insertion.</small>
         </div>}
         <div className="studio-insert-files" role="group" aria-label="Quick placement">
           <button disabled={busy} onClick={()=>{setOffset(false);setX('0');setY('0')}}>Hoop center</button>
