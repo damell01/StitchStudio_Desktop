@@ -3125,11 +3125,17 @@ async fn digitize_artwork(
                 }
             }
         }
-        // Try one reduced palette only in explicit maximum-efficiency mode.
+        // Try up to two reduced palettes only in explicit maximum-efficiency mode.
         // Keep owned thread palettes, approved text and manual color counts intact.
         if optimization_strength==3 && colors==0 && !has_lettering && options.threads.is_empty()
             && design.stitch_count()<=100_000 {
             if let Some(raster)=&prepared {
+                let original_document=document.clone();
+                let original_plan=design.clone();
+                let original_palette:std::collections::HashSet<_>=design.blocks.iter().map(|b|b.color).collect();
+                let started=std::time::Instant::now();
+                for _ in 0..2 {
+                if started.elapsed().as_secs()>=4 {break;}
                 let palette:std::collections::HashSet<_>=design.blocks.iter().map(|b|b.color).collect();
                 if (3..=10).contains(&palette.len()) {
                     let mut trial=options.clone();
@@ -3141,7 +3147,7 @@ async fn digitize_artwork(
                         let a=design.bounds();let b=plan.bounds();
                         let before=measure_stitches(&design);let after=measure_stitches(&plan);
                         // Every original shade must have a close replacement.
-                        let close=palette.iter().all(|old|next_palette.iter().any(|new|
+                        let close=original_palette.iter().all(|old|next_palette.iter().any(|new|
                             old.iter().zip(new.iter()).map(|(&x,&y)|(f64::from(x)-f64::from(y)).powi(2)).sum::<f64>()<=24.0_f64.powi(2)));
                         if close && next_palette.len()<palette.len() && plan.stitch_count()>0
                             && plan.stitch_count()<=design.stitch_count() && plan.trim_count()<=design.trim_count()
@@ -3149,10 +3155,12 @@ async fn digitize_artwork(
                             && after.long<=before.long && after.zero<=before.zero && after.short<=before.short.saturating_add(5)
                             && a.min.dist(b.min)<=5.0 && a.max.dist(b.max)<=5.0
                             && optimization_seconds(&plan,speed,trim)<optimization_seconds(&design,speed,trim)
-                            && raster.preserves_fidelity(&document,&next) {
+                            && raster.preserves_fidelity(&original_document,&next)
+                            && original_plan.bounds().min.dist(b.min)<=5.0 && original_plan.bounds().max.dist(b.max)<=5.0 {
                             document=next;design=plan;
-                        }
-                    }
+                        } else {break;}
+                    } else {break;}
+                } else {break;}
                 }
             }
         }
