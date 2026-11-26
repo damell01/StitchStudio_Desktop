@@ -4,8 +4,8 @@ import {InspectorDialog} from './workspace-inspector';
 
 type Issue = {uid:number|null;label:string|null;severity:'info'|'warning'|'error';message:string};
 type Hoop = {width:number;height:number};
-type PathOperation = {kind:'unite'|'minus_front'|'intersect'|'exclude'|'outline_stroke'} |
-  {kind:'offset'|'round_corners'|'simplify_outline';millimeters:number};
+type PathOperation = {kind:'unite'|'minus_front'|'intersect'|'exclude'|'outline_stroke'|'join_open_paths'} |
+  {kind:'offset'|'round_corners'|'simplify_outline'|'smooth_path';millimeters:number};
 
 function IssueList({width,height,onLocate}:{width:number;height:number;onLocate:(uid:number)=>void}) {
   const [issues,setIssues]=useState<Issue[]|null>(null);
@@ -66,6 +66,8 @@ function PathControls({count,disabled,onApply}:{
     <div className="inspector-actions">{operations.map(([label,kind])=>
       <button key={kind} disabled={disabled||count<2} onClick={()=>void apply({kind})}>{label}</button>
     )}</div>
+    <button disabled={disabled||count!==2} title="Join the nearest ends of two matching open running paths"
+      onClick={()=>void apply({kind:'join_open_paths'})}>Join nearest open ends</button>
     {count<2&&<small>Select at least two objects to combine them.</small>}
     <button disabled={disabled} onClick={()=>void apply({kind:'outline_stroke'})}>Outline stroke</button>
     <label>Offset (mm)<input type="number" min="-20" max="20" step=".1" value={offset}
@@ -80,6 +82,8 @@ function PathControls({count,disabled,onApply}:{
       onChange={event=>setTolerance(Number(event.target.value))}/></label>
     <button disabled={disabled||tolerance<.02||tolerance>.5}
       onClick={()=>void apply({kind:'simplify_outline',millimeters:tolerance})}>Simplify outline</button>
+    <button disabled={disabled||tolerance<.02||tolerance>.5}
+      onClick={()=>void apply({kind:'smooth_path',millimeters:tolerance})}>Smooth paths</button>
     {message&&<p role="status">{message}</p>}
   </div>;
 }

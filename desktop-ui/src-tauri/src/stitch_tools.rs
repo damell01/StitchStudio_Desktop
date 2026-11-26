@@ -94,6 +94,8 @@ pub(super) enum PathEdit {
     Intersect,
     Exclude,
     OutlineStroke,
+    JoinOpenPaths,
+    SmoothPath { millimeters: f64 },
     Offset { millimeters: f64 },
     RoundCorners { millimeters: f64 },
     SimplifyOutline { millimeters: f64 },
@@ -137,6 +139,53 @@ fn eligible_selection(doc: &Document, uids: &[usize]) -> Result<Vec<usize>, Stri
     Ok(indices)
 }
 
+fn join_open_paths(document: &mut Document, indices: &[usize]) -> Result<(), String> {
+    let &[a, b] = indices else {
+        return Err("Select exactly two open paths.".into());
+    };
+    let first = &document.shapes[a];
+    let second = &document.shapes[b];
+    if first.color != second.color
+        || first.params != second.params
+        || !matches!(first.params.kind, Some(Kind::Run) | None)
+        || !matches!(first.geometry, Geometry::Stroke { .. })
+        || !matches!(second.geometry, Geometry::Stroke { .. })
+    {
+        return Err(
+            "Choose two open running paths with the same thread and stitch settings.".into(),
+        );
+    }
+    let pa = document.edit_path(a).map_err(|e| e.to_string())?;
+    let pb = document.edit_path(b).map_err(|e| e.to_string())?;
+    let endpoints = |path: &[zigzag::bezier::SubPath]| {
+        let [part] = path else {
+            return None;
+        };
+        if part.closed || part.anchors.len() < 2 {
+            return None;
+        }
+        Some([part.anchors.first()?.p, part.anchors.last()?.p])
+    };
+    let [start_a, end_a] = endpoints(&pa).ok_or("Select paths with a single open line.")?;
+    let [start_b, end_b] = endpoints(&pb).ok_or("Select paths with a single open line.")?;
+    let (gap, ae, be) = [
+        (start_a.dist(start_b), false, false),
+        (start_a.dist(end_b), false, true),
+        (end_a.dist(start_b), true, false),
+        (end_a.dist(end_b), true, true),
+    ]
+    .into_iter()
+    .min_by(|a, b| a.0.total_cmp(&b.0))
+    .unwrap();
+    if gap > 50.0 {
+        return Err("Move the two ends within 5 mm before joining.".into());
+    }
+    document
+        .join_ends(a, (0, !ae), b, (0, !be), 1.0)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn edit_paths(
     document: &mut Document,
     uids: &[usize],
@@ -144,6 +193,24 @@ fn edit_paths(
 ) -> Result<&'static str, String> {
     let indices = eligible_selection(document, uids)?;
     let (label, op) = match operation {
+        PathEdit::JoinOpenPaths => {
+            join_open_paths(document, &indices)?;
+            return Ok("Join open paths");
+        }
+        PathEdit::SmoothPath { millimeters } => {
+            if !(0.02..=0.5).contains(&millimeters) {
+                return Err("Enter a smoothing tolerance between 0.02 and 0.5 mm.".into());
+            }
+            let (count, _) = document
+                .edit_paths_with(&indices, |path| {
+                    zigzag::pathtools::smooth_near(path, &|_| true, millimeters * 10.0)
+                })
+                .map_err(|error| error.to_string())?;
+            if count == 0 {
+                return Err("No curve changes were found at this tolerance.".into());
+            }
+            return Ok("Smooth selected paths");
+        }
         PathEdit::Unite => ("Unite artwork", PathOp::Unite),
         PathEdit::MinusFront => ("Subtract front artwork", PathOp::MinusFront),
         PathEdit::Intersect => ("Intersect artwork", PathOp::Intersect),
@@ -378,6 +445,20 @@ pub(super) async fn export_test_swatches(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn join_picks_the_nearest_open_ends() {
+        let mut doc=Document::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="30mm" height="20mm" viewBox="0 0 30 20">
+                <path d="M1 5 H9" stroke="navy" fill="none"/>
+                <path d="M10 5 H19" stroke="navy" fill="none"/>
+            </svg>"#,"Open paths",None).unwrap();
+        super::join_open_paths(&mut doc, &[0, 1]).unwrap();
+        assert_eq!(doc.shapes.len(), 1);
+        let path = doc.edit_path(0).unwrap();
+        let points = &path[0].anchors;
+        assert!((points.first().unwrap().p.dist(points.last().unwrap().p) - 180.0).abs() < 0.1);
+    }
+
     use super::*;
 
     fn artwork() -> Document {

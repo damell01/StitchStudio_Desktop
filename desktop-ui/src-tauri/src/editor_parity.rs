@@ -82,21 +82,28 @@ fn regenerate(
     Ok(result)
 }
 
+#[derive(Default)]
+pub(super) struct StitchSettingsClipboard(Mutex<Option<Params>>);
+
 #[tauri::command]
 pub(super) fn copy_object_stitch_settings(
     uid: usize,
     state: tauri::State<'_, Mutex<Workspace>>,
+    clipboard: tauri::State<'_, StitchSettingsClipboard>,
 ) -> Result<(), String> {
-    let mut workspace = state.lock().map_err(|error| error.to_string())?;
-    let doc = workspace
-        .source
-        .as_ref()
-        .ok_or("Open editable artwork first.")?;
-    let shape = &doc.shapes[editable_index(doc, uid)?];
-    if !generated(shape) {
-        return Err("Select generated artwork to copy stitch settings.".into());
-    }
-    workspace.stitch_clipboard = Some(shape.params.clone());
+    let params = {
+        let workspace = state.lock().map_err(|error| error.to_string())?;
+        let doc = workspace
+            .source
+            .as_ref()
+            .ok_or("Open editable artwork first.")?;
+        let shape = &doc.shapes[editable_index(doc, uid)?];
+        if !generated(shape) {
+            return Err("Select generated artwork to copy stitch settings.".into());
+        }
+        shape.params.clone()
+    };
+    *clipboard.0.lock().map_err(|error| error.to_string())? = Some(params);
     Ok(())
 }
 
@@ -106,17 +113,20 @@ pub(super) async fn paste_object_stitch_settings(
     app: tauri::AppHandle,
 ) -> Result<Preview, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let clipboard = app.state::<StitchSettingsClipboard>();
+        let settings = clipboard
+            .0
+            .lock()
+            .map_err(|error| error.to_string())?
+            .clone()
+            .ok_or("Copy an object's stitch settings first.")?;
         let state = app.state::<Mutex<Workspace>>();
         let mut workspace = state.lock().map_err(|error| error.to_string())?;
-        let settings = workspace
-            .stitch_clipboard
-            .as_ref()
-            .ok_or("Copy an object's stitch settings first.")?;
         let mut doc = workspace
             .source
             .clone()
             .ok_or("Open editable artwork first.")?;
-        paste_settings(&mut doc, settings, uids)?;
+        paste_settings(&mut doc, &settings, uids)?;
         regenerate(&mut workspace, doc, "Paste stitch settings")
     })
     .await

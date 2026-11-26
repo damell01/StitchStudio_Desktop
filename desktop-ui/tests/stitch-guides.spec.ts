@@ -9,8 +9,8 @@ test('reuses object settings and drags a pinned sewing entry in design units', a
       [[-22,-8],[-8,-8],[-8,8],[-22,8]],[[8,-8],[22,-8],[22,8],[8,8]],
     ]}]};
     const objects=[
-      {uid:10,label:'Source patch',kind:'fill',color:[90,50,110],bounds:[-22,-8,14,16],path:'M-22 -8H-8V8H-22Z'},
-      {uid:11,label:'Target patch',kind:'fill',color:[90,50,110],bounds:[8,-8,14,16],path:'M8 -8H22V8H8Z'},
+      {uid:10,label:'Source patch',kind:'fill',color:[90,50,110],bounds:[-22,-8,14,16],fill_rule:'nonzero',path:'M-22 -8H-8V8H-22Z'},
+      {uid:11,label:'Target patch',kind:'fill',color:[90,50,110],bounds:[8,-8,14,16],fill_rule:'nonzero',path:'M8 -8H22V8H8Z'},
     ];
     Object.assign(window,{guideCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>){
       calls.push({command,args});

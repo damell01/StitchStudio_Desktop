@@ -116,6 +116,10 @@ Model provenance: Robert Knight's OCRS models, fetched from `https://ocrs-models
 
 Use **Draw** above the canvas to drag a rectangle or ellipse, paint a satin path, or click points for a running path or manual stitches. Choose **Finish path** after the final point. The Measure tool snaps to nearby artwork edges and centers, and otherwise to the nearest millimeter. It shows inches and millimeters without changing the design.
 
+Choose **Draw → Satin column** to drag the two rails, then add optional rungs across both rails and choose **Finish column**. Search for drawing tools with **Ctrl+K** or **Cmd+K**. Use **P** for Pen and **M** for Measure.
+
+Open **Stitches → Object stitch tools** to display sewing order, show satin rails and rungs, drag the fill angle, or set entry and exit points. Use **Ctrl+Alt+C** and **Ctrl+Alt+V** to copy and paste stitch settings on Windows, or **Cmd+Option+C** and **Cmd+Option+V** on Mac. In the Text inspector, convert lettering to outlines for node edits. Restoring text uses the original lettering metadata, so changes made to the outline nodes are lost when you restore it.
+
 ## Preview placement on a garment
 
 Open a design and choose the shirt icon in the editor toolbar. Choose a T-shirt, hoodie, cap, or shorts. Pick toddler, kids, or adult sizing and select a placement. The preset anchor follows the current design position relative to the hoop center. Use the offsets and fabric color to compare placements. With Hoodie selected, drag the 3D preview or use the rotation slider. **Flat view** is available in the same preview. The mockup uses the current stitch paths and an approximate garment scale. It leaves the project and exports as they were.

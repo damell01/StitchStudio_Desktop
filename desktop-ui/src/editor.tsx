@@ -1,6 +1,6 @@
 import {StitchGuideOverlay,useStitchGuides} from './stitch-guides';
 import {compositionPrompt,parseComposition} from './assistant-composition';
-import {DrawingControls,DrawingOverlay,useCanvasDrawing} from './canvas-drawing';
+import {DrawingControls,DrawingOverlay,drawingTools,useCanvasDrawing} from './canvas-drawing';
 import {resolveMotif} from './assistant-motif';
 import {localModelEnabled} from './agent-settings';
 import {DesignIssuesDialog,PathToolsDialog,TestSwatchesDialog} from './stitch-tools';
@@ -150,8 +150,8 @@ assistantContext.current = {plan, width, height, machine, hoop, objects};
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 const editLock=useRef(false);const [inlineWork,setInlineWork]=useState('');
 async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return {plan:null,error:'The editor is busy. Try again when it finishes.'};editLock.current=true;setInlineWork(command==='maximize_in_hoop'?'Fitting design and regenerating stitches…':command==='resize_artwork_selection'?'Regenerating stitches at new size…':command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null);return {plan:next,error:null}}catch(e){const error=String(e);setMessage(error);return {plan:null,error}}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview([1,1]);setRotationPreview(0);setBusy(false)}}
-const drawing=useCanvasDrawing((tool,points)=>{
-  void edit('draw_canvas_shape',{tool,points,field:[width,height]});
+const drawing=useCanvasDrawing((tool,points,subpaths)=>{
+  void edit('draw_canvas_shape',{tool,points,subpaths,field:[width,height]});
 });
 const stitchGuides=useStitchGuides(plan,selected&&!selected.locked&&!selected.hidden?selected.uid:null,
   (uid,action)=>void edit('edit_object_stitch_controls',{uid,action}));
@@ -1095,8 +1095,10 @@ if(e.key==='Escape'&&window.innerWidth<dockBreakpoint&&(left||right)){setLeft(fa
 if((e.target as HTMLElement)?.closest("input,select,textarea,[contenteditable=true],[role=separator]"))return;
 if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)&&movementIds.length&&!e.ctrlKey&&!e.metaKey){e.preventDefault();const step=e.shiftKey?nudgeStep*10:e.altKey?nudgeStep*.1:nudgeStep;nudge(e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0,e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0);return;}
 if(e.repeat)return;
-if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==='c'&&canCopyStitchSettings){e.preventDefault();void copyStitchSettings();return;}
-if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==='v'&&canPasteStitchSettings){e.preventDefault();pasteStitchSettings();return;}
+if((e.ctrlKey||e.metaKey)&&e.altKey&&e.code==='KeyC'&&canCopyStitchSettings){e.preventDefault();void copyStitchSettings();return;}
+if((e.ctrlKey||e.metaKey)&&e.altKey&&e.code==='KeyV'&&canPasteStitchSettings){e.preventDefault();pasteStitchSettings();return;}
+const drawShortcut=!e.ctrlKey&&!e.metaKey&&!e.altKey?drawingTools.find(item=>item.shortcut===e.key.toUpperCase()):undefined;
+if(drawShortcut){e.preventDefault();drawing.pick(drawShortcut.tool);return;}
 if(e.key==='F11'){e.preventDefault();toggleFocus();return;}
 if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='i'){e.preventDefault();openInsertDialog();return;}
 if(e.key==='Delete'||e.key==='Backspace'){if(deletionTarget()){e.preventDefault();void deleteDesign()}return;}
@@ -1131,6 +1133,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
   <div className="studio-command-group studio-intelligence-tools" role="group" aria-label="Design intelligence"><button className="studio-tool-icon studio-assistant-action" title="Offline design assistant" aria-label="Offline design assistant" aria-pressed={assistantOpen} onClick={()=>{setAssistantOpen(true)}}><Sparkles size={17}/></button></div>
   <CommandPalette commands={[
+    ...drawingTools.map(item=>({label:item.label,group:'Drawing',run:()=>drawing.pick(item.tool),disabled:busy})),
     {label:'Move whole design',group:'Edit',run:()=>setCanvasMode('design'),disabled:!plan},
     {label:'Fit artwork',group:'View',run:fitArtwork,disabled:!plan},
     {label:'Fit hoop',group:'View',run:()=>{setZoom(100);setPan([0,0])}},
@@ -1174,7 +1177,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {plan&&<ThreadOrder assignments={threadAssignments} onAssign={(index,value)=>setThreadAssignments(old=>({...old,[index]:value}))} blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
   <button title="Delete selected design or objects (Delete)" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={17}/> Delete</button><button className="studio-price-job" title="Calculate pricing using current stitches and sewing time" disabled={!plan||busy} onClick={()=>setPricingOpen(true)}>Price job</button><button className="studio-save-design" title="Save editable Stitch Studio project (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={17}/> Save design</button><button className="primary studio-export" disabled={!plan?.stitches||outside||busy||machineExceeded||incompatibleHoop||invalidField} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
-{context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-210))}} role="group" aria-label="Object actions"><button onClick={()=>{const uid=context.uid;setContext(null);void invoke<unknown>('lettering_settings',{uid}).then(s=>{if(s)openText(uid);else{showInspector(true);setInspectorTab('transform')}}).catch(e=>setMessage(String(e)))}}>Object properties</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${focusCanvas?'canvas-focus':''} ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{'--studio-layers-width':`${leftWidth}px`,'--studio-inspector-width':`${rightWidth}px`} as CSSProperties}>
+{context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-270))}} role="group" aria-label="Object actions"><button onClick={()=>{const uid=context.uid;setContext(null);void invoke<unknown>('lettering_settings',{uid}).then(s=>{if(s)openText(uid);else{showInspector(true);setInspectorTab('transform')}}).catch(e=>setMessage(String(e)))}}>Object properties</button><button disabled={!canCopyStitchSettings} onClick={()=>{setContext(null);void copyStitchSettings()}}>Copy stitch settings</button><button onClick={()=>{setContext(null);drawing.pick(null);stitchGuides.setVisible(true)}}>Show stitch guides</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${focusCanvas?'canvas-focus':''} ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{'--studio-layers-width':`${leftWidth}px`,'--studio-inspector-width':`${rightWidth}px`} as CSSProperties}>
 <div className="editor-toolrail" role="group" aria-label="Editor tools">
   <button onClick={()=>setHoopOpen(true)} title="Hoop and machine settings"><SquareDashed size={20}/><small>Hoop</small></button>
   <button aria-pressed={right&&inspectorTab==='stitches'} onClick={()=>{showInspector(true);setInspectorTab('stitches')}} title="Stitch settings and quality"><Scissors size={20}/><small>Stitches</small></button>
@@ -1362,7 +1365,6 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   fill="transparent" pointerEvents="all" stroke="#8543aa" strokeWidth="1.5"
   vectorEffect="non-scaling-stroke" strokeDasharray="5 4"><title>Drag to move the whole design</title></rect>}</g>
 <DrawingOverlay drawing={drawing}/>
-{!drawing.tool&&<StitchGuideOverlay guides={stitchGuides} zoom={zoom}/>}
 {canvasMode==='design'&&independentGroups&&designGroups.map((group,i)=>{const b=group.bounds;if(!b)return null;return <g key={group.key} transform={activeGroup===group.key?'translate('+objectOffset.join(' ')+')':undefined}><rect data-design-group={group.key} x={b[0]-1} y={b[1]-1} width={b[2]+2} height={b[3]+2} fill="transparent" pointerEvents="all" stroke={activeGroup===group.key?'#754bb0':'#b49acb'} strokeDasharray="5 4" vectorEffect="non-scaling-stroke"><title>Move design {i+1}</title></rect></g>})}
 {canvasMode==='design'&&designGroups.filter(g=>g.key===activeGroup&&g.bounds&&g.bounds[2]>.01&&g.bounds[3]>.01).map(g=>{const [x,y,w,h]=g.bounds!;const cx=x+w/2,cy=y+h/2;const [sx,sy]=groupScalePreview;const tx=cx-w*sx/2+objectOffset[0],ty=cy-h*sy/2+objectOffset[1];return <g key={'resize-'+g.key} transform={`rotate(${rotationPreview} ${cx} ${cy})`}>{(sx!==1||sy!==1||rotationPreview!==0||objectOffset.some(v=>v!==0))&&<g pointerEvents="none" transform={`translate(${objectOffset.join(' ')}) translate(${cx} ${cy}) scale(${sx} ${sy}) translate(${-cx} ${-cy})`}>{g.members.filter(o=>o.path).map(o=><path key={o.uid} d={o.path} fill={o.fill_rule?'rgb('+o.color.join(',')+')':'none'} fillRule={o.fill_rule} stroke={'rgb('+o.color.join(',')+')'} strokeWidth={o.stroke_width||.3} opacity=".55"/>)}</g>}<rect x={tx} y={ty} width={w*sx} height={h*sy} fill="none" stroke="#754bb0" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" pointerEvents="none"/>{[0,1,2,3].map(i=><circle key={i} cx={tx+(i%2)*w*sx} cy={ty+Math.floor(i/2)*h*sy} r={Math.max(.65,1.2*100/zoom)} fill="white" stroke="#754bb0" vectorEffect="non-scaling-stroke" data-group-resize={i} style={{cursor:i===0||i===3?'nwse-resize':'nesw-resize'}}><title>Drag to resize and recalculate stitches · Shift keeps proportions</title></circle>)}<line x1={tx+w*sx/2} x2={tx+w*sx/2} y1={ty} y2={ty-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke" pointerEvents="none"/><circle cx={tx+w*sx/2} cy={ty-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" style={{cursor:'grab'}}><title>Rotate design · Shift snaps to 15°</title></circle></g>})}
 {snap&&<g pointerEvents="none" stroke="#a84bc5" strokeDasharray="4 3" strokeWidth="1" vectorEffect="non-scaling-stroke">{guides.x!==null&&<line x1={guides.x} x2={guides.x} y1={-height/2} y2={height/2} vectorEffect="non-scaling-stroke"/>}{guides.y!==null&&<line x1={-width/2} x2={width/2} y1={guides.y} y2={guides.y} vectorEffect="non-scaling-stroke"/>}</g>}
@@ -1395,7 +1397,9 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
    <title>{handle.dx&&handle.dy?'Drag corner to stretch · Shift keeps proportions':'Drag side to resize'}</title>
  </circle>)}
 <line x1={selected.bounds[0]+selected.bounds[2]/2} x2={selected.bounds[0]+selected.bounds[2]/2} y1={selected.bounds[1]} y2={selected.bounds[1]-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke"/><circle cx={selected.bounds[0]+selected.bounds[2]/2} cy={selected.bounds[1]-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" pointerEvents={busy?'none':'all'} style={{cursor:'grab'}}><title>Rotate object · Shift snaps to 15°</title></circle>
-</g>}</svg>{!plan?.stitches&&!drawing.tool&&<div className="workspace-empty">
+</g>}
+{!drawing.tool&&<StitchGuideOverlay guides={stitchGuides} zoom={zoom}/>}
+</svg>{!plan?.stitches&&!drawing.tool&&<div className="workspace-empty">
   <SquareDashed size={31}/>
   <strong>Start with a design</strong>
   <p>Open artwork or insert a library template.</p>

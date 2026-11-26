@@ -45,4 +45,30 @@ test('measures without altering stitches and commits a dragged shape in physical
   expect(request.tool).toBe('rectangle');
   expect(request.points[0][0]).toBeCloseTo(-12,0);
   expect(request.points[1][1]).toBeCloseTo(8,0);
+
+  await menu.click();
+  await page.getByRole('button',{name:'Satin column',exact:true}).click();
+  async function dragLine(from:number[],to:number[]){
+    const screen=await canvas.evaluate((element,pair)=>{
+      const matrix=(element as unknown as SVGSVGElement).getScreenCTM()!;
+      return pair.map(point=>{
+        const p=new DOMPoint(point[0],point[1]).matrixTransform(matrix);
+        return [p.x,p.y];
+      });
+    },[from,to]);
+    await page.mouse.move(screen[0][0],screen[0][1]);
+    await page.mouse.down();
+    await page.mouse.move(screen[1][0],screen[1][1],{steps:8});
+    await page.mouse.up();
+  }
+  await dragLine([-10,-4],[12,-4]);
+  await dragLine([-10,0],[12,0]);
+  await dragLine([0,-5],[0,1]);
+  expect(await edits()).toHaveLength(1);
+  await page.getByRole('button',{name:'Finish satin column'}).click();
+  await expect.poll(async ()=>(await edits()).length).toBe(2);
+  const column=(await edits())[1] as {tool:string;subpaths:number[][][]};
+  expect(column.tool).toBe('satinColumn');
+  expect(column.subpaths).toHaveLength(3);
+
 });
