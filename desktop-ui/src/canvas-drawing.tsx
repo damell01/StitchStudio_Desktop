@@ -12,6 +12,8 @@ export const drawingTools = [
 
 export function useCanvasDrawing(commit:(tool:Exclude<DrawingTool,'measure'>,points:Point[],subpaths?:Point[][])=>void) {
   const [tool,setTool]=useState<DrawingTool|null>(null);
+  const [unit,setUnit]=useState<'both'|'mm'|'in'|'cm'>(()=>{const v=localStorage.getItem('studio-measure-unit');return v==='mm'||v==='in'||v==='cm'?v:'both'});
+  function changeUnit(value:'both'|'mm'|'in'|'cm'){setUnit(value);localStorage.setItem('studio-measure-unit',value);}
   const [points,setPoints]=useState<Point[]>([]);
   const [column,setColumn]=useState<Point[][]>([]);
   const [hover,setHover]=useState<Point|null>(null);
@@ -67,7 +69,7 @@ export function useCanvasDrawing(commit:(tool:Exclude<DrawingTool,'measure'>,poi
     else if(tool!=='measure')finish();
     return true;
   }
-  return {tool,points,column,hover,clickTool,pick,finish,down,move,end};
+  return {tool,points,column,hover,clickTool,pick,finish,down,move,end,unit,changeUnit};
 }
 
 type Drawing = ReturnType<typeof useCanvasDrawing>;
@@ -87,6 +89,7 @@ export function DrawingControls({drawing,disabled}:{drawing:Drawing;disabled:boo
       {drawing.column.length<2?'Draw rail '+(drawing.column.length+1):'Finish column'}
     </button>}
     {drawing.clickTool&&<button disabled={disabled||drawing.points.length<2} onClick={drawing.finish}>Finish path</button>}
+    {drawing.tool==='measure'&&<select aria-label="Measurement units" value={drawing.unit} onChange={e=>drawing.changeUnit(e.target.value as 'both'|'mm'|'in'|'cm')}><option value="both">mm + in</option><option value="mm">mm</option><option value="in">in</option><option value="cm">cm</option></select>}
     {drawing.tool&&<button className="studio-tool-icon" onClick={()=>drawing.pick(null)} aria-label="Exit drawing tool" title="Exit drawing tool"><X size={16}/></button>}
   </div>;
 }
@@ -106,7 +109,7 @@ export function DrawingOverlay({drawing}:{drawing:Drawing}){
      drawing.tool==='star'||drawing.tool==='hexagon'||drawing.tool==='triangle' ? <polygon points={Array.from({length:drawing.tool==='star'?10:drawing.tool==='triangle'?3:6},(_,i)=>{const n=drawing.tool==='star'?10:drawing.tool==='triangle'?3:6;const angle=2*Math.PI*i/n-Math.PI/2;const r=drawing.tool==='star'&&i%2===1?.45:1;return [x+w/2+w/2*r*Math.cos(angle),y+h/2+h/2*r*Math.sin(angle)].join(',')}).join(' ')} vectorEffect="non-scaling-stroke"/> :
      <polyline points={line.map(point=>point.join(',')).join(' ')} vectorEffect="non-scaling-stroke"/>}
     {drawing.tool==='measure'&&<text fill={color} stroke="none" x={b[0]} y={b[1]-2} fontSize="4">
-      {(Math.hypot(w,h)/25.4).toFixed(3)} in · {Math.hypot(w,h).toFixed(2)} mm
+      {drawing.unit==='cm'?(Math.hypot(w,h)/10).toFixed(3)+' cm':drawing.unit==='mm'?Math.hypot(w,h).toFixed(2)+' mm':drawing.unit==='in'?(Math.hypot(w,h)/25.4).toFixed(3)+' in':(Math.hypot(w,h)/25.4).toFixed(3)+' in · '+Math.hypot(w,h).toFixed(2)+' mm'}
     </text>}
   </g>;
 }
