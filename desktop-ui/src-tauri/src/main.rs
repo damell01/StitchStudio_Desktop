@@ -753,6 +753,7 @@ impl SimplifyOptions {
     }
 }
 fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptions,uids:Option<&[usize]>,texture_radius:f64)->Result<(),String>{
+    let stable_woven=doc.settings.fabric=="standard";
     use zigzag::{params::Kind,svg::Geometry,boolean::{self,PathOp},geom::FillRule};
     let selected=|uid|uids.is_none_or(|ids|ids.contains(&uid));
     let eligible=|d:&zigzag::document::Document,i:usize| {
@@ -904,9 +905,18 @@ fn optimize_geometry(doc:&mut zigzag::document::Document, options:&SimplifyOptio
             // geometry-changing conversion that cannot persist on reload.
             if let Some(k)=trial.params.kind{if matches!((&s.geometry,k),(Geometry::Stroke{..},Kind::Run|Kind::Satin)|(Geometry::Fill{..},Kind::Satin)){s.params.kind=Some(k);}}
         }
-        if options.lighter_underlay&&kind==Kind::Satin&&s.params.satin_underlay.is_some(){
+        if options.lighter_underlay&&kind==Kind::Satin&&s.params.satin_underlay.is_some()
+            &&s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&s.params.underlay!=Some(false)
+            &&s.params.colors.is_none() {
+            // Only reduce an explicitly layered foundation on stable woven
+            // fabric. Keep the contour and center walk on broad satin.
             let old=s.params.satin_underlay.unwrap_or(0);
-            if old.count_ones()>1{s.params.satin_underlay=Some(old & !zigzag::params::underlay::ZIGZAG);}
+            let b=zigzag::svg::shapes_bounds(std::slice::from_ref(s));
+            if stable_woven && !b.is_empty() && b.width().min(b.height())>=30.0
+                &&old & zigzag::params::underlay::CENTER !=0
+                &&old & zigzag::params::underlay::CONTOUR !=0 {
+                s.params.satin_underlay=Some(old & !zigzag::params::underlay::ZIGZAG);
+            }
         }
     }
     doc.sync().map_err(|e|e.to_string())
