@@ -1,0 +1,54 @@
+name: Package Windows installer
+
+on:
+  push:
+    branches: [Dev]
+    paths: [.github/workflows/package-windows.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    if: github.ref == 'refs/heads/Dev'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: desktop-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop-ui/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-ui/src-tauri -> target
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/stitch-studio-model
+          key: stitch-model-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/prepare-local-assistant.mjs') }}
+      - run: npm ci
+      - name: Build the Windows installer
+        run: npm run tauri build -- --bundles nsis -- --locked
+      - name: Check installation and removal
+        id: install
+        shell: pwsh
+        run: ../.github/scripts/check-windows-install.ps1 -Bundle src-tauri/target/release/bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Stitch-Studio-Windows-x64
+          path: desktop-ui/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          compression-level: 0
+      - if: failure() && steps.install.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stitch-Studio-Windows-x64-UNVALIDATED
+          path: desktop-ui/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          compression-level: 0
