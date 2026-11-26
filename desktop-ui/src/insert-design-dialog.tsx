@@ -148,7 +148,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
       const result = candidate.source === 'approved' ? await invoke<Plan>('insert_approved_design',{...position,file:candidate.project.file}) : candidate.source === 'templates'
         ? await invoke<Plan>('insert_template', { ...position, id: candidate.template.id, art: candidate.template.art, widthMm })
         : candidate.source === 'artwork'
-          ? await invoke<Plan>('insert_character', { ...position, bytes: candidate.art.bytes, name: candidate.art.name, widthMm })
+          ? await invoke<Plan>(candidate.art.mime==='image/svg+xml'?'insert_svg_artwork':'insert_character', { ...position, bytes: candidate.art.bytes, name: candidate.art.name, widthMm })
           : candidate.source === 'layouts' ? await invoke<Plan>('insert_saved_template',{...position,file:candidate.file})
           : await invoke<Plan | null>('insert_embroidery', { ...position, file: candidate.file });
       if (!result) return;
@@ -176,7 +176,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
         {source === 'templates' && <TemplateLibrary
           selectedId={selection?.source === 'templates' ? selection.template.id : undefined}
           onPreview={template => { setSelection({ source, template }); setError(''); }} />}
-        {source === 'artwork' && <CharacterGallery onArt={art => { setSelection({ source, art }); setError(''); }} />}
+        {source === 'artwork' && <CharacterGallery actionLabel="Select design" onArt={art => { setSelection({ source, art }); setError(''); }} />}
         {source==='approved'&&<><select aria-label="Design category" value={category} onChange={e=>{setCategory(e.target.value);setSelection(null)}}><option value="all">All categories</option>{Array.from(new Set(approved.map(p=>p.category??'Uncategorized'))).sort().map(c=><option key={c}>{c}</option>)}</select><label className="studio-insert-search"><Search size={16}/><input placeholder="Search digitized designs" value={query} onChange={e=>setQuery(e.target.value)}/></label>{!approvedPage.total&&<p>{approved.length?'No matching designs.':'Approve artwork in Bulk Design Import to add reusable designs here.'}</p>}<div className="approved-insert-grid">{approvedPage.items.map(project=><button key={project.file} aria-pressed={selection?.source==='approved'&&selection.project.file===project.file} onClick={()=>setSelection({source:'approved',project})}><ApprovedPreview file={project.file}/><strong>{project.name}</strong><small>{project.category??'Uncategorized'}</small><small>{project.stitches.toLocaleString()} stitches</small></button>)}</div><ListNavigation {...approvedPage}/></>}
         {source === 'layouts' && <>
           <label className="studio-insert-search"><Search size={16}/><input placeholder="Find a saved layout" aria-label="Search saved layouts"
@@ -215,6 +215,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
             : selection?.source === 'artwork' ? <ArtworkPreview art={selection.art}/>
             : selection?.source === 'personal' ? <FileInput size={34}/> : <Crosshair size={34}/>}
         </div>
+        {selection?.source==='artwork'&&selection.art.mime==='image/svg+xml'&&<p>Original vector artwork. Stitches are generated at your chosen width when inserted. Add or edit names separately using lettering.</p>}
         {selection?.source === 'templates' && <TemplateAttribution template={selection.template}/>}
         {selection?.source === 'personal'
           ? <p>Machine files keep their original size.</p>
