@@ -9,6 +9,10 @@ use zigzag::{
 #[serde(rename_all = "camelCase")]
 pub(super) enum Drawing {
     Pen,
+    Freehand,
+    Star,
+    Hexagon,
+    Triangle,
     Manual,
     SatinBrush,
     SatinColumn,
@@ -41,7 +45,7 @@ fn add(
     let color = [105, 69, 162];
     match tool {
         Drawing::SatinColumn => return Err("Draw two rails for the satin column.".into()),
-        Drawing::Pen => document.add_drawing(&pts, false, color, Kind::Run),
+        Drawing::Pen | Drawing::Freehand => document.add_drawing(&pts, false, color, Kind::Run),
         Drawing::Manual => document.add_drawing(&pts, false, color, Kind::Manual),
         Drawing::SatinBrush => {
             let path = vec![bezier::SubPath {
@@ -50,7 +54,7 @@ fn add(
             }];
             document.add_drawing_stroke(&path, color, Kind::Satin, 2.5)
         }
-        Drawing::Rectangle | Drawing::Ellipse => {
+        Drawing::Rectangle | Drawing::Ellipse | Drawing::Star | Drawing::Hexagon | Drawing::Triangle => {
             let a = pts[0];
             let b = pts[1];
             let (left, top, right, bottom) =
@@ -60,6 +64,19 @@ fn add(
             }
             let path = if matches!(tool, Drawing::Rectangle) {
                 format!("M {left} {top} H {right} V {bottom} H {left} Z")
+            } else if matches!(tool, Drawing::Star | Drawing::Hexagon | Drawing::Triangle) {
+                let count = match tool { Drawing::Star => 10, Drawing::Triangle => 3, _ => 6 };
+                let cx = (left+right)/2.0;
+                let cy = (top+bottom)/2.0;
+                let mut path=String::new();
+                for i in 0..count {
+                    let angle=std::f64::consts::TAU*i as f64/count as f64-std::f64::consts::FRAC_PI_2;
+                    let radius=if matches!(tool, Drawing::Star)&&i%2==1 {0.45} else {1.0};
+                    let x=cx+(right-left)/2.0*radius*angle.cos();
+                    let y=cy+(bottom-top)/2.0*radius*angle.sin();
+                    path.push_str(&format!("{} {x} {y} ",if i==0 {"M"} else {"L"}));
+                }
+                path.push('Z');path
             } else {
                 let (rx, ry, cy) = (
                     (right - left) / 2.0,
@@ -162,6 +179,10 @@ mod tests {
     fn draws_paths_shapes_and_manual_needle_points() {
         for (tool, kind) in [
             (Drawing::Pen, Kind::Run),
+            (Drawing::Freehand, Kind::Run),
+            (Drawing::Star, Kind::Fill),
+            (Drawing::Triangle, Kind::Fill),
+            (Drawing::Hexagon, Kind::Fill),
             (Drawing::Manual, Kind::Manual),
             (Drawing::SatinBrush, Kind::Satin),
             (Drawing::Rectangle, Kind::Fill),
