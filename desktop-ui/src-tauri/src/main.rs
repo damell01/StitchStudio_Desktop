@@ -1018,7 +1018,12 @@ fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->Optim
     let sample=|d:&Design|{
         let mut cells=HashSet::new();let mut density=HashMap::<(i32,i32),usize>::new();
         for block in &d.blocks { for run in &block.runs{
-            for p in &run.pts{*density.entry(((p.x/10.).floor() as i32,(p.y/10.).floor() as i32)).or_default()+=1;}
+            for p in &run.pts {
+                let cell = ((p.x/10.).floor() as i32, (p.y/10.).floor() as i32);
+                *density.entry(cell).or_default() += 1;
+                // Single-point runs and isolated needle penetrations are also artwork.
+                cells.insert((block.color, cell.0, cell.1));
+            }
             for pair in run.pts.windows(2){
                 let n=(pair[0].dist(pair[1])/5.).ceil().clamp(1.,100.) as usize;
                 for k in 0..=n{let p=pair[0].lerp(pair[1],k as f64/n as f64);cells.insert((block.color,(p.x/10.).floor() as i32,(p.y/10.).floor() as i32));}
@@ -3299,6 +3304,22 @@ async fn insert_character(bytes:Vec<u8>,name:String,width_mm:f64,x_mm:f64,y_mm:f
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn optimization_preserves_isolated_contrasting_detail() {
+        use zigzag::{design::{Block, Run}, geom::P};
+        let original = Design {
+            blocks: vec![
+                Block { color: [0, 0, 0], runs: vec![Run { pts: vec![P::new(0.0, 0.0), P::new(100.0, 0.0)], trim_before: false }] },
+                Block { color: [255, 0, 0], runs: vec![Run { pts: vec![P::new(50.0, 20.0)], trim_before: false }] },
+            ],
+            ..Default::default()
+        };
+        let mut candidate = original.clone();
+        candidate.blocks.pop();
+        assert_eq!(optimization_quality(&original, &original, 800.0, 3.0).coverage, 100.0);
+        assert_eq!(optimization_quality(&original, &candidate, 800.0, 3.0).coverage, 0.0);
+    }
 
     #[test]
     fn production_estimate_includes_inter_color_travel_and_empty_runs() {
