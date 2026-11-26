@@ -656,11 +656,11 @@ impl Params {
         num("w", self.width);
         num("r", self.repeats.map(|r| r as f64));
         num("split", self.split);
-        if let Some(v) = self.foam_caps { t.push(format!("foamcaps={}", v as u8)); }
-        if let Some(v) = self.blend { t.push(format!("blend={}", v as u8)); }
         num("st", self.start);
         num("en", self.end);
         num("cell", self.cell);
+        if let Some(v) = self.foam_caps { t.push(format!("foamcaps={}", v as u8)); }
+        if let Some(v) = self.blend { t.push(format!("blend={}", v as u8)); }
         if let Some(st) = self.style {
             t.push(format!("style={}", st.name()));
         }
