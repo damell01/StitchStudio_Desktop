@@ -651,13 +651,17 @@ impl Studio {
             (Some(sent), None) => self.timeline(ui, s, &sent),
             (None, None) => {
                 let b = self.design_bounds();
+                let production_spm = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(
+                    egui::Id::new("production_spm"), || crate::app::SPM));
+                let minutes = self.design.estimated_seconds(production_spm, 3.0, 15.0)
+                    .unwrap_or(0.0) / 60.0;
                 stats(
                     ui,
                     &crate::units::fmt_size(b.width(), b.height()),
                     &format!("{} stitches", n(self.design.stitch_count())),
                     &format!(
                         "about {:.0} min",
-                        (self.design.stitch_count() as f64 / 400.0).ceil()
+                        minutes.ceil()
                     ),
                 );
             }
