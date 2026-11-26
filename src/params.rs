@@ -185,7 +185,7 @@ pub struct Fabric {
     pub run_len: f64,
 }
 
-pub const FABRICS: [Fabric; 4] = [
+pub const FABRICS: [Fabric; 13] = [
     Fabric {
         id: "standard",
         name: "Standard (twill, denim, patches)",
@@ -237,6 +237,123 @@ pub const FABRICS: [Fabric; 4] = [
         satin_spacing: 0.38,
         satin_pull: 0.3,
         run_len: 2.0,
+    },
+    Fabric {
+        id: "t-shirt",
+        name: "T-shirt",
+        about: "Jersey knit: light coverage, resilient underlay and appropriate stabilizer.",
+        fill_spacing: 0.34,
+        fill_len: 2.8,
+        fill_pull: 0.25,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.4,
+        satin_spacing: 0.42,
+        satin_pull: 0.25,
+        run_len: 2.1,
+    },
+    Fabric {
+        id: "sweatshirt",
+        name: "Sweatshirt",
+        about: "Midweight fleece-backed sweatshirt: supportive underlay without overpacking.",
+        fill_spacing: 0.32,
+        fill_len: 3,
+        fill_pull: 0.22,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.3,
+        satin_spacing: 0.41,
+        satin_pull: 0.23,
+        run_len: 2.3,
+    },
+    Fabric {
+        id: "polo",
+        name: "Polo shirt",
+        about: "Pique knit: open coverage and underlay to protect the textured surface.",
+        fill_spacing: 0.34,
+        fill_len: 2.8,
+        fill_pull: 0.25,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.35,
+        satin_spacing: 0.42,
+        satin_pull: 0.26,
+        run_len: 2.2,
+    },
+    Fabric {
+        id: "towel",
+        name: "Towel",
+        about: "Terry loops: strong underlay; use water-soluble topping so detail stays visible.",
+        fill_spacing: 0.33,
+        fill_len: 2.9,
+        fill_pull: 0.28,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.1,
+        satin_spacing: 0.39,
+        satin_pull: 0.27,
+        run_len: 2.1,
+    },
+    Fabric {
+        id: "blanket",
+        name: "Blanket",
+        about: "Blanket fabrics vary: use an appropriate stabilizer and topping for pile.",
+        fill_spacing: 0.35,
+        fill_len: 3,
+        fill_pull: 0.25,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.3,
+        satin_spacing: 0.42,
+        satin_pull: 0.26,
+        run_len: 2.3,
+    },
+    Fabric {
+        id: "denim",
+        name: "Denim",
+        about: "Stable heavy woven denim: balanced coverage and modest compensation.",
+        fill_spacing: 0.27,
+        fill_len: 3.3,
+        fill_pull: 0.08,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.6,
+        satin_spacing: 0.4,
+        satin_pull: 0.16,
+        run_len: 2.5,
+    },
+    Fabric {
+        id: "performance",
+        name: "Performance wear",
+        about: "Thin stretch performance material: lower density, supportive underlay and gentle hooping.",
+        fill_spacing: 0.38,
+        fill_len: 2.8,
+        fill_pull: 0.3,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.3,
+        satin_spacing: 0.44,
+        satin_pull: 0.3,
+        run_len: 2.1,
+    },
+    Fabric {
+        id: "fleece",
+        name: "Fleece",
+        about: "High-pile fleece: supportive underlay, topping and open fill coverage.",
+        fill_spacing: 0.35,
+        fill_len: 3,
+        fill_pull: 0.28,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.1,
+        satin_spacing: 0.4,
+        satin_pull: 0.29,
+        run_len: 2.3,
+    },
+    Fabric {
+        id: "patch",
+        name: "Patch",
+        about: "Stabilized patch backing: balanced fills, edge coverage and optional cut-line treatment.",
+        fill_spacing: 0.27,
+        fill_len: 3.1,
+        fill_pull: 0.1,
+        fill_edge_walk: true,
+        fill_underlay_spacing: 1.6,
+        satin_spacing: 0.4,
+        satin_pull: 0.16,
+        run_len: 2.4,
     },
 ];
 
@@ -631,6 +748,24 @@ pub fn decode_illustrator_id(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn garment_presets_are_unique_and_have_safe_defaults() {
+        let mut seen = std::collections::HashSet::new();
+        for f in FABRICS {
+            assert!(seen.insert(f.id), "duplicate fabric identifier: {}", f.id);
+            assert_eq!(Fabric::by_id(f.id), Some(&f));
+            assert!(f.fill_spacing >= 0.20 && f.fill_spacing <= 0.50);
+            assert!(f.fill_len >= 1.5 && f.fill_len <= 5.0);
+            assert!(f.satin_spacing >= 0.30 && f.satin_spacing <= 0.55);
+            assert!(f.fill_underlay_spacing > 0.0);
+            assert!(!f.about.is_empty());
+        }
+        for id in ["t-shirt", "sweatshirt", "polo", "towel", "blanket", "denim", "performance", "fleece", "patch"] {
+            assert!(Fabric::by_id(id).is_some(), "missing garment preset: {id}");
+        }
+        assert_eq!(Fabric::standard().id, "standard");
+    }
 
     #[test]
     fn parses_plain_and_illustrator_ids() {
