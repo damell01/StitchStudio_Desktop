@@ -7,10 +7,14 @@ test.beforeEach(async ({ page }) => {
       __TAURI_INTERNALS__: { invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown> };
       stitchTestCalls: string[];
       stitchTestFail: boolean;
+      stitchTestDense: boolean;
+      stitchTestGoals: unknown[];
       stitchTestRelease: (() => void) | null;
     };
     host.stitchTestCalls = [];
     host.stitchTestFail = false;
+    host.stitchTestDense = false;
+    host.stitchTestGoals = [];
     host.stitchTestRelease = null;
     let generation = 0;
     let current: unknown = null;
@@ -26,7 +30,7 @@ test.beforeEach(async ({ page }) => {
             await new Promise<void>(resolve => { host.stitchTestRelease = resolve; });
           }
           if (host.stitchTestFail) throw Error('This artwork has no foreground');
-          draft = { name: "Artwork", stitches: args?.detail, trims: 0, blocks: [{ color: [66, 42, 90], runs: [[[0, 0], [3, 3]]] }] };
+          draft = { name: "Artwork", stitches: host.stitchTestDense ? 21_000 : args?.detail, trims: 0, blocks: [{ color: [66, 42, 90], runs: [[[0, 0], [3, 3]]] }] };
           return {
             id,
             plan: draft,
@@ -39,6 +43,15 @@ test.beforeEach(async ({ page }) => {
           };
         }
         if (command === 'compare_digitizer_draft') {
+          host.stitchTestGoals.push(args?.targetStitches);
+          if (host.stitchTestDense) {
+            const base={name:'Artwork',blocks:[{color:[66,42,90],runs:[[[0,0],[3,3]]]}]};
+            const quality={coverage:96,density_peak:2,seconds:4};
+            return [
+              {strength:2,plan:{...base,stitches:14_000,trims:0},reason:null,quality},
+              {strength:3,plan:{...base,stitches:9_800,trims:150},reason:null,quality},
+            ];
+          }
           if (args?.quick !== false) return [];
           const plan = { name:'Artwork', stitches:40, trims:0, blocks:[{color:[66,42,90],runs:[[[0,0],[3,3]]]}] };
           return [{strength:5,plan,reason:null,quality:{coverage:96,density_peak:2,seconds:4}}];
@@ -122,4 +135,21 @@ test('deep optimization exposes and recommends the faster eligible stitch plan',
   const alternative = page.getByRole('button', {name:/Fast Stitch/});
   await expect(alternative).toHaveAttribute('aria-pressed', 'true');
   await expect(alternative).toContainText('33% fewer stitches');
+});
+
+test('upload recommends a checked plan near the stitch goal and updates it without tracing again', async ({page}) => {
+  await page.evaluate(() => { (window as unknown as {stitchTestDense:boolean}).stitchTestDense=true; });
+  await page.getByRole('button',{name:'Choose or drop an image'}).click();
+  await expect.poll(() => page.evaluate(() => typeof (window as unknown as {stitchTestRelease:unknown}).stitchTestRelease)).toBe('function');
+  await page.evaluate(() => (window as unknown as {stitchTestRelease:()=>void}).stitchTestRelease());
+  await expect(page.getByRole('button',{name:/Maximum/})).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('.digitizer-preview-metrics')).toContainText('9,800');
+  await page.getByLabel('Stitch-count goal').selectOption('15000');
+  await expect(page.getByRole('region',{name:'Compare embroidery-ready designs'}).getByRole('button',{name:/Balanced/})).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('.digitizer-preview-metrics')).toContainText('14,000');
+  const state=await page.evaluate(() => {
+    const host=window as unknown as {stitchTestCalls:string[];stitchTestGoals:number[]};
+    return {traces:host.stitchTestCalls.filter(name=>name==='digitize_artwork').length,goals:host.stitchTestGoals};
+  });
+  expect(state).toEqual({traces:1,goals:[10_000,15_000]});
 });

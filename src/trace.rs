@@ -453,6 +453,16 @@ fn digitize_trace(trace: Traced, name: &str, options: &TraceOptions) -> Result<c
     if options.colors == 0 {
         consolidate_traced_fills(&mut document)?;
     }
+    // The SVG importer populates fallback stitch kinds. This artwork comes
+    // from our own tracer, so those defaults are free to change.
+    let wide_strokes: Vec<_> = document.shapes.iter().enumerate()
+        .filter_map(|(index, shape)| match shape.geometry {
+            Geometry::Stroke { width, .. } if width > 55.0 => Some(index),
+            _ => None,
+        }).collect();
+    if !wide_strokes.is_empty() {
+        document.outline_stroke(&wide_strokes)?;
+    }
     // Small neutral ink shapes in text-like rows retain their individual
     // contours. Detect geometry rather than guessing the actual characters.
     if options.remove_background && trace.colors.len()==1 && trace.colors[0].iter().all(|&v|v<55) {
@@ -463,16 +473,6 @@ fn digitize_trace(trace: Traced, name: &str, options: &TraceOptions) -> Result<c
             let peers=candidates.iter().filter(|&&j|j!=i && (bounds[j].max.y-b.max.y).abs()<=b.height()*0.28 && (bounds[j].height()-b.height()).abs()<=b.height()*0.35 && (bounds[j].center().x-b.center().x).abs()<=b.height()*8.0).count();
             if peers>=3 {document.shapes[i].groups.push("tl-small-ink-detail".into());}
         }
-    }
-    // The SVG importer populates fallback stitch kinds. This artwork comes
-    // from our own tracer, so those defaults are free to change.
-    let wide_strokes: Vec<_> = document.shapes.iter().enumerate()
-        .filter_map(|(index, shape)| match shape.geometry {
-            Geometry::Stroke { width, .. } if width > 55.0 => Some(index),
-            _ => None,
-        }).collect();
-    if !wide_strokes.is_empty() {
-        document.outline_stroke(&wide_strokes)?;
     }
     for shape in &mut document.shapes {
         // An unoutlined, degenerate wide stroke keeps its default, rather

@@ -79,6 +79,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
   const artworkUrl = useArtworkUrl(original);
   const vector = art?.mime === 'image/svg+xml';
   const review = generated?.art === art && generated?.settings === settings && generated.lettering===selected ? generated.review : null;
+  const [stitchGoal,setStitchGoal]=useState(10_000);
   const [comparison,setComparison]=useState<{id:number;deep:boolean;variants:{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);
   const [deepRequest,setDeepRequest]=useState<{id:number}|null>(null);
   const currentDeepRequest=review&&deepRequest?.id===review.id?deepRequest:null;
@@ -91,7 +92,7 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     setCompareError('');setCompareBusy(false);
     if(!review)return;
     let active=true;setCompareBusy(true);
-    invoke<{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]>('compare_digitizer_draft',{id:review.id,quick:!currentDeepRequest}).then(variants=>{
+    invoke<{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]>('compare_digitizer_draft',{id:review.id,quick:!currentDeepRequest,targetStitches:stitchGoal}).then(variants=>{
       if(!active||!Array.isArray(variants))return;
       setComparison({id:review.id,deep:!!currentDeepRequest,variants});
       const speed=Math.max(100,Math.min(1500,Number(localStorage.getItem('studio-sewing-spm'))||800));
@@ -99,11 +100,12 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
       const change=Number(localStorage.getItem('studio-change-seconds')??8);
       const time=(p:Plan)=>p.stitches/speed+p.trims*(Number.isFinite(trim)?trim:3)/60+Math.max(0,p.blocks.length-1)*(Number.isFinite(change)?change:8)/60;
       const eligible=variants.filter(v=>v.plan&&v.strength!==4&&(v.quality?.coverage??0)>=85&&time(v.plan)<time(review.plan));
-      eligible.sort((a,b)=>time(a.plan!)-time(b.plan!));
+      const aboveGoal=(p:Plan)=>Math.max(0,p.stitches-stitchGoal);
+      eligible.sort((a,b)=>aboveGoal(a.plan!)-aboveGoal(b.plan!) || time(a.plan!)-time(b.plan!));
       const best=eligible[0]?.strength??0;setRecommended(best);setChosen(best);
     }).catch(e=>{if(active)setCompareError(String(e))}).finally(()=>{if(active)setCompareBusy(false)});
     return()=>{active=false};
-  },[review?.id,currentDeepRequest]);
+  },[review?.id,currentDeepRequest,stitchGoal]);
   
   const threadUsage=useMemo(()=>{
     const usage=new Map<string,number>();
@@ -441,7 +443,11 @@ export function Digitizer({ onDone, initialArtwork }: { onDone: () => void; init
     </article>
     <article className={`artwork-preview review-${mode === 'density' || mode === 'thread' ? 'stitches' : mode}`}>
       <div className="preview-heading"><div><small>DESIGN REVIEW</small><strong title={art?.name}>{art?.name}</strong></div><span className="digitizer-preview-state" role="status">{processing?"Generating":review?"Preview ready":"Artwork"}</span></div>
-      {review&&<section className="digitizer-variant-review" aria-label="Compare embroidery-ready designs"><div className="digitizer-variant-heading"><div><strong>Choose your stitch plan</strong><small>Compare actual stitch paths before editing or exporting.</small></div>{compareBusy&&<span role="status">{currentDeepRequest?'Checking fill directions, spacing and solid artwork…':'Optimizing alternatives…'}</span>}</div>{compareError&&<p role="status">Alternative preview unavailable: {compareError}. Original still available.</p>}<DigitizerVariants base={review.plan} variants={activeComparison?.variants??[]} chosen={chosen} recommended={recommended} onChoose={setChosen}/><div className="digitizer-review-actions">{!activeComparison?.deep&&<button disabled={busy||compareBusy} onClick={()=>setDeepRequest({id:review.id})}>Deep optimization</button>}<button disabled={busy||compareBusy} onClick={()=>setShowExport(v=>!v)}>Export {outputFormat.toUpperCase()}</button><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Open in design studio <ArrowRight size={16}/></button></div>{showExport&&<div className="digitizer-direct-export"><strong>Confirm usable sewing field</strong><div className="workspace-hoop-fields"><label>Width (in)<input type="number" min=".1" step=".01" value={exportWidth} onChange={e=>setExportWidth(e.target.value)}/></label><label>Height (in)<input type="number" min=".1" step=".01" value={exportHeight} onChange={e=>setExportHeight(e.target.value)}/></label></div><small>Use the machine's usable sewing field, not the hoop's outer dimensions. DST does not preserve exact thread colors.</small><button className="primary" disabled={busy||compareBusy||!(Number(exportWidth)>0&&Number(exportHeight)>0)} onClick={()=>void exportChosen()}>Save {outputFormat.toUpperCase()} file</button>{exportNotice&&<p role="status">{exportNotice}</p>}</div>}<small>The Quality report and density heatmap describe the original plan.</small></section>}
+      {review&&<section className="digitizer-variant-review" aria-label="Compare embroidery-ready designs"><div className="digitizer-variant-heading"><div><strong>Choose your stitch plan</strong><small>Compare actual stitch paths before editing or exporting.</small></div>{compareBusy&&<span role="status">{currentDeepRequest?'Checking fill directions, spacing and solid artwork…':'Optimizing alternatives…'}</span>}</div><label className="digitizer-stitch-goal">Stitch-count goal
+        <select value={stitchGoal} disabled={busy||compareBusy} onChange={event=>{
+          setDeepRequest(null);setComparison(null);setStitchGoal(Number(event.target.value));
+        }}>{[5_000,7_500,10_000,15_000,20_000,30_000].map(goal=><option key={goal} value={goal}>{goal.toLocaleString()}</option>)}</select>
+      </label>{activeComparison&&review.plan.stitches>stitchGoal&&<p role="status">{(plan?.stitches??0)<=stitchGoal?'Selected preview meets the stitch-count goal.':'Selected preview is above the goal. Compare the available plans before applying.'}</p>}{compareError&&<p role="status">Alternative preview unavailable: {compareError}. Original still available.</p>}<DigitizerVariants base={review.plan} variants={activeComparison?.variants??[]} chosen={chosen} recommended={recommended} onChoose={setChosen}/><div className="digitizer-review-actions">{!activeComparison?.deep&&<button disabled={busy||compareBusy} onClick={()=>setDeepRequest({id:review.id})}>Deep optimization</button>}<button disabled={busy||compareBusy} onClick={()=>setShowExport(v=>!v)}>Export {outputFormat.toUpperCase()}</button><button className="primary" disabled={busy||compareBusy} onClick={openDraft}>Open in design studio <ArrowRight size={16}/></button></div>{showExport&&<div className="digitizer-direct-export"><strong>Confirm usable sewing field</strong><div className="workspace-hoop-fields"><label>Width (in)<input type="number" min=".1" step=".01" value={exportWidth} onChange={e=>setExportWidth(e.target.value)}/></label><label>Height (in)<input type="number" min=".1" step=".01" value={exportHeight} onChange={e=>setExportHeight(e.target.value)}/></label></div><small>Use the machine's usable sewing field, not the hoop's outer dimensions. DST does not preserve exact thread colors.</small><button className="primary" disabled={busy||compareBusy||!(Number(exportWidth)>0&&Number(exportHeight)>0)} onClick={()=>void exportChosen()}>Save {outputFormat.toUpperCase()} file</button>{exportNotice&&<p role="status">{exportNotice}</p>}</div>}<small>The Quality report and density heatmap describe the original plan.</small></section>}
       {plan&&<div className="digitizer-preview-metrics"><div><small>Stitch points</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Unique colors</small><strong>{colors.size}</strong></div><div><small>Color blocks</small><strong>{plan.blocks.length}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div></div>}<div className="review-switch" role="group" aria-label="Preview options">
         {(['compare', 'stitches', 'original'] as const).map(view =>
           <button key={view} aria-pressed={mode === view} onClick={() => setMode(view)}>

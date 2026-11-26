@@ -1733,6 +1733,8 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .digitizer-variant-review{display:grid;gap:10px;padding:12px;border:1px solid var(--lav-border,#d8cce6);border-radius:12px;min-width:0;grid-column:1/-1}
 .digitizer-variant-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .digitizer-variant-heading>div{display:grid;gap:3px}
+.digitizer-stitch-goal{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.digitizer-stitch-goal select{width:auto;min-width:7rem}
 .digitizer-variant-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .digitizer-variant-grid .digitizer-variant-card{display:flex;flex-direction:column;align-items:stretch;text-align:left;gap:5px;padding:9px;min-width:0;border:1px solid var(--lav-border,#d8cce6);border-radius:10px;background:var(--lav-panel,Canvas);color:inherit}
 .digitizer-variant-grid .digitizer-variant-card[aria-pressed=true]{border-color:var(--brand,#8055b4);outline:1px solid var(--brand,#8055b4)}

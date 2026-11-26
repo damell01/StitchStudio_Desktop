@@ -317,12 +317,21 @@ impl Document {
                 .collect()
         };
         let (mut shapes, tree, metadata) = svg::load_with_tree_and(self.xml.as_bytes(), |doc| {
-            (lettering_ids(doc), layers::read_layer_properties(doc))
+            let small_ink = doc.descendants()
+                .filter(|n| n.is_element() && n.attribute("data-tl-small-ink-detail") == Some("1"))
+                .filter_map(|n| n.attribute("id").map(str::to_string))
+                .collect::<HashSet<_>>();
+            (lettering_ids(doc), layers::read_layer_properties(doc), small_ink)
         })?;
-        (self.lettering_ids, self.layer_properties) = metadata.unwrap_or_default();
+        let (lettering, layers, small_ink) = metadata.unwrap_or_default();
+        self.lettering_ids = lettering;
+        self.layer_properties = layers;
         self.tree = Some(std::sync::Arc::new(tree));
         shapes.retain(|s| !self.removed_parts.contains(&(s.id.clone(), s.part)));
         for s in &mut shapes {
+            if small_ink.contains(&s.id) && !s.groups.iter().any(|g| g == "tl-small-ink-detail") {
+                s.groups.push("tl-small-ink-detail".into());
+            }
             s.uid = match old_uids.get(&(s.id.clone(), s.part)) {
                 Some(&u) => u,
                 None => {
@@ -641,6 +650,16 @@ impl Document {
             };
             let fill = index.get(&(id, Part::Fill)).copied();
             let stroke = index.get(&(id, Part::Stroke)).copied();
+            // Keep protection for traced lettering when stitch settings are
+            // rewritten or an editable project is reopened.
+            if n.attribute("data-tl-small-ink-detail").is_none()
+                && [fill, stroke].into_iter().flatten().any(|i| {
+                    self.shapes[i].groups.iter().any(|g| g == "tl-small-ink-detail")
+                })
+            {
+                let start = n.attributes().find(|a| a.name() == "id").expect("has id").range().start;
+                edits.push((start..start, "data-tl-small-ink-detail=\"1\" ".into()));
+            }
             let fill_removed = removed.contains(&(id, Part::Fill));
             let stroke_removed = removed.contains(&(id, Part::Stroke));
             if fill.is_none() && stroke.is_none() && !fill_removed && !stroke_removed {

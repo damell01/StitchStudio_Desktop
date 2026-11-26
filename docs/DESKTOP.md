@@ -107,7 +107,7 @@ Model provenance: Robert Knight's OCRS models, fetched from `https://ocrs-models
 
 ## First design
 
-1. From Home, choose **Digitize artwork**. Select or drop a raster image, SVG, or PDF. For a multipage PDF, choose the page before tracing.
+1. From Home, choose **Digitize artwork**. Select or drop a raster image, SVG, or PDF. For a multipage PDF, choose the page before tracing. The digitizer compares checked plans with a default **Stitch-count goal** of 10,000. Change the goal to compare again without retracing. The finished size and artwork determine which counts are achievable.
 2. Review the stitch paths alongside the source. For raster artwork, use **Processed** to inspect the cleanup result. **Density** shows up to 512 one-square-millimeter cells with the highest needle penetration counts in the DST stream.
 3. Adjust fabric or open **Advanced artwork options**. The draft updates automatically after a short pause. Choose **Open in design studio** to apply it.
 4. Set the machine's verified embroidery field and preferred format in **Machine Manager**. Select the intended hoop in the editor. Hoops measure the usable sewing field.

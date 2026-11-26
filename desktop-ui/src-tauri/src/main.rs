@@ -1052,13 +1052,13 @@ fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->Optim
 }
 // Combine stitch economy with dependency-aware travel ordering. Unlike
 // individual trials this can reduce both needle count and trim overhead.
-fn combined_economy_candidate(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Option<(zigzag::document::Document,Design)>{
+fn combined_economy_candidate(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions,level:u8)->Option<(zigzag::document::Document,Design)>{
     if uids.is_some()||options.exhausted(){return None}
     use zigzag::params::Kind;
     if source.shapes.iter().any(|s|s.params.stop==Some(true)||s.params.trim==Some(true)
         ||matches!(s.params.kind,Some(Kind::Manual|Kind::Applique))
         ||source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)){return None}
-    let (mut doc,_) = economical_fill_candidate(source,original,None,5,0.)
+    let (mut doc,_) = economical_fill_candidate(source,original,None,level,0.)
         .or_else(||economical_fill_candidate(source,original,None,3,0.))
         .unwrap_or_else(||(source.clone(),original.clone()));
     if options.exhausted(){return None}
@@ -1074,7 +1074,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     if let Some(v)=automatic_texture_candidate(source,uids,options){choices.push(v);}
     if let Some(v)=remove_covered_fill_candidate(source,uids,options){choices.push(v);}
     if let Some(v)=narrow_artwork_candidate(source,original,uids,options){choices.push(v);}
-    if let Some(v)=combined_economy_candidate(source,original,uids,options){choices.push(v);}
+    if let Some(v)=combined_economy_candidate(source,original,uids,options,5){choices.push(v);}
     if !options.exhausted(){if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){choices.push(v);}}choices.push((doc,plan));}}
     for angle in [0.,45.,90.] {
         if options.exhausted(){break}
@@ -1365,18 +1365,46 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let seconds=|d:&Design|optimization_seconds(d,speed,trim);
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
         let stitch_goal=options.target_stitches.or_else(||(original.stitch_count()>15_000).then_some(10_000));
+        let before=measure_stitches(original);let a=original.bounds();
+        let eligible=|d:&Design|{let b=d.bounds();let after=measure_stitches(d);
+            d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&seconds(d)<seconds(original)
+            &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero
+            &&a.min.dist(b.min)<=5.0&&a.max.dist(b.max)<=5.0
+            &&optimization_quality(original,d,speed,trim).coverage>=if strength==1{95.}else if strength==2{90.}else{85.}
+            &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
+        };
         let mut candidates=Vec::new();
         if options.quick {
+            if strength==3 {
+                if let Some(goal)=stitch_goal.filter(|goal|*goal<original.stitch_count()) {
+                    // Try the original geometry first. A fast trim or texture
+                    // candidate can score well after one pass but leave less
+                    // room for larger reductions than the unchanged outlines.
+                    let mut seed=None;
+                    for _ in 0..3 {
+                        if options.exhausted(){break}
+                        let (doc,plan)=seed.as_ref().map_or((source,original),|(doc,plan)|(doc,plan));
+                        let Some((next_doc,next_plan))=economical_fill_candidate(doc,plan,uids,4,0.)
+                            .or_else(||economical_fill_candidate(doc,plan,uids,3,0.)) else {break};
+                        if seconds(&next_plan)>=seconds(plan)||!eligible(&next_plan){break}
+                        if next_plan.stitch_count()<=goal&&target.is_none_or(|t|seconds(&next_plan)<=t) {
+                            return Ok((next_doc,next_plan));
+                        }
+                        seed=Some((next_doc,next_plan));
+                    }
+                    if let Some(variant)=seed{candidates.push(variant);}
+                }
+            }
+            if !options.exhausted(){if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}}
             if strength==3&&!options.exhausted(){if let Some(v)=remove_covered_fill_candidate(source,uids,options){candidates.push(v);}if !options.exhausted(){if let Some(v)=narrow_artwork_candidate(source,original,uids,options){candidates.push(v);}}}
-            if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}
             if strength==3 && original.stitch_count()>=12_000 {
                 if !options.exhausted(){if let Some(v)=automatic_texture_candidate(source,uids,options){candidates.push(v);}}
-                if let Some(v)=combined_economy_candidate(source,original,uids,options){candidates.push(v);}
-                if !options.exhausted(){if let Some(v)=economical_fill_candidate(source,original,uids,5,0.0){candidates.push(v);}}
+                if let Some(v)=combined_economy_candidate(source,original,uids,options,4){candidates.push(v);}
+                if !options.exhausted(){if let Some(v)=economical_fill_candidate(source,original,uids,4,0.0){candidates.push(v);}}
                 if !options.exhausted(){
                     if let Some(doc)=union_redundant_fills(source,uids,options){
                         let plan=doc.plan();
-                        if !options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.0){if uids.is_none(){candidates.push(v);}}}
+                        if !options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,4,0.0){if uids.is_none(){candidates.push(v);}}}
                         candidates.push((doc,plan));
                     }
                 }
@@ -1386,7 +1414,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             if strength==3{if let Some(v)=remove_covered_fill_candidate(source,uids,options){candidates.push(v);}}
             if strength>=2{if let Some(v)=narrow_artwork_candidate(source,original,uids,options){candidates.push(v);}}
             if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
-            if strength==3{if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){candidates.push(v);}}candidates.push((doc,plan));}}
+            if strength==3{if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,4,0.){candidates.push(v);}}candidates.push((doc,plan));}}
         }
         if options.solid||options.merge||options.auto_types||options.lighter_underlay{
             let radii:&[f64]=if options.solid&&strength>=3{&[4.0,8.0,12.0]}else if options.solid&&strength==2{&[2.0,4.0]}else{&[2.0]};
@@ -1424,14 +1452,6 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             }
         }
         }
-        let before=measure_stitches(original);let a=original.bounds();
-        let eligible=|d:&Design|{let b=d.bounds();let after=measure_stitches(d);
-            d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&seconds(d)<seconds(original)
-            &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero
-            &&a.min.dist(b.min)<=5.0&&a.max.dist(b.max)<=5.0
-            &&optimization_quality(original,d,speed,trim).coverage>=if strength==1{95.}else if strength==2{90.}else{85.}
-            &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
-        };
         candidates.retain(|(_,d)|eligible(d));
         candidates.sort_by(|(_,a),(_,b)|{
             let rank=|d:&Design|{
@@ -1453,7 +1473,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
                     &&target.is_none_or(|t|seconds(&design)<=t){break}
                 let candidate=match stage{
                     0=>remove_covered_fill_candidate(&doc,uids,options),
-                    1=>economical_fill_candidate(&doc,&design,uids,5,0.),
+                    1=>economical_fill_candidate(&doc,&design,uids,4,0.),
                     2=>narrow_artwork_candidate(&doc,&design,uids,options),
                     _=>economical_fill_candidate(&doc,&design,uids,3,0.),
                 };
@@ -3119,34 +3139,48 @@ async fn insert_approved_design(file:String,x_mm:f64,y_mm:f64,app:tauri::AppHand
 }
 // Compare against the same digitized source without changing the editor.
 #[tauri::command]
-async fn compare_digitizer_draft(id:u64,quick:Option<bool>,app:tauri::AppHandle)->Result<Vec<SimplifyVariant>,String>{
+async fn compare_digitizer_draft(id:u64,quick:Option<bool>,target_stitches:Option<usize>,app:tauri::AppHandle)->Result<Vec<SimplifyVariant>,String>{
     use tauri::Manager;
     tauri::async_runtime::spawn_blocking(move||{
         let state=app.state::<Mutex<Workspace>>();
-        let (doc,original)={
+        let quick=quick.unwrap_or(true);
+        let target_stitches=target_stitches.unwrap_or(10_000).clamp(500,200_000);
+        let (doc,original,mut alternatives)={
             let w=state.lock().map_err(|e|e.to_string())?;
             let d=w.digitizer_draft.as_ref().filter(|d|d.id==id).ok_or("Digitizing draft expired")?;
-            (d.document.clone(),d.design.clone())
+            let alternatives=if quick { Vec::new() } else { d.alternatives.iter().filter(|v| matches!(v.0,2|3)).cloned().collect() };
+            (d.document.clone(),d.design.clone(),alternatives)
         };
-        let mut variants=Vec::new();let mut alternatives=Vec::new();
-        let quick=quick.unwrap_or(true);let strengths:&[u8]=if quick{&[2,3]}else{&[1,2,3,4,5]};
+        let describe=|strength,plan:&Design| SimplifyVariant {
+            strength,plan:Some(preview(plan)),reason:None,quality:Some(optimization_quality(&original,plan,800.,3.)),
+        };
+        let mut variants:Vec<_>=alternatives.iter().map(|(strength,_,plan)|describe(*strength,plan)).collect();
+        let budget=SimplifyBudget::new(std::time::Duration::from_secs(10));
+        let strengths:&[u8]=if quick { &[2,3] } else { &[5,4,1] };
         for &strength in strengths {
-            if strength>=4{
-                match if strength==4{choose_silhouette(&doc,&original,None,&SimplifyOptions::default())}else{choose_fast_stitch(&doc,&original,None,&SimplifyOptions::default())}{
-                    Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None,quality:Some(optimization_quality(&original,&plan,800.,3.))});alternatives.push((strength,d,plan));}
-                    Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
+            if budget.exhausted(){break}
+            let options=SimplifyOptions{
+                quick,solid:strength==3,merge:strength>=2,auto_types:strength>=2,
+                target_stitches:Some(target_stitches),budget:Some(budget.clone()),..Default::default()
+            };
+            let variant=match strength {
+                4=>choose_silhouette(&doc,&original,None,&options),
+                5=>choose_fast_stitch(&doc,&original,None,&options),
+                _=>choose_simplification(&doc,&original,strength,None,false,&options),
+            };
+            match variant {
+                Ok((d,plan))=>{
+                    variants.push(describe(strength,&plan));
+                    alternatives.push((strength,d,plan));
                 }
-                continue
-            }
-            let options=SimplifyOptions{quick,solid:strength==3,merge:strength>=2,auto_types:strength>=2,target_stitches:Some(10_000),..Default::default()};
-            match choose_simplification(&doc,&original,strength,None,strength==3,&options){
-                Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None,quality:Some(optimization_quality(&original,&plan,800.,3.))});alternatives.push((strength,d,plan));}
-                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
+                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None}),
             }
         }
+        variants.sort_by_key(|v|v.strength);
         let mut w=state.lock().map_err(|e|e.to_string())?;
         let d=w.digitizer_draft.as_mut().filter(|d|d.id==id).ok_or("A newer artwork replaced this draft")?;
-        d.alternatives=alternatives;Ok(variants)
+        d.alternatives=alternatives;
+        Ok(variants)
     }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
@@ -3579,6 +3613,34 @@ fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::ne
 
 #[cfg(test)]
 mod fixed_resize_tests {
+    #[test]
+    fn automatic_logo_preview_can_meet_a_ten_thousand_stitch_goal() {
+        use zigzag::document::Document;
+        let mut source = Document::from_svg(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="90mm" viewBox="0 0 120 90">
+            <rect id="badge" x="4" y="4" width="112" height="82" rx="8" fill="navy"/>
+            <path id="initials" fill="white" fill-rule="evenodd"
+            d="M18 28H45V62H18Z M25 36H38V54H25Z M62 28H101V36H87V62H76V36H62Z"/>
+            </svg>"#, "Dense badge lettering", None,
+        ).unwrap();
+        source.shapes[0].params.spacing = Some(0.22);
+        source.shapes[0].params.len = Some(1.6);
+        source.shapes[1].groups.push("tl-small-ink-detail".into());
+        source.sync().unwrap();
+        assert!(source.shapes[1].groups.iter().any(|group|group=="tl-small-ink-detail"));
+        let original = source.plan();
+        let options = super::SimplifyOptions { quick: true, target_stitches: Some(10_000), ..Default::default() };
+        let (document, candidate) = super::choose_simplification(&source, &original, 3, None, false, &options).unwrap();
+        eprintln!("Badge stitch count: {} → {}", original.stitch_count(), candidate.stitch_count());
+        assert!(original.stitch_count() > 20_000);
+        assert!(candidate.stitch_count() <= 10_000);
+        assert!(candidate.trim_count() <= original.trim_count());
+        assert!(super::optimization_quality(&original, &candidate, 800., 3.).coverage >= 85.);
+        assert_eq!(document.shapes[1].params, source.shapes[1].params);
+        assert!(original.blocks.iter().map(|block|block.color).eq(candidate.blocks.iter().map(|block|block.color)));
+        assert!(document.shapes[0].params.fill_spacing(&document.plan_options().fabric) <= 0.55);
+    }
+
     #[test]
     fn maximum_refines_a_dense_fill_beyond_one_pass() {
         let mut source = zigzag::document::Document::from_svg(
