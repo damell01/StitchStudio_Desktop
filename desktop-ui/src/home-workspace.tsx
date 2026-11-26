@@ -1,6 +1,6 @@
 import {invoke} from '@tauri-apps/api/core';
 import {
-  ArrowRight, FileText, FolderOpen, History, ImagePlus, Layers3, LayoutTemplate,
+  ArrowRight, BookOpen, FileText, FolderOpen, History, ImagePlus, Layers3, LayoutTemplate,
   Library, Plus, Scissors, Settings, Shapes, Shield, Sparkles, Type,
 } from 'lucide-react';
 import {useEffect,useState} from 'react';
@@ -15,6 +15,7 @@ type Props = {
   navigate:(page:string)=>void;
   studio:(assistant?:boolean)=>void;
   projects:()=>void;
+  onArtworkDrop:(file:File)=>void;
 };
 
 const quickCreate = [
@@ -29,12 +30,14 @@ const resources = [
   {page:'Font Manager',label:'Fonts',Icon:Type},
   {page:'Thread Library',label:'Threads',Icon:Scissors},
   {page:'Machine Manager',label:'Machines & hoops',Icon:Settings},
+  {page:'Help Center',label:'How-to guides',Icon:BookOpen},
 ] as const;
 
-export function HomeWorkspace({navigate,studio,projects}:Props) {
+export function HomeWorkspace({navigate,studio,projects,onArtworkDrop}:Props) {
   const [overview,setOverview]=useState<Overview>({current:null,recovery:false});
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
+  const [dragging,setDragging]=useState(false);
   useEffect(()=>{
     let active=true;
     void invoke<Overview>('workspace_overview').then(status=>{if(active&&status)setOverview(status);}).catch(()=>{});
@@ -78,10 +81,18 @@ export function HomeWorkspace({navigate,studio,projects}:Props) {
   }
 
   return <div className="studio-home">
-    <section className="studio-home-hero" aria-labelledby="studio-home-title">
+    <section className="studio-home-hero" aria-labelledby="studio-home-title" data-dragging={dragging||undefined}
+      onDragOver={event=>{if(event.dataTransfer.types.includes('Files')){event.preventDefault();event.dataTransfer.dropEffect=busy?'none':'copy';if(!busy)setDragging(true);}}}
+      onDragLeave={event=>{if(!(event.relatedTarget instanceof Node)||!event.currentTarget.contains(event.relatedTarget))setDragging(false)}}
+      onDrop={event=>{
+        if(!event.dataTransfer.types.includes('Files'))return;
+        event.preventDefault();setDragging(false);
+        const file=event.dataTransfer.files[0];
+        if(!busy&&file)onArtworkDrop(file);
+      }}>
       <div className="studio-home-hero-content">
         <h1 id="studio-home-title">Start a design</h1>
-        <p>Turn your artwork into stitches, or start with a blank hoop.</p>
+        <p>{dragging?'Drop to preview your stitches.':'Drop an image here to digitize it, or start with a blank hoop.'}</p>
         <div className="studio-home-primary">
           <button className="primary" disabled={busy} onClick={()=>navigate('Digitize an image')}><ImagePlus size={19}/> Digitize artwork <ArrowRight size={16}/></button>
           <button disabled={busy} onClick={()=>void open('blank')}><Plus size={19}/> Blank design</button>

@@ -22,6 +22,7 @@ import './editor-frame.css';
 import {ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {CommandPalette,type Command} from './command-palette';
 import {InsertDesignDialog} from './insert-design-dialog';
+import {EditorDigitizer} from './editor-digitizer';
 import {confirmAction,toast} from './dialogs';
 import {ExportCenter} from './export-center';
 import {readThreads} from './threads';
@@ -112,6 +113,8 @@ const selectionIds=multi.filter(id=>objects.some(o=>o.uid===id&&!o.locked&&!o.hi
 const [nudgeStep,setNudgeStep]=useState(1);
 const lockedObjects=useMemo(()=>objects.filter(object=>object.locked||object.hidden).map(object=>object.uid),[objects]);
 const [dragLayer,setDragLayer]=useState<number|null>(null);
+const [artworkImport,setArtworkImport]=useState<{file:File|null}|null>(null);
+const [artworkDrag,setArtworkDrag]=useState(false);
 const [dropLayer,setDropLayer]=useState<{uid:number;direction:'before'|'after'}|null>(null);
 const [renameDraft,setRenameDraft]=useState('');
 const [marquee,setMarquee]=useState<{x:number;y:number;w:number;h:number}|null>(null);
@@ -1137,6 +1140,10 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <h1 title={plan?.name || 'Untitled design'}>{plan?.name || 'Untitled design'}</h1>
   </div>
   <EditorHelp/>
+  <EditorDigitizer active={artworkImport} onOpen={()=>setArtworkImport({file:null})} onClose={()=>setArtworkImport(null)} disabled={busy} onInsert={async(id,strength)=>{
+    const result=await invoke<Plan>('insert_digitizer_draft',{id,strength});
+    setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);
+  }}/>
   <div className="studio-command-group">
     <button className="studio-tool-icon" title="Open artwork" aria-label="Open artwork" disabled={busy} onClick={open}><FolderOpen size={18}/></button>
     <button className="studio-insert-action" title="Insert design (Ctrl+I or Cmd+I)" aria-label="Insert design" disabled={busy} onClick={openInsertDialog}><FilePlus size={18}/><span>Insert design</span></button>
@@ -1178,6 +1185,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {label:stitchGuides.data?.textForm==='outlines'?'Restore editable text':'Convert lettering to outlines',group:'Lettering',run:changeTextForm,disabled:busy||!stitchGuides.data?.textForm},
     {label:'Add Text',group:'Create',run:()=>openText(),disabled:busy},
     {label:'Insert design',group:'File',run:openInsertDialog,disabled:busy},
+    {label:'Import image and digitize',group:'File',run:()=>setArtworkImport({file:null}),disabled:busy},
     {label:'Duplicate selection',group:'Edit',run:()=>editSelection({kind:'duplicate'}),disabled:busy||!selected},
     {label:'Delete selection',group:'Edit',run:()=>void deleteDesign(),disabled:busy||!deletionTarget()},{label:'Clear canvas',group:'Edit',run:()=>void deleteDesign(true),disabled:busy||!plan?.stitches},
     {label:'Rotate selection',group:'Edit',run:()=>editSelection({kind:'rotate'}),disabled:busy||!selected},
@@ -1322,7 +1330,21 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     </LayerDialog>
   </div>
 </article>
-{left&&panelResizeHandle("left")}{right&&panelResizeHandle("right")}<article className="canvas-panel">
+{left&&panelResizeHandle("left")}{right&&panelResizeHandle("right")}<article className="canvas-panel"
+  onDragOver={event=>{
+    if(!event.dataTransfer.types.includes('Files'))return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect=busy?'none':'copy';
+    if(!busy)setArtworkDrag(true);
+  }}
+  onDragLeave={event=>{if(!(event.relatedTarget instanceof Node)||!event.currentTarget.contains(event.relatedTarget))setArtworkDrag(false)}}
+  onDrop={event=>{
+    if(!event.dataTransfer.types.includes('Files'))return;
+    event.preventDefault();
+    setArtworkDrag(false);
+    if(!busy&&event.dataTransfer.files[0])setArtworkImport({file:event.dataTransfer.files[0]});
+  }}>
+{artworkDrag&&<div className="canvas-artwork-drop" role="status">Drop an image to digitize</div>}
 <div className={`studio-camera studio-camera-docked ${cameraTop?'studio-camera-top':'studio-camera-bottom'}`} role="group" aria-label="Canvas view">
   <button className="studio-tool-icon camera-dock-grip" title="Move camera controls to the top or bottom"
     aria-label={cameraTop?'Move camera controls to bottom':'Move camera controls to top'}

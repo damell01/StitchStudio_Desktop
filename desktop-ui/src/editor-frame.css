@@ -213,3 +213,18 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
   align-items: end;
   gap: 8px;
 }
+
+.editor-digitizer.studio-modal { width: min(1380px, calc(100vw - 32px)); }
+.canvas-artwork-drop {
+  position: absolute;
+  z-index: 3;
+  inset: 10px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--brand-accent);
+  border-radius: 12px;
+  color: var(--brand);
+  background: var(--workspace-surface);
+  font-weight: 700;
+  pointer-events: none;
+}

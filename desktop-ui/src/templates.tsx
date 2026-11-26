@@ -137,6 +137,8 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   ) && matchesName([template.name, template.category, ...(template.tags ?? [])].join(' '), query))
     .sort((a,b)=>category==='Recent'?recent.indexOf(a.id)-recent.indexOf(b.id):compareNames(a.name,b.name));
   const page=usePagedList(results,JSON.stringify([query,category]));
+  const [limit,setLimit]=useState(36);
+  const shown = onPreview ? results.slice(0,limit) : page.items;
 
   function choose(id: string) {
     const next = [id, ...recent.filter(previous => previous !== id)].slice(0, 20);
@@ -155,15 +157,15 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   return <>
     {!insert&&!onPreview&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All','Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>setCategory(item)}>{item}</button>)}</div>}
     <div className="library-filters">
-      <label className="library-search"><Search size={16} /><input aria-label="Search templates" placeholder="Search templates" value={query} onChange={event => setQuery(event.target.value)} /></label>
-      <label>Category <select value={category} onChange={event => setCategory(event.target.value)}>
+      <label className="library-search"><Search size={16} /><input aria-label="Search templates" placeholder="Search templates" value={query} onChange={event => {setQuery(event.target.value);setLimit(36);}} /></label>
+      <label>Category <select value={category} onChange={event => {setCategory(event.target.value);setLimit(36);}}>
         {['All', 'Favorites', 'Recent', ...new Set(templates.map(template => template.category))].map(item => <option key={item}>{item}</option>)}
       </select></label>
       <small>{results.length} {results.length === 1 ? 'design' : 'designs'}</small>
     </div>
     {results.length === 0 && <p role="status">No designs match your search.</p>}
     <section className="template-grid" aria-label="Template results">
-      {page.items.map(template => <article key={template.id}>
+      {shown.map(template => <article key={template.id}>
         <button className="design-favorite" title="Toggle favorite"
           aria-label={(favorites.includes(template.id) ? 'Remove favorite ' : 'Favorite ') + template.name}
           aria-pressed={favorites.includes(template.id)} onClick={() => favorite(template.id)}>
@@ -178,7 +180,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
         </button>
       </article>)}
     </section>
-    <ListNavigation {...page}/>
+    {onPreview ? results.length>limit&&<button onClick={()=>setLimit(previous=>previous+36)}>Show more templates</button> : <ListNavigation {...page}/>}
     {selected && <TemplatePreview template={selected} insert={insert} widthMm={widthMm}
       onCancel={() => setSelected(null)} onChoose={() => choose(selected.id)} />}
   </>;

@@ -17,12 +17,14 @@ The [desktop build and packaging guide](docs/DESKTOP.md) has local commands for 
 
 ## Start your first project
 
-1. On **Home**, choose **Digitize artwork** and select or drop an image. Stitch Studio generates a preview automatically.
+1. Drop an image on **Home**, or choose **Digitize artwork** and browse for it. Stitch Studio generates a preview automatically.
 2. Compare the artwork and stitches, set the intended width and fabric, then choose **Open in design studio**.
-3. Save a `.stitchstudio` project. Use **Insert design** to add a template or a saved machine file to the same project.
+3. Save a `.stitchstudio` project. Use **Insert design** to add a template or saved machine file. To digitize new artwork in the open project, drop an image on the canvas or use **Import image and digitize**, then choose **Add to current design**.
 4. Check hoop fit and open **Thread order** to review the blocks. Choose **Export design** and select a format your machine accepts. Test sew a new design on matching scrap fabric.
 
 Use **?** in the editor toolbar to search how-to guides and view screenshots while your project stays open. Digitize, Lettering, and Appliqué also have a **?** for help with that tool. Open **Help → Help Center** for the visual stitch reference or to restart the optional tour.
+
+In **Font Manager**, drop TTF or OTF files onto the import area to use them in Stitch Studio lettering. BX files can be stored in the library.
 
 ## Automatic updates
 

@@ -2858,6 +2858,70 @@ fn font_assets(app:tauri::AppHandle)->Result<Vec<FontAsset>,String>{
 }
 #[derive(serde::Serialize,Default)]
 struct FontImport {imported:usize,duplicates:usize,skipped:usize,errors:Vec<String>}
+static FONT_IMPORT_LOCK: Mutex<()> = Mutex::new(());
+
+fn store_font(dir: &std::path::Path, file: &std::path::Path, bytes: &[u8], result: &mut FontImport) {
+    use std::io::Write;
+    let ext = file.extension().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase();
+    if bytes.is_empty() || bytes.len() > 50_000_000 || !matches!(ext.as_str(), "ttf" | "otf" | "bx") {
+        result.skipped += 1;
+        return;
+    }
+    if ext != "bx" && !zigzag::svg::valid_font_bytes(bytes.to_vec()) {
+        result.errors.push(format!("{}: no supported font faces", file.display()));
+        return;
+    }
+    let stem = file.file_stem().unwrap_or_default().to_string_lossy();
+    let _guard = FONT_IMPORT_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+    for attempt in 0..=10_000 {
+        let name = if attempt == 0 {format!("{stem}.{ext}")} else {format!("{stem} ({attempt}).{ext}")};
+        let dest = dir.join(name);
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&dest) {
+            Ok(mut output) => {
+                if let Err(err) = output.write_all(bytes) {
+                    drop(output);
+                    let _ = std::fs::remove_file(&dest);
+                    result.errors.push(err.to_string());
+                } else {
+                    result.imported += 1;
+                    zigzag::svg::invalidate_app_fonts();
+                }
+                return;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                if std::fs::symlink_metadata(&dest).is_ok_and(|meta| {
+                    meta.file_type().is_file() && meta.len() == bytes.len() as u64
+                }) && std::fs::read(&dest).ok().as_deref() == Some(bytes) {
+                    result.duplicates += 1;
+                    return;
+                }
+            }
+            Err(err) => {
+                result.errors.push(err.to_string());
+                return;
+            }
+        }
+    }
+    result.errors.push("Too many filename conflicts".into());
+}
+
+#[tauri::command]
+async fn import_dropped_font(name: String, bytes: Vec<u8>, app: tauri::AppHandle) -> Result<FontImport, String> {
+    let path = std::path::Path::new(&name);
+    if path.components().count() != 1
+        || !matches!(path.components().next(), Some(std::path::Component::Normal(_)))
+        || name.contains(['/', '\\', ':'])
+    {
+        return Err("Invalid font filename".into());
+    }
+    let dir = font_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut result = FontImport::default();
+        store_font(&dir, std::path::Path::new(&name), &bytes, &mut result);
+        result
+    }).await.map_err(|err| err.to_string())
+}
+
 #[tauri::command]
 async fn import_fonts(folder:bool,app:tauri::AppHandle)->Result<Option<FontImport>,String>{
  let paths=if folder{let Some(p)=rfd::AsyncFileDialog::new().pick_folder().await else{return Ok(None)};vec![p.path().to_owned()]}else{let Some(p)=rfd::AsyncFileDialog::new().add_filter("Font files",&["bx","ttf","otf"]).pick_files().await else{return Ok(None)};p.into_iter().map(|p|p.path().to_owned()).collect()};
@@ -2871,13 +2935,7 @@ async fn import_fonts(folder:bool,app:tauri::AppHandle)->Result<Option<FontImpor
  let ext=p.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
  if !meta.is_file()||!["bx","ttf","otf"].contains(&ext.as_str())||meta.len()>50_000_000||meta.len()==0{result.skipped+=1;continue}
  let bytes=match std::fs::read(&p){Ok(b)=>b,Err(e)=>{result.errors.push(e.to_string());continue}};
- let stem=p.file_stem().unwrap_or_default().to_string_lossy();
- let mut n=0;loop{let name=if n==0{format!("{stem}.{ext}")}else{format!("{stem} ({n}).{ext}")};let dest=dir.join(name);
- match std::fs::OpenOptions::new().write(true).create_new(true).open(&dest){
- Ok(mut f)=>{use std::io::Write;if let Err(e)=f.write_all(&bytes){let _=std::fs::remove_file(&dest);result.errors.push(e.to_string())}else{result.imported+=1}break},
- Err(e) if e.kind()==std::io::ErrorKind::AlreadyExists=>{if std::fs::read(&dest).ok().as_deref()==Some(bytes.as_slice()){result.duplicates+=1;break}n+=1;if n>10000{result.errors.push("Too many filename conflicts".into());break}},
- Err(e)=>{result.errors.push(e.to_string());break}
- }}
+ store_font(&dir, &p, &bytes, &mut result);
  }Some(result)
  }).await.map_err(|e|e.to_string())
 }
@@ -2886,8 +2944,11 @@ fn remove_font_asset(app:tauri::AppHandle,file:String)->Result<(),String>{
  let p=std::path::Path::new(&file);
  if p.components().count()!=1||!matches!(p.components().next(),Some(std::path::Component::Normal(_)))||!["bx","ttf","otf"].contains(&p.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase().as_str()){return Err("Invalid font filename".into())}
  let target=font_dir(&app)?.join(p);
+ let _guard = FONT_IMPORT_LOCK.lock().unwrap_or_else(|err| err.into_inner());
  if !std::fs::symlink_metadata(&target).map_err(|e|e.to_string())?.file_type().is_file(){return Err("Not a regular font file".into())}
- std::fs::remove_file(target).map_err(|e|e.to_string())
+ std::fs::remove_file(target).map_err(|e|e.to_string())?;
+ zigzag::svg::invalidate_app_fonts();
+ Ok(())
 }
 #[derive(serde::Serialize)]
 struct ArtworkInput{name:String,mime:String,bytes:Vec<u8>}
@@ -3444,6 +3505,29 @@ fn apply_digitizer_draft(id: u64, strength: Option<u8>, state: tauri::State<'_, 
     workspace.source = Some(document);
     Ok(())
 }
+#[tauri::command]
+async fn insert_digitizer_draft(id: u64, strength: u8, app: tauri::AppHandle) -> Result<Preview, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|err| err.to_string())?;
+        let draft = workspace.digitizer_draft.as_ref()
+            .filter(|draft| draft.id == id)
+            .ok_or("This draft expired. Regenerate stitches before inserting it.")?;
+        let document = if strength == 0 {
+            &draft.document
+        } else {
+            &draft.alternatives.iter().find(|(level, _, _)| *level == strength)
+                .ok_or("Selected preview is unavailable")?.1
+        };
+        let xml = document.to_svg().map_err(|err| err.to_string())?;
+        let name = document.name.clone();
+        let result = insert_editable_artwork(&mut workspace, &xml, &name, 0.0, 0.0, false)?;
+        workspace.digitizer_draft = None;
+        Ok(result)
+    }).await.map_err(|err| err.to_string())?
+}
+
 #[derive(serde::Serialize)]
 struct LibraryEntry {file:String,name:String,stitches:usize,colors:usize,width:f64,height:f64,modified:u64,created:Option<u64>}
 #[tauri::command]
@@ -3833,7 +3917,7 @@ async fn open_prepared_bundled_design(id:String,app:tauri::AppHandle)->Result<Op
         project.restore(&state)
     }).await.map_err(|e|e.to_string())?
 }
-fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,local_assistant::bundled_assistant_ready,local_assistant::interpret_with_local_model,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_multiple_formats, export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,get_routing_settings, set_routing_settings, get_specialty_settings, set_specialty_settings, copy_stitch_properties, set_sewing_commands, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,local_assistant::bundled_assistant_ready,local_assistant::interpret_with_local_model,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_multiple_formats, export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,get_routing_settings, set_routing_settings, get_specialty_settings, set_specialty_settings, copy_stitch_properties, set_sewing_commands, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,import_dropped_font,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,insert_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {

@@ -120,16 +120,56 @@ pub fn load_file(path: &std::path::Path) -> Result<Vec<Shape>> {
     load(&data)
 }
 
-pub fn fontdb() -> std::sync::Arc<usvg::fontdb::Database> {
+type FontDatabase = std::sync::Arc<usvg::fontdb::Database>;
+
+static APP_FONT_DIRECTORY: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+static APP_FONTS: std::sync::Mutex<Option<FontDatabase>> = std::sync::Mutex::new(None);
+
+/// Configure a private font library for this process before rendering text.
+pub fn set_app_font_directory(path: std::path::PathBuf) {
+    let _ = APP_FONT_DIRECTORY.set(path);
+}
+
+pub fn invalidate_app_fonts() {
+    *APP_FONTS.lock().unwrap_or_else(|err| err.into_inner()) = None;
+}
+
+pub fn valid_font_bytes(bytes: Vec<u8>) -> bool {
+    let mut db = usvg::fontdb::Database::new();
+    db.load_font_data(bytes);
+    db.faces().next().is_some()
+}
+
+pub fn fontdb() -> FontDatabase {
     // Loading system fonts is slow; do it once per process.
-    static DB: std::sync::OnceLock<std::sync::Arc<usvg::fontdb::Database>> =
-        std::sync::OnceLock::new();
-    DB.get_or_init(|| {
+    static SYSTEM: std::sync::OnceLock<FontDatabase> = std::sync::OnceLock::new();
+    let base = SYSTEM.get_or_init(|| {
         let mut db = usvg::fontdb::Database::new();
         db.load_system_fonts();
         std::sync::Arc::new(db)
-    })
-    .clone()
+    });
+    let Some(directory) = APP_FONT_DIRECTORY.get() else {
+        return base.clone();
+    };
+    let mut cache = APP_FONTS.lock().unwrap_or_else(|err| err.into_inner());
+    cache.get_or_insert_with(|| {
+        let mut paths: Vec<_> = std::fs::read_dir(directory).into_iter().flatten()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|ext| ext.to_str())
+                .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "ttf" | "otf")))
+            .collect();
+        paths.sort();
+        if paths.is_empty() {
+            return base.clone();
+        }
+        let mut db = (**base).clone();
+        for path in paths {
+            let _ = db.load_font_file(path);
+        }
+        std::sync::Arc::new(db)
+    }).clone()
 }
 
 /// The font database for parsing one SVG: the system fonts only when it

@@ -2,14 +2,17 @@
 use tauri_plugin_updater::UpdaterExt;
 
 pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    let builder = builder.setup(|app| {
+    builder.setup(|app| {
+        use tauri::Manager;
+        if let Ok(directory) = app.path().app_local_data_dir() {
+            zigzag::svg::set_app_font_directory(directory.join("fonts"));
+        }
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
         if configured(app.handle()) {
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
         }
         Ok(())
-    });
-    builder
+    })
 }
 
 fn configured(app: &tauri::AppHandle) -> bool {

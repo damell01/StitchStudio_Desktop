@@ -1,5 +1,5 @@
 .studio-insert {
-  width: min(940px, calc(100vw - 24px));
+  width: min(1320px, calc(100vw - 24px));
   max-width: none;
   max-height: calc(100dvh - 24px);
   padding: 0;
@@ -32,9 +32,9 @@
 
 .studio-insert-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 230px;
+  grid-template-columns: minmax(0, 1fr) 260px;
   min-height: 0;
-  max-height: 62dvh;
+  max-height: 76dvh;
 }
 
 .studio-insert-library, .studio-insert-placement {

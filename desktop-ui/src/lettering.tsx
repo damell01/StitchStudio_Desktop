@@ -1,24 +1,24 @@
 import {confirmAction} from './dialogs';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import './lettering.css';
-import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
+import {compareNames,matchesName} from './list-navigation';
 import {FilePlus,Plus,Search,Type} from 'lucide-react';
 import {invoke} from '@tauri-apps/api/core';
 function FontPicker({fonts,selected,choose}:{fonts:string[];selected:string;choose:(font:string)=>void}) {
   const dialog=useRef<HTMLDialogElement>(null);
   const [query,setQuery]=useState('');
   const filtered=fonts.filter(font=>matchesName(font,query)).sort(compareNames);
-  const page=usePagedList(filtered,query,10);
+  const [limit,setLimit]=useState(36);
   return <>
     <button onClick={()=>dialog.current?.showModal()} disabled={!fonts.length} aria-label="Choose font"><Type size={16}/> {selected||'Choose font'}</button>
-    <dialog className="studio-modal font-picker" ref={dialog} aria-label="Choose an installed font">
-      <div className="studio-modal-heading"><h2>Choose an installed font</h2><button onClick={()=>dialog.current?.close()}>Close</button></div>
-      <label className="library-search"><Search size={16}/><input autoFocus placeholder="Search fonts" aria-label="Find installed fonts" value={query} onChange={event=>setQuery(event.target.value)}/></label>
+    <dialog className="studio-modal font-picker" ref={dialog} aria-label="Choose a lettering font">
+      <div className="studio-modal-heading"><h2>Choose a lettering font</h2><button onClick={()=>dialog.current?.close()}>Close</button></div>
+      <label className="library-search"><Search size={16}/><input autoFocus placeholder="Search fonts" aria-label="Find installed fonts" value={query} onChange={event=>{setQuery(event.target.value);setLimit(36);}}/></label>
       {!filtered.length&&<p role="status">No installed fonts match.</p>}
-      <div className="font-picker-results">{page.items.map(font=><button aria-pressed={font===selected} key={font} onClick={()=>{choose(font);dialog.current?.close();}}>
+      <div className="font-picker-results">{filtered.slice(0,limit).map(font=><button aria-pressed={font===selected} key={font} onClick={()=>{choose(font);dialog.current?.close();}}>
         <span style={{fontFamily:font}}>Aa</span>{font}
       </button>)}</div>
-      <ListNavigation {...page}/>
+      {filtered.length>limit&&<button onClick={()=>setLimit(previous=>previous+36)}>Show more fonts</button>}
     </dialog>
   </>;
 }

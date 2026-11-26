@@ -87,7 +87,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
   const [category,setCategory]=useState('all');
   const [files, setFiles] = useState<string[]>([]);
   const [query, setQuery] = useState('');
-  const approvedPage=usePagedList(approved.filter(p=>matchesName(p.name+' '+(p.category??'Uncategorized'),query)&&(category==='all'||(p.category??'Uncategorized')===category)).sort((a,b)=>compareNames(a.name,b.name)),JSON.stringify([query,category]),12);
+  const approvedPage=usePagedList(approved.filter(p=>matchesName(p.name+' '+(p.category??'Uncategorized'),query)&&(category==='all'||(p.category??'Uncategorized')===category)).sort((a,b)=>compareNames(a.name,b.name)),JSON.stringify([query,category]),36);
   const [width, setWidth] = useState('2');
   const [artAspect,setArtAspect]=useState<number|null>(null);
   const selectedArt=selection?.source==='artwork'?selection.art:null;
@@ -109,7 +109,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const lock = useRef(false);
-  const page = usePagedList(files.filter(file => matchesName(file, query)).sort(compareNames), query, 10);
+  const page = usePagedList(files.filter(file => matchesName(file, query)).sort(compareNames), query, 36);
   const widthMm = Number(width) * MM_PER_INCH;
   const widthValid = widthMm >= 5 && widthMm <= 250;
   const xMm = offset ? Number(x) * MM_PER_INCH : 0;
