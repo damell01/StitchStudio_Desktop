@@ -99,3 +99,43 @@ test('the offline assistant previews requests and runs only the confirmed change
   await expect(conversation).toContainText('Change skipped.');
   expect(await mutations()).toHaveLength(2);
 });
+
+test('bundled model and MCP advice still need approval before editing', async ({page})=>{
+  await page.addInitScript(()=>{
+    localStorage.setItem('studio-tour-seen','1');
+    const calls:string[]=[];
+    let incoming:string|null='Center design';
+    const plan={name:'Badge',stitches:400,trims:1,blocks:[{color:[88,52,108],runs:[[[0,0],[8,8]]]}]};
+    Object.assign(window,{assistantModelCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>) {
+      calls.push(command);
+      if(command==='current_preview'||command==='center_design')return plan;
+      if(command==='editable_objects')return [];
+      if(command==='interpret_with_local_model')return 'Center design';
+      if(command==='agent_bridge_edit'){
+        const result=incoming;
+        if(args.consume)incoming=null;
+        return result;
+      }
+      return null;
+    }}});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await page.getByRole('button',{name:'Offline design assistant'}).click();
+  const dialog=page.getByRole('dialog',{name:'Design assistant'});
+  const prompt=dialog.getByRole('textbox',{name:'Ask the design assistant'});
+  await prompt.fill('The badge needs to sit right in the middle of the frame');
+  await prompt.press('Enter');
+  const proposal=dialog.getByRole('region',{name:'Proposed change'});
+  await expect(proposal).toContainText('center of the current hoop');
+  const calls=()=>page.evaluate(()=>(window as unknown as {assistantModelCalls:string[]}).assistantModelCalls);
+  expect(await calls()).toContain('interpret_with_local_model');
+  expect(await calls()).not.toContain('center_design');
+  await dialog.getByRole('button',{name:'Skip',exact:true}).click();
+
+  await dialog.getByRole('button',{name:'Review agent edit'}).click();
+  await expect(proposal).toContainText('center of the current hoop');
+  expect(await calls()).not.toContain('center_design');
+  await dialog.getByRole('button',{name:'Apply change'}).click();
+  await expect.poll(async ()=>(await calls()).filter(name=>name==='center_design')).toEqual(['center_design']);
+});

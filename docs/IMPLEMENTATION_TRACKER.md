@@ -30,7 +30,7 @@ The desktop editor uses the shared ZigZag engine. Its **Stitches** inspector ope
 | Workspace | Multiple open designs with independent undo, view and recovery, plus tabbed or floating inspectors. Desktop already has collapsible docks, project saving and a recovery copy. |
 | Machine output | Expose compatible device-transfer workflows only after model-specific testing. ZigZag's Skitch workflow is specific to that machine family. Complete desktop batch export and verify the existing machine output on the Poolin EOM. |
 
-MCP is available in the legacy studio and bridge. The Stitch Studio Desktop assistant matches supported commands locally. The editor tools above operate directly through the desktop application.
+MCP is available in the legacy studio and bridge. Stitch Studio Desktop has a separate opt-in MCP connection for design summaries and proposals. Its built-in assistant matches common commands locally and uses the packaged model to interpret unfamiliar phrasing. The editor tools above operate directly through the desktop application. Native installer checks verify the model file and runtime. Real-model response quality and external-client interoperability still need release testing.
 
 ## Phase and acceptance tracker
 

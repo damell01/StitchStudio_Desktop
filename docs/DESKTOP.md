@@ -129,6 +129,14 @@ Open a design and choose the shirt icon in the editor toolbar. Choose a T-shirt,
 
 Press **Ctrl+K** or **Cmd+K** to search pages and available editing actions. Type part of a name, then press **Enter** to run the first result. Font Manager and the lettering font picker show short pages of results. Where a name includes inches, centimeters, or millimeters, versions in the same family are sorted by physical size. Font Manager also filters by format and favorites. Template, project, character, profile, and thread lists use the same page controls.
 
+## Design assistant
+
+Windows x64 and macOS installers package a CPU-based Qwen 0.5B model and its llama.cpp runtime. The assistant uses built-in commands for familiar phrases and runs the bundled model automatically for unfamiliar wording. The model translates the request into a supported editor command on the computer. Design changes still go through the existing review and apply flow. Use **Settings → Design assistant** to turn off model interpretation.
+
+Native packaging downloads and verifies the pinned runtime and model once. The model file adds about 470 MiB before installer compression. Set `STITCH_ASSISTANT_CACHE` to a directory containing the same verified files to build from a local cache. Development builds can use the editor's built-in commands without downloading the model.
+
+To use Codex CLI or Claude Code, choose **Settings → Design assistant → Start agent connection**, select the client, and copy its setup command. Run that command on the computer running Stitch Studio. The optional connection is available over MCP on loopback and shares a limited design summary. An external agent can queue one edit, which appears under **Review agent edit** in the Studio assistant. The connection address changes after the app or connection restarts. Remove a stale client entry before registering the new address if your client requires it.
+
 ## Developer checks
 
 From the repository root:

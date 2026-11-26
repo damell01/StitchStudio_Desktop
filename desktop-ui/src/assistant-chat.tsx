@@ -1,3 +1,4 @@
+import {invoke} from '@tauri-apps/api/core';
 import {ArrowDownUp, ArrowRight, Check, CircleHelp, Clock3, Scan, Scissors, Sparkles, X} from 'lucide-react';
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import './assistant-chat.css';
@@ -82,6 +83,7 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [inputValue, setInput] = useState('');
   const [proposal, setProposal] = useState<AssistantProposal | null>(null);
+  const [external,setExternal]=useState<string|null>(null);
   const [operation, setOperation] = useState<'thinking' | 'applying' | null>(null);
 
   useEffect(() => {
@@ -91,6 +93,25 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
     input.current?.focus();
     return () => { if (element.open) element.close(); };
   }, [open]);
+
+  useEffect(()=>{
+    if(!open)return;
+    let active=true;
+    const refresh=()=>{void invoke<string|null>('agent_bridge_edit',{consume:false})
+      .then(value=>{if(active)setExternal(typeof value==='string'?value:null);}).catch(()=>{});};
+    refresh();
+    const timer=window.setInterval(refresh,1800);
+    return ()=>{active=false;window.clearInterval(timer);};
+  },[open]);
+
+  async function reviewExternal(accept:boolean) {
+    if(processing.current||busy||proposal)return;
+    try {
+      const edit=await invoke<string|null>('agent_bridge_edit',{consume:true});
+      setExternal(null);
+      if(accept&&typeof edit==='string')await request(edit);
+    } catch(error){append('Assistant',String(error));}
+  }
 
   useEffect(() => {
     if (feed.current) feed.current.scrollTop = feed.current.scrollHeight;
@@ -198,6 +219,11 @@ export function AssistantChat({open, busy, onClose, onRequest}: {
         {actions.map(({label, prompt, Icon}) => <button key={label} type="button" disabled={disabled||!!proposal}
           onClick={() => void request(prompt)}><Icon size={14} aria-hidden="true"/>{label}</button>)}
       </div>
+      {external&&<div className="studio-tools" role="group" aria-label="External agent proposal">
+        <p>External agent proposed <strong>{external}</strong></p>
+        <button disabled={busy||!!operation||!!proposal} onClick={()=>void reviewExternal(true)}>Review agent edit</button>
+        <button disabled={busy||!!operation||!!proposal} onClick={()=>void reviewExternal(false)}>Dismiss agent edit</button>
+      </div>}
       <form onSubmit={submit}>
         <label className="screen-reader-only" htmlFor="assistant-prompt">Ask the design assistant</label>
         <input id="assistant-prompt" ref={input} maxLength={160} value={inputValue} disabled={disabled||!!proposal}

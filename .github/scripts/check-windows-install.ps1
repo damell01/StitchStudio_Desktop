@@ -12,6 +12,11 @@ try {
     foreach ($path in @($program, $uninstaller, (Join-Path $target 'licenses\LICENSE'))) {
         if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing installed file: $path" }
     }
+    $model = Get-Item (Join-Path $target 'local-assistant\qwen2.5-0.5b-instruct-q4_k_m.gguf')
+    if ($model.Length -ne 491400032) { throw 'The bundled assistant model is incomplete.' }
+    $runtime = Join-Path $target 'local-assistant\runtime\llama-cli.exe'
+    & $runtime --version
+    if ($LASTEXITCODE -ne 0) { throw 'The bundled assistant runtime could not start.' }
 } finally {
     if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
         $remove = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru

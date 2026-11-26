@@ -1,3 +1,4 @@
+import {localModelEnabled} from './agent-settings';
 import {DesignIssuesDialog,PathToolsDialog,TestSwatchesDialog} from './stitch-tools';
 import {PricingCalculator} from './pricing-calculator';
 import {PathEditor} from './path-editor';
@@ -238,7 +239,17 @@ async function applySimplify(){if(!simplifyReview||busy||editLock.current)return
 
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
 async function prepareAssistant(input: string): Promise<string | AssistantProposal> {
-  const intent = assistantIntent(input);
+  let interpreted = input;
+  let intent = assistantIntent(interpreted);
+  if(!intent&&localModelEnabled()&&input.trim().length<=240){
+    try {
+      const rewritten=await invoke<string|null>('interpret_with_local_model',{prompt:input});
+      if(typeof rewritten==='string'){
+        interpreted=rewritten;
+        intent=assistantIntent(interpreted);
+      }
+    } catch {}
+  }
   if (!intent) {
     return 'I couldn’t match that request to an editor action. Try a quick action, or describe one edit with a measurement or color.';
   }
@@ -252,7 +263,7 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
       ['stabilizer', 'Match backing to the garment. Stretchy knits typically need cutaway. Test your fabric and design together.'],
       ['thread trims', 'Trims cut the thread between regions. Covered travel and color order can reduce trims.'],
     ];
-    return tips.find(([key]) => input.toLowerCase().includes(key))?.[1] ?? 'Choose a topic such as underlay or density.';
+    return tips.find(([key]) => interpreted.toLowerCase().includes(key))?.[1] ?? 'Choose a topic such as underlay or density.';
   }
   if (intent.kind === 'clearSelection') {
     setMulti([]); setSelectedObject(null); setActiveGroup(null); setContext(null);

@@ -10,3 +10,7 @@ dist/
 node_modules/
 playwright-report/
 test-results/
+
+# Pinned local assistant files staged for native packaging.
+desktop-ui/resources/local-assistant/*.gguf
+desktop-ui/resources/local-assistant/runtime/
