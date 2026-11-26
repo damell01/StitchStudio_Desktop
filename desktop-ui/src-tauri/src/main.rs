@@ -956,6 +956,7 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
     let mut longer_fill=false;
     for i in 0..doc.shapes.len(){
         if doc.records_text(i){continue}
+        if doc.layer_properties(&doc.shapes[i].id).is_some_and(|l|l.hidden||l.locked){continue}
         let shape=&mut doc.shapes[i];
         if !uids.is_none_or(|ids|ids.contains(&shape.uid))||shape.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")
             ||shape.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill||shape.params.stop==Some(true)||shape.params.trim==Some(true)
@@ -1027,10 +1028,28 @@ fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->Optim
     let overlap=overlap.min(weakest);
     OptimizationQuality{coverage:overlap*100.,density_peak:peak,seconds:optimization_seconds(plan,speed,trim)}
 }
+// Combine stitch economy with dependency-aware travel ordering. Unlike
+// individual trials this can reduce both needle count and trim overhead.
+fn combined_economy_candidate(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Option<(zigzag::document::Document,Design)>{
+    if uids.is_some()||options.exhausted(){return None}
+    use zigzag::params::Kind;
+    if source.shapes.iter().any(|s|s.params.stop==Some(true)||s.params.trim==Some(true)
+        ||matches!(s.params.kind,Some(Kind::Manual|Kind::Applique))
+        ||source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)){return None}
+    let (mut doc,_) = economical_fill_candidate(source,original,None,5,0.)
+        .or_else(||economical_fill_candidate(source,original,None,3,0.))
+        .unwrap_or_else(||(source.clone(),original.clone()));
+    if options.exhausted(){return None}
+    doc.settings.hat_order=true;
+    doc.sync().ok()?;
+    let plan=doc.plan();
+    Some((doc,plan))
+}
 fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let score=|d:&Design|optimization_seconds(d,speed,trim);
     let mut choices=Vec::new();
+    if let Some(v)=combined_economy_candidate(source,original,uids,options){choices.push(v);}
     if !options.exhausted(){if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){choices.push(v);}}choices.push((doc,plan));}}
     for angle in [0.,45.,90.] {
         if options.exhausted(){break}
@@ -1055,7 +1074,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
         &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
         &&optimization_quality(original,d,speed,trim).coverage>=85.
     });
-    choices.sort_by(|a,b|score(&a.1).total_cmp(&score(&b.1)));
+    choices.sort_by(|a,b|{let gap=|d:&Design|options.target_minutes.filter(|t|t.is_finite()&&*t>0.).map(|t|(score(d)/(t*60.)-1.).max(0.)).unwrap_or(0.)+options.target_stitches.filter(|n|*n>0).map(|n|(d.stitch_count() as f64/n as f64-1.).max(0.)).unwrap_or(0.);gap(&a.1).total_cmp(&gap(&b.1)).then_with(||score(&a.1).total_cmp(&score(&b.1)))});
     choices.into_iter().next().ok_or("No faster eligible stitch plan found".into())
 }
 /// Join selected shading fragments into a fill at the same layer position.
@@ -1222,13 +1241,14 @@ fn union_redundant_fills(source:&zigzag::document::Document,uids:Option<&[usize]
 fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
-        let seconds=|d:&Design|d.stitch_count() as f64/speed*60.0+d.trim_count() as f64*trim;
+        let seconds=|d:&Design|optimization_seconds(d,speed,trim);
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
         let mut candidates=Vec::new();
         if options.quick {
             if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}
             if strength==3 && original.stitch_count()>=12_000 {
-                if let Some(v)=economical_fill_candidate(source,original,uids,5,0.0){candidates.push(v);}
+                if let Some(v)=combined_economy_candidate(source,original,uids,options){candidates.push(v);}
+                if !options.exhausted(){if let Some(v)=economical_fill_candidate(source,original,uids,5,0.0){candidates.push(v);}}
                 if !options.exhausted(){
                     if let Some(doc)=union_redundant_fills(source,uids,options){
                         let plan=doc.plan();
