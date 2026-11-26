@@ -261,6 +261,8 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
     if(clauses.length>8)return 'Use up to eight edits in one request.';
     if(invalidField||incompatibleHoop||machineExceeded)return 'Choose a compatible hoop first.';
     const edits:Record<string,unknown>[]=[];
+    const motifs:Record<string,unknown>[]=[];
+    const lettering:Record<string,unknown>[]=[];
     for(const clause of clauses){
       const action=assistantIntent(clause);
       if(action?.kind==='moveSelected'&&movementIds.length){
@@ -269,10 +271,21 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
         const targets=objects.filter(o=>!o.hidden&&!o.locked&&o.color.join(',')===action.previous?.join(','));
         if(!targets.length)return 'No matching editable color for: '+clause;
         for(const o of targets)edits.push({type:'recolor',uid:o.uid,color:action.color});
+      }else if(action?.kind==='lettering'&&action.text){
+        const fonts=await invoke<string[]>('lettering_fonts');
+        const font=fonts.find(n=>n==='Arial')??fonts[0];
+        if(!font)return 'Install a lettering font first.';
+        lettering.push({settings:{text:action.text,font,size:action.size??15,spacing:.4,arc:0,bold:true,italic:false,color:[105,69,162],align:'center'},center:[0,0]});
+      }else if(action?.kind==='motif'&&action.text&&action.width&&action.position){
+        const artwork=await resolveMotif(action.text,action.width);
+        if('message' in artwork)return artwork.message;
+        const bounds=designBounds;
+        if(action.position!=='center'&&!bounds)return 'For a blank design, place the motif at the hoop center first.';
+        motifs.push({name:artwork.name,svg:artwork.svg,color:artwork.color??null,width:action.width,position:action.position,applique:!!action.applique,anchor:bounds?[bounds.left,bounds.top,bounds.width,bounds.height]:[0,0,0,0],field:[width,height]});
       }else{return 'This combined request contains an unsupported edit: '+clause+'. Try it separately.';}
     }
-    if(edits.length>24)return 'Select fewer objects for this combined edit.';
-    const composition={name:'Combined assistant edits',field:[width,height],motifs:[],lettering:[],edits};
+    if(edits.length+motifs.length+lettering.length>24)return 'Select fewer objects for this combined edit.';
+    const composition={name:'Combined assistant edits',field:[width,height],motifs,lettering,edits};
     const after=await invoke<Plan>('compose_assistant_design',{composition,apply:false});
     const before=plan??{name:'Blank design',stitches:0,trims:0,blocks:[]};
     const minutes=(p:Plan)=>p.stitches/sewingSpm+p.trims*trimSeconds/60+Math.max(0,p.blocks.length-1)*changeSeconds/60;
