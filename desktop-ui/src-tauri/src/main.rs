@@ -720,7 +720,7 @@ impl SimplifyBudget {
 #[serde(rename_all="camelCase",default)]
 struct SimplifyOptions {
     solid:bool, merge:bool, auto_types:bool, lighter_underlay:bool,
-    target_minutes:Option<f64>, speed:Option<f64>, trim_seconds:Option<f64>, quick:bool,
+    target_minutes:Option<f64>, target_stitches:Option<usize>, speed:Option<f64>, trim_seconds:Option<f64>, quick:bool,
     solid_only: bool,
     solid_color: Option<[u8; 3]>,
     #[serde(skip)]
@@ -1288,8 +1288,12 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         };
         candidates.retain(|(_,d)|eligible(d));
         candidates.sort_by(|(_,a),(_,b)|{
-            let rank=|d:&Design|if target.is_some_and(|t|seconds(d)<=t){(0,seconds(d))}else{(1,seconds(d))};
-            let a=rank(a);let b=rank(b);a.0.cmp(&b.0).then(a.1.total_cmp(&b.1))
+            let rank=|d:&Design|{
+                let time_gap=target.map(|t|(seconds(d)/t-1.).max(0.)).unwrap_or(0.);
+                let stitch_gap=options.target_stitches.filter(|n|*n>0).map(|n|(d.stitch_count() as f64/n as f64-1.).max(0.)).unwrap_or(0.);
+                (time_gap+stitch_gap,seconds(d))
+            };
+            let a=rank(a);let b=rank(b);a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1))
         });
         let (mut doc,mut design)=candidates.into_iter().next().ok_or("No eligible improvement passed the checks. Original retained.")?;
         if strength==3 {
