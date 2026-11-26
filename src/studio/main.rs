@@ -45,7 +45,7 @@ mod units;
 mod view_tools;
 mod widgets;
 
-const USAGE: &str = "usage: zigzag-studio [design.svg] [--select N] [--mcp-port PORT | --no-mcp | --mcp-stdio]\n\n  --mcp-stdio  no window: serve the MCP tools over stdin/stdout (headless, for agents)";
+const USAGE: &str = "usage: zigzag-studio [--version] [design.svg] [--select N] [--mcp-port PORT | --no-mcp | --mcp-stdio]\n\n  --mcp-stdio  no window: serve the MCP tools over stdin/stdout (headless, for agents)";
 
 fn main() -> eframe::Result {
     let mut path = None;
@@ -65,6 +65,10 @@ fn main() -> eframe::Result {
             }
             Some("--mcp-port") => mcp_port = args.next().and_then(|v| v.to_str()?.parse().ok()),
             Some("--no-mcp") => mcp_port = None,
+            Some("-V" | "--version") => {
+                println!("Stitch Studio Desktop {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
             Some("-h" | "--help") => {
                 println!("{USAGE}");
                 return Ok(());
