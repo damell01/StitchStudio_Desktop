@@ -35,6 +35,28 @@ fn drawing_points(points: Vec<[f64; 2]>, field: [f64; 2]) -> Result<Vec<P>, Stri
         .collect())
 }
 
+// Internal coordinates are tenths of a millimeter. Keep endpoints and
+// corners; remove only points within 0.12 mm of the retained segment.
+fn simplify_freehand(points:&[P])->Vec<P>{
+ if points.len()<3{return points.to_vec()}
+ let mut keep=vec![false;points.len()];
+ keep[0]=true;keep[points.len()-1]=true;
+ let mut stack=vec![(0,points.len()-1)];
+ while let Some((a,b))=stack.pop(){
+  let dx=points[b].x-points[a].x;let dy=points[b].y-points[a].y;
+  let denom=dx*dx+dy*dy;
+  let mut best=1.2;let mut index=None;
+  for i in a+1..b{
+   let x=points[i].x-points[a].x;let y=points[i].y-points[a].y;
+   let t=if denom>0.0{((x*dx+y*dy)/denom).clamp(0.0,1.0)}else{0.0};
+   let d=(x-t*dx).hypot(y-t*dy);
+   if d>best{best=d;index=Some(i);}
+  }
+  if let Some(i)=index{keep[i]=true;stack.push((a,i));stack.push((i,b));}
+ }
+ points.iter().zip(keep).filter_map(|(p,k)|k.then_some(*p)).collect()
+}
+
 fn add(
     document: &mut Document,
     tool: Drawing,
@@ -45,7 +67,8 @@ fn add(
     let color = [105, 69, 162];
     match tool {
         Drawing::SatinColumn => return Err("Draw two rails for the satin column.".into()),
-        Drawing::Pen | Drawing::Freehand => document.add_drawing(&pts, false, color, Kind::Run),
+        Drawing::Pen => document.add_drawing(&pts, false, color, Kind::Run),
+        Drawing::Freehand => document.add_drawing(&simplify_freehand(&pts), false, color, Kind::Run),
         Drawing::Manual => document.add_drawing(&pts, false, color, Kind::Manual),
         Drawing::SatinBrush => {
             let path = vec![bezier::SubPath {
@@ -158,6 +181,12 @@ pub(super) async fn draw_canvas_shape(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn freehand_cleanup_preserves_endpoints_and_corners(){
+        let points=vec![P::new(0.,0.),P::new(5.,0.4),P::new(10.,0.),P::new(10.,10.),P::new(10.,20.)];
+        assert_eq!(simplify_freehand(&points),vec![points[0],points[2],points[4]]);
+    }
 
     #[test]
     fn draws_explicit_satin_rails_with_a_connecting_rung() {
