@@ -634,7 +634,7 @@ fn simplify_needle_path(points:&[zigzag::geom::P],max_length:f64,tolerance:f64)-
 fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool)->Option<(zigzag::document::Document,Design)>{
     use zigzag::{params::Kind,svg::Geometry,bezier::{Anchor,SubPath}};
     if original.stitch_count()==0||original.stitch_count()>200_000{return None}
-    let protected: std::collections::HashSet<_> = source.shapes.iter().filter(|s| source.layer_properties(&s.id).is_some_and(|l| l.locked || l.hidden) || s.params.stop == Some(true) || s.params.trim == Some(true) || s.params.kind == Some(Kind::Applique)).map(|s| s.uid).collect();
+    let protected: std::collections::HashSet<_> = source.shapes.iter().enumerate().filter(|(i,s)| source.records_text(*i) || s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail") || source.layer_properties(&s.id).is_some_and(|l| l.locked || l.hidden) || s.params.stop == Some(true) || s.params.trim == Some(true) || s.params.kind == Some(Kind::Applique)).map(|(_,s)| s.uid).collect();
     let selected=|uid:usize|uids.is_none_or(|ids|ids.contains(&uid)) && !protected.contains(&uid);
     let mut best=None;let cost=|d:&Design|d.stitch_count().saturating_add(d.trim_count().saturating_mul(40));
     let before=measure_stitches(original);let original_bounds=original.bounds();
@@ -674,7 +674,7 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
                 let target=(len*factor).min(if strength>=3{4.0}else{3.5});
                 if target>len+0.05{shape.params.len=Some(target);changed=true;}
             }
-            if kind==Kind::Run&&matches!(shape.geometry,Geometry::Stroke{..}){
+            if kind==Kind::Run&&matches!(shape.geometry,Geometry::Stroke{..})&&b.width().max(b.height())>=50.0{
                 let len=shape.params.run_len(&fabric);
                 let target=(len*factor).min(if strength>=3{3.5}else{3.0});
                 if target>len+0.05{shape.params.len=Some(target);changed=true;}
