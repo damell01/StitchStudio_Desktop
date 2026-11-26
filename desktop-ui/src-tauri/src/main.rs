@@ -92,8 +92,10 @@ fn smart_resize(workspace:&mut Workspace,width_mm:f64,height_mm:f64)->Result<Pre
     let c=bounds.center();let ids:Vec<_>=(0..doc.shapes.len()).collect();
     doc.transform(&ids,[sx,0.0,0.0,sy,c.x*(1.0-sx),c.y*(1.0-sy)]).map_err(|e|e.to_string())?;
     let mut design=doc.plan_cached(&mut workspace.plan_cache);
-    if design.stitch_count()==0||design.stitch_count()>2_000_000{return Err("Resize produced an empty or excessively large stitch plan.".into())}
-    if let Some((next,optimized))=optimized_density(&doc,&design){doc=next;design=optimized;}
+    validate_resized_design(&design)?;
+    if let Some((next,optimized))=optimized_density(&doc,&design){
+        if validate_resized_design(&optimized).is_ok() { doc=next;design=optimized; }
+    }
     let result=preview(&design);workspace.checkpoint_named("Smart resize and regenerate");workspace.source=Some(doc);workspace.current=Some(design);Ok(result)
 }
 #[tauri::command]
@@ -406,6 +408,9 @@ fn transform_for_resize(
 fn validate_resized_design(design: &Design) -> Result<(), String> {
     if !(1..=MAX_RESIZED_STITCHES).contains(&design.stitch_count()) {
         return Err("Resize produced an empty or excessively large stitch plan.".into());
+    }
+    if design.blocks.iter().flat_map(|b| &b.runs).flat_map(|r| &r.pts).any(|p| !p.x.is_finite() || !p.y.is_finite()) {
+        return Err("Resize produced invalid stitch coordinates.".into());
     }
     Ok(())
 }
