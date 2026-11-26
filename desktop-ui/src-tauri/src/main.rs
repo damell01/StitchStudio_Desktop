@@ -868,29 +868,38 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
 // Compare spatial occupancy of actual needle paths, not just bounding boxes.
 #[derive(serde::Serialize)]
 struct OptimizationQuality{coverage:f64,density_peak:usize,seconds:f64}
+fn optimization_seconds(d:&Design,speed:f64,trim:f64)->f64{
+    let speed=if speed.is_finite(){speed.clamp(100.,1500.)}else{800.};
+    let trim=if trim.is_finite(){trim.clamp(0.,30.)}else{3.};
+    let travel:f64=d.blocks.iter().flat_map(|b|b.runs.windows(2)).filter_map(|r|Some(r[0].pts.last()?.dist(*r[1].pts.first()?))).sum();
+    // Needle penetrations, trim overhead, color changes and estimated jump travel.
+    d.stitch_count() as f64/speed*60.+d.trim_count() as f64*trim+d.blocks.len().saturating_sub(1) as f64*8.+travel/10./100.
+}
 fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->OptimizationQuality{
     use std::collections::{HashSet,HashMap};
     let sample=|d:&Design|{
         let mut cells=HashSet::new();let mut density=HashMap::<(i32,i32),usize>::new();
-        for run in d.blocks.iter().flat_map(|b|&b.runs){
+        for block in &d.blocks { for run in &block.runs{
             for p in &run.pts{*density.entry(((p.x/10.).floor() as i32,(p.y/10.).floor() as i32)).or_default()+=1;}
             for pair in run.pts.windows(2){
                 let n=(pair[0].dist(pair[1])/5.).ceil().clamp(1.,100.) as usize;
-                for k in 0..=n{let p=pair[0].lerp(pair[1],k as f64/n as f64);cells.insert(((p.x/10.).floor() as i32,(p.y/10.).floor() as i32));}
+                for k in 0..=n{let p=pair[0].lerp(pair[1],k as f64/n as f64);cells.insert((block.color,(p.x/10.).floor() as i32,(p.y/10.).floor() as i32));}
             }
+        }
         }
         (cells,density.values().copied().max().unwrap_or(0))
     };
     let (a,_)=sample(original);let (b,peak)=sample(plan);
     let overlap=a.intersection(&b).count() as f64/a.union(&b).count().max(1) as f64;
-    OptimizationQuality{coverage:overlap*100.,density_peak:peak,seconds:plan.stitch_count() as f64/speed.clamp(100.,1500.)*60.+plan.trim_count() as f64*trim.clamp(0.,30.)}
+    OptimizationQuality{coverage:overlap*100.,density_peak:peak,seconds:optimization_seconds(plan,speed,trim)}
 }
 fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
-    let score=|d:&Design|d.stitch_count() as f64/speed*60.+d.trim_count() as f64*trim;
+    let score=|d:&Design|optimization_seconds(d,speed,trim);
     let mut choices=Vec::new();
     let mut mode=options.clone();mode.target_minutes=None;mode.solid=true;mode.merge=true;mode.auto_types=true;
     if let Ok(v)=choose_simplification(source,original,3,uids,false,&mode){choices.push(v);}
+    for angle in [0.,30.,60.,90.,120.,150.] {if let Some(v)=economical_fill_candidate(source,original,uids,3,angle){choices.push(v);}}
     if uids.is_none() && source.shapes.iter().all(|s|s.params.stop!=Some(true)&&s.params.trim!=Some(true)&&s.params.kind!=Some(zigzag::params::Kind::Manual)){
         // Reuse dependency-aware ordering, without moving overlapping layers.
         let mut doc=source.clone();doc.settings.hat_order=true;
@@ -902,10 +911,10 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     }
     let audit=measure_stitches(original);let bounds=original.bounds();
     choices.retain(|(_,d)|{let b=d.bounds();let q=measure_stitches(d);
-        d.stitch_count()>0&&score(d)<score(original)&&q.long<=audit.long&&q.zero<=audit.zero
+        d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&score(d)<score(original)&&q.long<=audit.long&&q.zero<=audit.zero
         &&bounds.min.dist(b.min)<=5.&&bounds.max.dist(b.max)<=5.
         &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
-        &&optimization_quality(original,d,speed,trim).coverage>=65.
+        &&optimization_quality(original,d,speed,trim).coverage>=85.
     });
     choices.sort_by(|a,b|score(&a.1).total_cmp(&score(&b.1)));
     choices.into_iter().next().ok_or("No faster eligible stitch plan found".into())
@@ -915,7 +924,7 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
     let old_bounds=original.bounds();let old_audit=measure_stitches(original);
     let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
     let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
-    let seconds=|d:&Design|d.stitch_count() as f64*60.0/speed+d.trim_count() as f64*trim;
+    let seconds=|d:&Design|optimization_seconds(d,speed,trim);
     for radius in [8.0,12.0,16.0]{
         let Some(doc)=rebuild_solid_artwork(source,uids,radius) else{continue};
         let plan=doc.plan();
@@ -977,13 +986,14 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         }
         let before=measure_stitches(original);let a=original.bounds();
         candidates.retain(|(_,d)|{let b=d.bounds();let after=measure_stitches(d);
-            d.stitch_count()>0&&d.stitch_count()>=original.stitch_count()*(if options.solid&&strength==3{45}else{65})/100&&seconds(d)<seconds(original)
+            d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&seconds(d)<seconds(original)
             &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero
             &&a.min.dist(b.min)<=5.0&&a.max.dist(b.max)<=5.0
+            &&optimization_quality(original,d,speed,trim).coverage>=if strength==1{95.}else if strength==2{90.}else{85.}
             &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
         });
         candidates.sort_by(|(_,a),(_,b)|{
-            let rank=|d:&Design|if target.is_some_and(|t|seconds(d)<=t){(0,-seconds(d))}else{(1,seconds(d))};
+            let rank=|d:&Design|if target.is_some_and(|t|seconds(d)<=t){(0,seconds(d))}else{(1,seconds(d))};
             let a=rank(a);let b=rank(b);a.0.cmp(&b.0).then(a.1.total_cmp(&b.1))
         });
         let (doc,design)=candidates.into_iter().next().ok_or("No eligible improvement passed the checks. Original retained.")?;
