@@ -489,9 +489,21 @@ fn fill_runs(
             groups.push(u);
         }
     }
+    // Broad stable-woven fills do not need the very dense legacy 0.25 mm
+    // default. Preserve explicit settings, narrow details and other fabrics.
+    let bounds = rings.iter().flatten().fold(Bounds::empty(), |mut b, &pt| {
+        b.add(pt);
+        b
+    });
+    let spacing = if p.spacing.is_none() && f.id == "standard"
+        && !bounds.is_empty() && bounds.width().min(bounds.height()) >= 80.0 {
+        p.fill_spacing(f).max(0.35)
+    } else {
+        p.fill_spacing(f)
+    };
     let top = FillParams {
         angle,
-        spacing: mm(p.fill_spacing(f)),
+        spacing: mm(spacing),
         len: mm(p.fill_len(f)),
         inset: 0.0,
         pull: mm(p.fill_pull(f)),
@@ -1606,7 +1618,10 @@ pub fn plan_cached(
                         for i in 1..n {
                             run.pts.push(prev.lerp(start, i as f64 / n as f64));
                         }
-                        run.pts.extend(pts.iter().copied());
+                        // Identical seam endpoints add a needle penetration
+                        // without adding coverage. Keep all nonzero moves.
+                        let skip = usize::from(gap <= 1e-6);
+                        run.pts.extend(pts.iter().skip(skip).copied());
                         cursor = run.pts.last().copied();
                         force_trim = false;
                         same_shape = true;
@@ -1725,6 +1740,19 @@ impl Design {
             .sum()
     }
 
+    /// Rough production time including trims and color/stop blocks.
+    /// Caller supplies machine-specific speeds and overhead in seconds.
+    pub fn estimated_seconds(&self, stitches_per_minute: f64, trim_seconds: f64, change_seconds: f64) -> Option<f64> {
+        if !stitches_per_minute.is_finite() || stitches_per_minute <= 0.0
+            || !trim_seconds.is_finite() || trim_seconds < 0.0
+            || !change_seconds.is_finite() || change_seconds < 0.0 {
+            return None;
+        }
+        Some(self.stitch_count() as f64 * 60.0 / stitches_per_minute
+            + self.trim_count() as f64 * trim_seconds
+            + self.blocks.len().saturating_sub(1) as f64 * change_seconds)
+    }
+
     pub fn trim_count(&self) -> usize {
         self.blocks
             .iter()
@@ -1790,6 +1818,19 @@ mod tests {
     /// Overlap removal is cached per shape: after moving one object, the
     /// cached plan must still equal a plan made from scratch (what moved
     /// and what it overlapped are redone; the rest is reused).
+    #[test]
+    fn broad_default_fill_uses_fewer_stitches_than_legacy_density() {
+        let mut s = shape(fill(sq(0.0, 0.0, 300.0)), Kind::Fill, [0,0,0]);
+        let opt = PlanOptions::default();
+        let optimized = plan("auto", std::slice::from_ref(&s), &opt);
+        s.params.spacing = Some(0.25);
+        let legacy = plan("legacy", &[s], &opt);
+        assert!(optimized.stitch_count() < legacy.stitch_count());
+        assert!(optimized.estimated_seconds(700.0, 3.0, 15.0).unwrap()
+            < legacy.estimated_seconds(700.0, 3.0, 15.0).unwrap());
+        assert!(optimized.estimated_seconds(0.0, 3.0, 15.0).is_none());
+    }
+
     #[test]
     fn cached_overlap_removal_matches_a_fresh_plan_after_a_move() {
         let grid = |dx: f64| -> Vec<Shape> {
