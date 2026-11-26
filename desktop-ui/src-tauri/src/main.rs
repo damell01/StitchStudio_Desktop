@@ -564,7 +564,9 @@ fn audit_stitches(state: tauri::State<'_, Mutex<Workspace>>) -> Result<StitchAud
 fn optimized_density(source:&zigzag::document::Document, original:&Design)->Option<(zigzag::document::Document,Design)>{
  if source.settings.fabric!="standard" || original.stitch_count()==0 || original.stitch_count()>100_000{return None}
  let mut next=source.clone();let mut changed=false;
+ let protected: std::collections::HashSet<_> = source.shapes.iter().filter(|s| source.layer_properties(&s.id).is_some_and(|l| l.locked || l.hidden) || s.params.stop == Some(true) || s.params.trim == Some(true)).map(|s| s.uid).collect();
  for shape in &mut next.shapes {
+  if protected.contains(&shape.uid) { continue; }
   use zigzag::params::Kind;
   if shape.params.kind.unwrap_or(Kind::Fill)!=Kind::Fill || shape.params.spacing.is_some(){continue}
   if let zigzag::svg::Geometry::Fill{rings,rule}=&shape.geometry{
@@ -587,6 +589,7 @@ fn optimized_density(source:&zigzag::document::Document, original:&Design)->Opti
  || !original.blocks.iter().map(|b|b.color).eq(candidate.blocks.iter().map(|b|b.color))
  || original.per_shape.len()!=candidate.per_shape.len()
  || !original.per_shape.iter().zip(&candidate.per_shape).all(|(&a,&b)|a==0||b>0)
+ || optimization_quality(original,&candidate,800.,3.).coverage < 95.0
  {return None}
  Some((next,candidate))
 }
