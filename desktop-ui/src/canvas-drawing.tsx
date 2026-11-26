@@ -108,8 +108,8 @@ export function DrawingOverlay({drawing}:{drawing:Drawing}){
      drawing.tool==='ellipse' ? <ellipse cx={x+w/2} cy={y+h/2} rx={w/2} ry={h/2} vectorEffect="non-scaling-stroke"/> :
      drawing.tool==='star'||drawing.tool==='hexagon'||drawing.tool==='triangle' ? <polygon points={Array.from({length:drawing.tool==='star'?10:drawing.tool==='triangle'?3:6},(_,i)=>{const n=drawing.tool==='star'?10:drawing.tool==='triangle'?3:6;const angle=2*Math.PI*i/n-Math.PI/2;const r=drawing.tool==='star'&&i%2===1?.45:1;return [x+w/2+w/2*r*Math.cos(angle),y+h/2+h/2*r*Math.sin(angle)].join(',')}).join(' ')} vectorEffect="non-scaling-stroke"/> :
      <polyline points={line.map(point=>point.join(',')).join(' ')} vectorEffect="non-scaling-stroke"/>}
-    {drawing.tool==='measure'&&<text fill={color} stroke="none" x={b[0]} y={b[1]-2} fontSize="4">
+    {drawing.tool==='measure'&&<g><path d={`M${a[0]} ${a[1]} H${b[0]} V${b[1]}`} strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/><text fill={color} stroke="none" x={(a[0]+b[0])/2} y={a[1]-2} fontSize="3.5" textAnchor="middle">{drawing.unit==='in'?(w/25.4).toFixed(3)+' in':drawing.unit==='cm'?(w/10).toFixed(2)+' cm':w.toFixed(2)+' mm'}</text><text fill={color} stroke="none" x={b[0]+2} y={(a[1]+b[1])/2} fontSize="3.5">{drawing.unit==='in'?(h/25.4).toFixed(3)+' in':drawing.unit==='cm'?(h/10).toFixed(2)+' cm':h.toFixed(2)+' mm'}</text><text fill={color} stroke="none" x={b[0]} y={b[1]-2} fontSize="4">
       {drawing.unit==='cm'?(Math.hypot(w,h)/10).toFixed(3)+' cm':drawing.unit==='mm'?Math.hypot(w,h).toFixed(2)+' mm':drawing.unit==='in'?(Math.hypot(w,h)/25.4).toFixed(3)+' in':(Math.hypot(w,h)/25.4).toFixed(3)+' in · '+Math.hypot(w,h).toFixed(2)+' mm'}
-    </text>}
+    </text></g>}
   </g>;
 }
