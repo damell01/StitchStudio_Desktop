@@ -40,7 +40,7 @@ export function RecentProjects({onOpen}:{onOpen:()=>void}) {
   return <section className="recent-project-grid">{projects.slice(0,5).map(p=><article key={p.file}><ProjectThumbnail project={p}/><strong>{p.name}</strong><small>{p.stitches.toLocaleString()} points · {p.colors} colors</small><ProjectDates project={p} compact/><button onClick={()=>void open(p)}>Open project</button></article>)}<button className="recent-scan" onClick={()=>void scan()}><FolderOpen size={22}/>{projects.length?'Refresh from folder':'Find saved projects'}</button>{error&&<p role="alert">{error}</p>}</section>
 }
 
-export function Library({ onDone,onArtwork,onBulkImport,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;onBulkImport?:()=>void;initialTab?:'embroidery'|'projects'|'artwork' }) {
+export function Library({ onDone,onArtwork,onBulkImport,onPrepared,initialTab='embroidery' }: { onDone: () => void; onArtwork?: (art:Art)=>void;onBulkImport?:()=>void;onPrepared?:(id:string)=>Promise<void>;initialTab?:'embroidery'|'projects'|'artwork' }) {
   const [tab, setTab] = useState<'embroidery' | 'projects' | 'artwork'>(initialTab);
   const [files, setFiles] = useState<string[]>([]);
   const [projects, setProjects] = useState<Project[]>(readProjectLibrary);
@@ -117,7 +117,7 @@ export function Library({ onDone,onArtwork,onBulkImport,initialTab='embroidery' 
       <button aria-pressed={tab === 'projects'} onClick={() => { setTab('projects'); setQuery(''); }}>Stitch Studio projects</button>
       {onArtwork&&<button aria-pressed={tab==='artwork'} onClick={()=>{setTab('artwork');setQuery('');}}>Artwork</button>}
     </div>
-    {tab==='artwork'&&onArtwork?<CharacterGallery onArt={onArtwork}/>:<>
+    {tab==='artwork'&&onArtwork?<CharacterGallery onArt={onArtwork} onPrepared={onPrepared}/>:<>
     <div className="library-filters">{onBulkImport&&<button onClick={onBulkImport}><FilePlus size={16}/> Bulk digitize artwork</button>}
       <label className="library-search"><Search size={16} /><input aria-label="Search designs" placeholder="Search designs" value={query} onChange={event => setQuery(event.target.value)} /></label>
       {tab === 'embroidery' ? <>
@@ -138,7 +138,7 @@ export function Library({ onDone,onArtwork,onBulkImport,initialTab='embroidery' 
     {tab === 'embroidery' ? <>
       {files.length === 0 && <>
         <p>Import machine files in DST, PES, PEC, EXP, JEF or VP3 format to use them here.</p>
-        {onArtwork&&<CharacterGallery onArt={onArtwork}/>}
+        {onArtwork&&<CharacterGallery onArt={onArtwork} onPrepared={onPrepared}/>}
       </>}
       {files.length > 0 && visibleFiles.length === 0 && <p>No files match your search.</p>}
       <div className="font-list">
