@@ -141,6 +141,10 @@ pub struct Params {
     pub width: Option<f64>,
     pub border: Option<bool>,
     pub short_stitches: Option<bool>,
+    /// Secure the start and end of an open satin column over embroidery foam.
+    pub foam_caps: Option<bool>,
+    /// Overlap neighboring thread strips to blend their colors physically.
+    pub blend: Option<bool>,
     pub thread: Option<[u8; 3]>,
     pub order: Option<u32>,
     /// Satin auto-split: stitches longer than this (mm) are split; 0 = off.
@@ -503,6 +507,8 @@ impl Params {
             width: child.width.or(self.width),
             border: child.border.or(self.border),
             short_stitches: child.short_stitches.or(self.short_stitches),
+            foam_caps: child.foam_caps.or(self.foam_caps),
+            blend: child.blend.or(self.blend),
             thread: child.thread.or(self.thread),
             order: child.order.or(self.order),
             split: child.split.or(self.split),
@@ -589,6 +595,8 @@ impl Params {
             "w" | "width" => self.width = num.filter(|v| *v > 0.0),
             "border" => self.border = flag,
             "ss" => self.short_stitches = flag,
+            "foamcaps" => self.foam_caps = flag,
+            "blend" => self.blend = flag,
             "t" | "thread" => self.thread = parse_hex(v),
             "o" | "order" => self.order = num.filter(|v| *v >= 0.0).map(|v| v as u32),
             "split" => self.split = num.filter(|v| *v >= 0.0),
@@ -648,6 +656,8 @@ impl Params {
         num("w", self.width);
         num("r", self.repeats.map(|r| r as f64));
         num("split", self.split);
+        if let Some(v) = self.foam_caps { t.push(format!("foamcaps={}", v as u8)); }
+        if let Some(v) = self.blend { t.push(format!("blend={}", v as u8)); }
         num("st", self.start);
         num("en", self.end);
         num("cell", self.cell);
