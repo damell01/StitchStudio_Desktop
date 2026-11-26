@@ -118,6 +118,16 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
     }
   }
 
+  function chooseArtwork(file:File){
+    if(!/\.(png|jpe?g|webp|bmp|svg)$/i.test(file.name)){setError('Choose PNG, JPEG, WebP, BMP or SVG artwork.');return;}
+    if(file.size>25*1024*1024){setError('Artwork must be under 25 MB.');return;}
+    void run(async()=>{
+      const mime=/\.svg$/i.test(file.name)?'image/svg+xml':file.type||'application/octet-stream';
+      setSource('artwork');
+      setSelection({source:'artwork',art:{name:file.name,mime,bytes:Array.from(new Uint8Array(await file.arrayBuffer()))}});
+    });
+  }
+
   async function loadFiles() {
     setFiles(await invoke<string[]>('personal_designs'));
   }
@@ -176,6 +186,10 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
         {source === 'templates' && <TemplateLibrary
           selectedId={selection?.source === 'templates' ? selection.template.id : undefined}
           onPreview={template => { setSelection({ source, template }); setError(''); }} />}
+        {source === 'artwork' && <div className="studio-insert-files" onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault()}} onDrop={e=>{e.preventDefault();if(!busy&&e.dataTransfer.files[0])chooseArtwork(e.dataTransfer.files[0])}}>
+          <label>Drop artwork here or browse<input type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,.svg" disabled={busy} onChange={e=>{const file=e.currentTarget.files?.[0];if(file)chooseArtwork(file);e.currentTarget.value=''}}/></label>
+          <small>Preview artwork, choose its size and placement, then insert without replacing your design.</small>
+        </div>}
         {source === 'artwork' && <CharacterGallery actionLabel="Select design" onArt={art => { setSelection({ source, art }); setError(''); }} />}
         {source==='approved'&&<><select aria-label="Design category" value={category} onChange={e=>{setCategory(e.target.value);setSelection(null)}}><option value="all">All categories</option>{Array.from(new Set(approved.map(p=>p.category??'Uncategorized'))).sort().map(c=><option key={c}>{c}</option>)}</select><label className="studio-insert-search"><Search size={16}/><input placeholder="Search digitized designs" value={query} onChange={e=>setQuery(e.target.value)}/></label>{!approvedPage.total&&<p>{approved.length?'No matching designs.':'Approve artwork in Bulk Design Import to add reusable designs here.'}</p>}<div className="approved-insert-grid">{approvedPage.items.map(project=><button key={project.file} aria-pressed={selection?.source==='approved'&&selection.project.file===project.file} onClick={()=>setSelection({source:'approved',project})}><ApprovedPreview file={project.file}/><strong>{project.name}</strong><small>{project.category??'Uncategorized'}</small><small>{project.stitches.toLocaleString()} stitches</small></button>)}</div><ListNavigation {...approvedPage}/></>}
         {source === 'layouts' && <>
