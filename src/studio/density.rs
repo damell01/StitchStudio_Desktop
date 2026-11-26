@@ -23,21 +23,29 @@ pub struct DensityMap {
     rows: usize,
     /// Penetrations per mm² at each cell, smoothed.
     per_mm2: Vec<f32>,
+    cell: f64,
 }
 
 impl DensityMap {
     pub fn of(d: &Design) -> DensityMap {
         let b = d.bounds();
+        if b.is_empty() || ![b.min.x,b.min.y,b.max.x,b.max.y].iter().all(|v| v.is_finite()) {
+            return DensityMap { origin: P::new(0.0,0.0), cols: 0, rows: 0, per_mm2: Vec::new(), cell: CELL };
+        }
+        // Bound memory for oversized or malformed imported designs.
+        let cell = CELL.max(b.width().max(b.height()) / 1000.0);
+        if !cell.is_finite() { return DensityMap { origin: P::new(0.0,0.0), cols: 0, rows: 0, per_mm2: Vec::new(), cell: CELL }; }
         let origin = P::new(
-            (b.min.x / CELL).floor() * CELL,
-            (b.min.y / CELL).floor() * CELL,
+            (b.min.x / cell).floor() * cell,
+            (b.min.y / cell).floor() * cell,
         );
-        let cols = ((b.max.x - origin.x) / CELL).ceil().max(1.0) as usize + 1;
-        let rows = ((b.max.y - origin.y) / CELL).ceil().max(1.0) as usize + 1;
+        let cols = ((b.max.x - origin.x) / cell).ceil().max(1.0) as usize + 1;
+        let rows = ((b.max.y - origin.y) / cell).ceil().max(1.0) as usize + 1;
         let mut counts = vec![0u32; cols * rows];
         for p in d.blocks.iter().flat_map(|b| &b.runs).flat_map(|r| &r.pts) {
-            let cx = ((p.x - origin.x) / CELL) as usize;
-            let cy = ((p.y - origin.y) / CELL) as usize;
+            if !p.x.is_finite() || !p.y.is_finite() { continue; }
+            let cx = ((p.x - origin.x) / cell) as usize;
+            let cy = ((p.y - origin.y) / cell) as usize;
             if cx < cols && cy < rows {
                 counts[cy * cols + cx] += 1;
             }
@@ -57,7 +65,7 @@ impl DensityMap {
                         }
                     }
                 }
-                per_mm2[y * cols + x] = sum as f32 / n.max(1) as f32;
+                per_mm2[y * cols + x] = sum as f32 / n.max(1) as f32 / (cell / 10.0).powi(2) as f32;
             }
         }
         DensityMap {
@@ -65,6 +73,7 @@ impl DensityMap {
             cols,
             rows,
             per_mm2,
+            cell,
         }
     }
 
@@ -95,15 +104,15 @@ impl DensityMap {
                 let a = view.to_screen(
                     rect,
                     P::new(
-                        self.origin.x + x as f64 * CELL,
-                        self.origin.y + y as f64 * CELL,
+                        self.origin.x + x as f64 * self.cell,
+                        self.origin.y + y as f64 * self.cell,
                     ),
                 );
                 let b = view.to_screen(
                     rect,
                     P::new(
-                        self.origin.x + (x + 1) as f64 * CELL,
-                        self.origin.y + (y + 1) as f64 * CELL,
+                        self.origin.x + (x + 1) as f64 * self.cell,
+                        self.origin.y + (y + 1) as f64 * self.cell,
                     ),
                 );
                 let r = Rect::from_two_pos(a, b);
@@ -144,6 +153,16 @@ mod tests {
             }],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn empty_and_oversized_designs_have_bounded_maps() {
+        let empty = DensityMap::of(&Design::default());
+        assert_eq!(empty.peak(), 0.0);
+        let mut d = grid(3.0, 1);
+        d.blocks[0].runs[0].pts.push(P::new(1e7, 1e7));
+        let map = DensityMap::of(&d);
+        assert!(map.cols <= 1003 && map.rows <= 1003);
     }
 
     #[test]
