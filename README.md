@@ -1,9 +1,38 @@
-## Stitch Studio Desktop on the Dev branch
+# Stitch Studio Desktop
 
-The React and Tauri desktop application lives in `desktop-ui`. For Windows PowerShell and macOS terminal commands, see the [desktop build and packaging guide](docs/DESKTOP.md). The [implementation tracker](docs/IMPLEMENTATION_TRACKER.md) records tested workflows and open acceptance work.
+Stitch Studio is a Windows and macOS embroidery editor built with React, Tauri, and the ZigZag Rust engine. Digitize artwork, edit and combine designs, preview the sewing sequence, and export machine files. Save as `.stitchstudio` to keep editable geometry and settings. Core design tools run offline.
 
-**Set up automatic updates.** The [DBell Creations updater setup guide](packaging/update-host/README.md) has the Windows commands to generate the keys, a GitHub secrets and variables checklist, and the steps to publish your first signed installer to Hostinger.
+## Install a Dev test build
 
+Open the relevant GitHub Actions run and download its **Artifacts** ZIP after packaging succeeds. Test installers are available to people with access to this repository.
+
+| Platform | Artifact | After extracting the ZIP |
+| --- | --- | --- |
+| Windows x64 | `Stitch-Studio-Windows-x64` | Run the setup `.exe`. |
+| Intel Mac, including 2019 Intel models | `Stitch-Studio-Mac-Intel` | Open the `.dmg` and drag Stitch Studio into Applications. |
+
+[Windows installer workflow](https://github.com/damell01/StitchStudio_Desktop/actions/workflows/package-windows.yml) · [Intel Mac installer workflow](https://github.com/damell01/StitchStudio_Desktop/actions/workflows/package-intel-mac.yml)
+
+The [desktop build and packaging guide](docs/DESKTOP.md) has local commands for Windows PowerShell and macOS Terminal, plus Apple silicon packaging instructions.
+
+## Start your first project
+
+1. On **Home**, choose **Digitize artwork** and select or drop an image. Stitch Studio generates a preview automatically.
+2. Compare the artwork and stitches, set the intended width and fabric, then choose **Open in design studio**.
+3. Save a `.stitchstudio` project. Use **Insert design** to add a template or a saved machine file to the same project.
+4. Check hoop fit and open **Thread order** to review the blocks. Choose **Export design** and select a format your machine accepts. Test sew a new design on matching scrap fabric.
+
+Open **Help → Help Center** for searchable how-to guides and screenshots, including foam satin lettering, appliqué, and mapping threads on a Poolin EOM. Use the **?** beside the Digitize, Lettering, or Appliqué page title to read its guide without leaving the page. **Quick tour** walks through the main areas of the app and can be restarted from Help.
+
+## Automatic updates
+
+The standalone test installers are for manual installation. Automatic updates require an initial signed, feed-enabled installer and a working private HTTPS feed. For the DBell Creations deployment, configure Hostinger and the GitHub Actions signing and deployment settings before publishing. Once the initial build is installed and paired, open **Settings → App updates** to check for later releases. [Private updater setup guide](packaging/update-host/README.md)
+
+See the [implementation tracker](docs/IMPLEMENTATION_TRACKER.md) for verified workflows and open acceptance work.
+
+---
+
+The sections below document the upstream ZigZag editor, tools, and distribution.
 
 <img src="packaging/macos/AppIcon-dark.png" alt="ZigZag dark mode app icon" width="160" height="160">
 

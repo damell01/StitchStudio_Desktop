@@ -1484,14 +1484,25 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .help-lesson-layout{display:grid;grid-template-columns:minmax(180px,250px) minmax(0,1fr);gap:10px}
 .help-lesson-nav{display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--lav-panel,var(--studio-panel));border:1px solid var(--lav-border,var(--studio-line));border-radius:10px}
 .help-lesson-nav h2{margin:0 0 5px}
+.help-lesson-nav input{width:100%;min-width:0}
+.help-lesson-nav nav{display:grid;gap:4px}
 .help-lesson-nav button{text-align:left;font-size:12px;padding:8px;gap:8px}
-.help-lesson-nav button span{color:var(--brand);font-weight:600}
 .help-lesson-nav button[aria-pressed=true]{background:var(--brand-soft);border-color:var(--brand-accent);color:var(--brand)}
+.help-lesson-nav .help-tour-launch{align-self:start;margin-top:4px}
 .help-lesson-card{padding:14px}
-.help-lesson-card>small{color:var(--brand);font-size:10px;letter-spacing:.06em}
 .help-lesson-card h2{margin:6px 0}
 .help-lesson-card ol{padding-left:24px;margin:8px 0}
 .help-lesson-card li{padding:5px 0;font-size:13px}
+.help-screenshot{margin-top:12px;padding-top:10px;border-top:1px solid var(--lav-border,var(--studio-line))}
+.help-screenshot summary{width:fit-content;cursor:pointer;color:var(--brand);font-size:13px;font-weight:600}
+.help-screenshot img{display:block;max-width:100%;height:auto;margin-top:8px;border:1px solid var(--lav-border,var(--studio-line));border-radius:8px}
+.workspace-heading-actions{display:flex;align-items:center;gap:6px;flex:none}
+.workflow-help{box-sizing:border-box;width:min(650px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;padding:18px;border:1px solid var(--lav-border,var(--studio-line));border-radius:12px;background:var(--lav-panel,var(--studio-panel));color:var(--studio-ink)}
+.workflow-help::backdrop{background:#23163870}
+.workflow-help-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.workflow-help-heading h2{margin:0}
+.workflow-help ol{padding-left:24px}
+.workflow-help li{padding-block:4px}
 .help-reference-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .help-reference-heading h2{margin:0}
 .help-reference-heading input{width:min(280px,40%)}
