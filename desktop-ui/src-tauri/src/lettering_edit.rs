@@ -20,6 +20,12 @@ pub(crate) struct LetteringSettings {
     #[serde(default)] pub path: Option<String>,
     #[serde(default)] pub path_offset: Option<f64>,
     #[serde(default)] pub path_flip: Option<bool>,
+    #[serde(default)] pub effect_color: Option<[u8;3]>,
+    #[serde(default)] pub inner_color: Option<[u8;3]>,
+    #[serde(default)] pub outer_width: Option<f64>,
+    #[serde(default)] pub inner_width: Option<f64>,
+    #[serde(default)] pub shadow_x: Option<f64>,
+    #[serde(default)] pub shadow_y: Option<f64>,
 }
 
 impl LetteringSettings {
@@ -52,14 +58,32 @@ impl LetteringSettings {
         if !(0.0..=1.0).contains(&path_offset){return Err("Baseline start must be between 0 and 100 percent.".into())}
         let kind = match self.kind.as_deref() {
             None => zigzag::params::Kind::Satin,
-            Some("puff") => zigzag::params::Kind::Satin,
+            Some("puff" | "double_outline" | "shadow" | "gradient") => zigzag::params::Kind::Satin,
             Some("bean") => zigzag::params::Kind::Run,
             Some(k) => zigzag::params::Kind::parse(k).filter(|k| matches!(k, zigzag::params::Kind::Satin | zigzag::params::Kind::Fill | zigzag::params::Kind::Applique | zigzag::params::Kind::Run | zigzag::params::Kind::Ripple | zigzag::params::Kind::Contour | zigzag::params::Kind::Cross | zigzag::params::Kind::Meander | zigzag::params::Kind::Blanket)).ok_or("Unsupported lettering effect")?,
+        };
+        let outer_width=self.outer_width.unwrap_or(2.4);
+        let inner_width=self.inner_width.unwrap_or(1.0);
+        let shadow_x=self.shadow_x.unwrap_or(1.5);
+        let shadow_y=self.shadow_y.unwrap_or(1.5);
+        if !(0.5..=6.0).contains(&outer_width) || !(0.3..=4.0).contains(&inner_width)
+            || !(-10.0..=10.0).contains(&shadow_x) || !(-10.0..=10.0).contains(&shadow_y)
+            || (self.kind.as_deref()==Some("double_outline") && inner_width>=outer_width) {
+            return Err("Check outline widths (inner must be smaller) and shadow offsets.".into());
+        }
+        let effect=match self.kind.as_deref() {
+            Some("double_outline")=>Some("outline".to_string()),
+            Some("shadow")=>Some("shadow".to_string()),
+            Some("gradient")=>Some("gradient".to_string()),
+            _=>None,
         };
         let leading = self.leading.unwrap_or(1.5);
         if !(0.5..=5.0).contains(&leading) { return Err("Line spacing must be between 0.5 and 5 cap heights.".into()); }
         Ok(TextSpec {
             kind, leading, puff: self.kind.as_deref() == Some("puff"), bean: self.kind.as_deref() == Some("bean"),
+            effect, effect_color:self.effect_color.unwrap_or([28,35,55]),
+            inner_color:self.inner_color.unwrap_or([245,245,245]),
+            outer_width,inner_width,shadow_x,shadow_y,
             text: self.text, font: self.font, size_mm: self.size, spacing_mm: self.spacing,
             arc_mm: self.arc, bold: self.bold, italic: self.italic, color: self.color, align,
             h_scale,v_scale,kern,path,path_offset,path_flip:self.path_flip.unwrap_or(false),..Default::default()
@@ -113,19 +137,25 @@ pub(crate) fn lettering_settings(uid:usize,state:tauri::State<'_,std::sync::Mute
  let w=state.lock().map_err(|e|e.to_string())?;
  let Some(doc)=w.source.as_ref() else{return Ok(None)};
  let Some(index)=doc.shapes.iter().position(|s|s.uid==uid) else{return Ok(None)};
- Ok(doc.lettering(index).map(|s|LetteringSettings{text:s.text,font:s.font,size:s.size_mm,spacing:s.spacing_mm,arc:s.arc_mm,bold:s.bold,italic:s.italic,color:s.color,align:s.align.name().into(),kind:Some(if s.puff && s.kind == zigzag::params::Kind::Satin {"puff".into()} else if s.bean && s.kind == zigzag::params::Kind::Run {"bean".into()} else {s.kind.name().into()}),leading:Some(s.leading),h_scale:Some(s.h_scale),v_scale:Some(s.v_scale),kern:Some(s.kern),path:Some(s.path.as_ref().map(|p|zigzag::bezier::to_svg_d(&zigzag::bezier::transform(p,[0.1,0.0,0.0,0.1,0.0,0.0]))).unwrap_or_default()),path_offset:Some(s.path_offset),path_flip:Some(s.path_flip)}))
+ Ok(doc.lettering(index).map(|s|LetteringSettings{text:s.text,font:s.font,size:s.size_mm,spacing:s.spacing_mm,arc:s.arc_mm,bold:s.bold,italic:s.italic,color:s.color,align:s.align.name().into(),kind:Some(if s.effect.as_deref() == Some("outline") {"double_outline".into()} else if s.effect.as_deref() == Some("shadow") {"shadow".into()} else if s.effect.as_deref() == Some("gradient") {"gradient".into()} else if s.puff && s.kind == zigzag::params::Kind::Satin {"puff".into()} else if s.bean && s.kind == zigzag::params::Kind::Run {"bean".into()} else {s.kind.name().into()}),leading:Some(s.leading),h_scale:Some(s.h_scale),v_scale:Some(s.v_scale),kern:Some(s.kern),path:Some(s.path.as_ref().map(|p|zigzag::bezier::to_svg_d(&zigzag::bezier::transform(p,[0.1,0.0,0.0,0.1,0.0,0.0]))).unwrap_or_default()),path_offset:Some(s.path_offset),path_flip:Some(s.path_flip),effect_color:Some(s.effect_color),inner_color:Some(s.inner_color),outer_width:Some(s.outer_width),inner_width:Some(s.inner_width),shadow_x:Some(s.shadow_x),shadow_y:Some(s.shadow_y)}))
 }
 #[tauri::command]
 pub(crate) async fn update_lettering(uid:usize,settings:LetteringSettings,app:tauri::AppHandle)->Result<Preview,String>{
  use tauri::Manager;
  tauri::async_runtime::spawn_blocking(move||{
+ let effect_color_present=settings.effect_color.is_some();let inner_color_present=settings.inner_color.is_some();
+ let outer_present=settings.outer_width.is_some();let inner_present=settings.inner_width.is_some();
+ let shadow_x_present=settings.shadow_x.is_some();let shadow_y_present=settings.shadow_y.is_some();
  let has_leading=settings.leading.is_some();let has_kind=settings.kind.is_some();let scale_x=settings.h_scale.is_some();let scale_y=settings.v_scale.is_some();let has_kern=settings.kern.is_some();let has_path=settings.path.is_some();let has_offset=settings.path_offset.is_some();let has_flip=settings.path_flip.is_some();let next=settings.spec()?;
  let state=app.state::<std::sync::Mutex<Workspace>>();
  let mut w=state.lock().map_err(|e|e.to_string())?;
  let mut doc=w.source.clone().ok_or("No editable design")?;
  let index=super::editor_parity::editable_index(&doc,uid)?;
  let mut spec=doc.lettering(index).ok_or("Selected object is not editable text")?;
- spec.text=next.text;spec.font=next.font;spec.size_mm=next.size_mm;spec.spacing_mm=next.spacing_mm;spec.arc_mm=next.arc_mm;spec.bold=next.bold;spec.italic=next.italic;spec.color=next.color;spec.align=next.align;if has_kind{spec.kind=next.kind;spec.bean=next.bean;spec.puff=next.puff}if has_leading{spec.leading=next.leading}if scale_x{spec.h_scale=next.h_scale}if scale_y{spec.v_scale=next.v_scale}if has_kern{spec.kern=next.kern}if has_path{spec.path=next.path}if has_offset{spec.path_offset=next.path_offset}if has_flip{spec.path_flip=next.path_flip}
+ spec.text=next.text;spec.font=next.font;spec.size_mm=next.size_mm;spec.spacing_mm=next.spacing_mm;spec.arc_mm=next.arc_mm;spec.bold=next.bold;spec.italic=next.italic;spec.color=next.color;spec.align=next.align;if has_kind{spec.kind=next.kind;spec.bean=next.bean;spec.puff=next.puff;spec.effect=next.effect}
+ if effect_color_present{spec.effect_color=next.effect_color}if inner_color_present{spec.inner_color=next.inner_color}
+ if outer_present{spec.outer_width=next.outer_width}if inner_present{spec.inner_width=next.inner_width}
+ if shadow_x_present{spec.shadow_x=next.shadow_x}if shadow_y_present{spec.shadow_y=next.shadow_y}if has_leading{spec.leading=next.leading}if scale_x{spec.h_scale=next.h_scale}if scale_y{spec.v_scale=next.v_scale}if has_kern{spec.kern=next.kern}if has_path{spec.path=next.path}if has_offset{spec.path_offset=next.path_offset}if has_flip{spec.path_flip=next.path_flip}
  doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
  doc.sync().map_err(|e|e.to_string())?;
  let design=doc.plan_cached(&mut w.plan_cache);
