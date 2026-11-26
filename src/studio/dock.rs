@@ -2892,7 +2892,17 @@ impl Studio {
                     .selected_text(fabric.name)
                     .width(170.0)
                     .show_ui(ui, |ui| {
-                        for f in FABRICS {
+                        const GARMENTS: [&str; 9] = ["t-shirt", "sweatshirt", "polo", "towel", "blanket", "denim", "performance", "fleece", "patch"];
+                        ui.label(egui::RichText::new("Garments").strong().small());
+                        for id in GARMENTS {
+                            if let Some(f) = zigzag::params::Fabric::by_id(id) {
+                                ui.selectable_value(&mut self.doc.settings.fabric, f.id.to_string(), f.name)
+                                    .on_hover_text(f.about);
+                            }
+                        }
+                        ui.separator();
+                        ui.label(egui::RichText::new("Other materials and headwear").strong().small());
+                        for f in FABRICS.into_iter().filter(|f| !GARMENTS.contains(&f.id)) {
                             ui.selectable_value(
                                 &mut self.doc.settings.fabric,
                                 f.id.to_string(),
@@ -2904,6 +2914,19 @@ impl Studio {
                     .response
                     .labelled_by(lid)
                     .on_hover_text(fabric.about);
+            });
+            fm.row("Garment guide", |ui, _| {
+                let selected = self.doc.settings.fabric();
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new(selected.about).small());
+                    ui.label(egui::RichText::new(selected.stabilizer).small());
+                    ui.label(egui::RichText::new(selected.needle).small());
+                    ui.label(egui::RichText::new(format!(
+                        "Fill {:.2} mm · Satin {:.2} mm · Pull {:.2} mm · Underlay {:.2} mm",
+                        selected.fill_spacing, selected.satin_spacing, selected.satin_pull,
+                        selected.fill_underlay_spacing
+                    )).small());
+                });
             });
             fm.row("Hoop", |ui, lid| {
                 egui::ComboBox::from_id_salt("hoop")
