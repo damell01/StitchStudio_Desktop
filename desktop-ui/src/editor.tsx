@@ -304,6 +304,14 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
     },
   });
 
+  // Multi-object requests use one native preview and one undo checkpoint.
+  const compositionProposal = async (composition: Record<string,unknown>, title:string, detail:string): Promise<AssistantProposal> => {
+    const after=await invoke<Plan>('compose_assistant_design',{composition,apply:false});
+    const before=plan ?? {name:'Blank design',stitches:0,trims:0,blocks:[]};
+    const minutes=(p:Plan)=>p.stitches/sewingSpm+p.trims*trimSeconds/60+Math.max(0,p.blocks.length-1)*changeSeconds/60;
+    return {...native(title,detail,'compose_assistant_design',{composition,apply:true}),
+      comparison:{before,after,beforeMinutes:minutes(before),afterMinutes:minutes(after)}};
+  };
   if (intent.kind === 'motif' && intent.text && intent.position && intent.width) {
     const position = intent.position;
     const anchorObjects = movementIds.length && intent.relative !== 'hoop' && intent.relative !== 'design' ? objects.filter(object=>movementIds.includes(object.uid)) : [];
@@ -336,17 +344,13 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
     };
     const motif = {name:artwork.name,svg:artwork.svg,color:artwork.color ?? null,
       width:intent.width,position,applique:!!intent.applique,anchor,field:[width,height]};
-    const after = await invoke<Plan>('preview_assistant_motif',{motif});
-    const before = plan ?? {name:'Blank design', stitches:0, trims:0, blocks:[]};
-    const minutes = (candidate:Plan) => candidate.stitches / sewingSpm + candidate.trims * trimSeconds / 60;
     const count = paired ? '2 copies' : '1 copy';
     const detail = artwork.name+' · '+count+' · '+intent.width.toLocaleString(undefined,{maximumFractionDigits:2})+
       ' mm wide each · '+places[position]+'. '+(motif.applique ?
       'Includes fabric placement, tack-down and finishing stitches. Check pauses on your machine.' :
       'Adds editable artwork to the current design.');
     const title = motif.applique ? 'Add appliqué motif' : 'Add design motif';
-    return {...native(title,detail,'insert_assistant_motif',{motif}),
-      comparison:{before,after,beforeMinutes:minutes(before),afterMinutes:minutes(after)}};
+    return compositionProposal({name:artwork.name,field:[width,height],motifs:[motif],lettering:[],edits:[]},title,detail);
   }
 
   if (intent.kind === 'lettering') {
