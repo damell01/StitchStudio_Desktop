@@ -344,12 +344,25 @@ impl Studio {
                 ],
             );
             let b = self.design_bounds();
+            // Production speed is independent of simulator playback speed.
+            let speed_id = egui::Id::new("production_spm");
+            let mut production_spm = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(speed_id, || SPM));
+            egui::ComboBox::from_id_salt("production-speed")
+                .selected_text(format!("{production_spm:.0} SPM"))
+                .width(72.0)
+                .show_ui(ui, |ui| {
+                    for speed in [400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0, 1200.0] {
+                        ui.selectable_value(&mut production_spm, speed, format!("{speed:.0} SPM"));
+                    }
+                }).response.on_hover_text("Machine sewing speed for production estimates (not playback speed)");
+            ui.ctx().data_mut(|d| d.insert_temp(speed_id, production_spm));
+            let seconds = self.design.estimated_seconds(production_spm, 3.0, 15.0).unwrap_or(0.0);
             let stats = format!(
                 "{} · {} colors · {} trims · ~{:.0} min",
                 crate::units::fmt_size(b.width(), b.height()),
                 self.design.blocks.len(),
                 self.design.trim_count(),
-                (total as f64 / SPM).ceil()
+                (seconds / 60.0).ceil()
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.issues_button(ui);
@@ -369,7 +382,7 @@ impl Studio {
                 }
                 ui.label(egui::RichText::new(stats).size(11.0).color(p.secondary))
                     .on_hover_text(format!(
-                        "Estimate at {SPM} stitches/min. Planned in {:.1} ms.",
+                        "Estimate at {production_spm:.0} stitches/min, plus 3 s per trim and 15 s per color/stop block. Actual machine time varies. Planned in {:.1} ms.",
                         self.plan_ms
                     ));
                 ui.add_space(12.0);
