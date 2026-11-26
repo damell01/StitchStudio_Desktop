@@ -22,7 +22,7 @@ function FontPicker({fonts,selected,choose}:{fonts:string[];selected:string;choo
     </dialog>
   </>;
 }
-const letteringEffects = [["satin","Standard satin"],["fill","Tatami fill"],["applique","Fabric appliqué"],["run","Running outline"],["bean","Bean stitch (triple pass)"],["ripple","Lightweight ripple"],["contour","Contour fill"],["cross","Cross stitch"],["meander","Quilted meander"],["blanket","Blanket edge"]] as const;
+const letteringEffects = [["satin","Standard satin"],["puff","Foam satin (experimental)"],["fill","Tatami fill"],["applique","Fabric appliqué"],["run","Running outline"],["bean","Bean stitch (triple pass)"],["ripple","Lightweight ripple"],["contour","Contour fill"],["cross","Cross stitch"],["meander","Quilted meander"],["blanket","Blanket edge"]] as const;
 type Settings = {
   kind?:string;
   leading?:number;
@@ -214,7 +214,7 @@ export function InlineLettering({uid,disabled,onBusy,onDone,baseline,pickingBase
  ].map(p=><button type="button" key={p.name} onClick={()=>setSettings(old=>({...old,...p.values}))}>{p.name}</button>)}
  </div>
  <label>Embroidery effect<select value={settings.kind??"satin"} onChange={e=>change("kind",e.target.value)}>{letteringEffects.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
- <label>Line spacing (× capital height)<input type="number" min=".5" max="5" step=".1" value={settings.leading??1.5} onChange={e=>change("leading",Number(e.target.value))}/></label>
+ {settings.kind==="puff"&&<small>Experimental dense satin for foam. End caps are not generated automatically; test on scrap before production.</small>}<label>Line spacing (× capital height)<input type="number" min=".5" max="5" step=".1" value={settings.leading??1.5} onChange={e=>change("leading",Number(e.target.value))}/></label>
  <label>Find font<input type="search" placeholder="Search installed fonts…" value={fontQuery} onChange={e=>setFontQuery(e.target.value)}/></label><label>Font<select value={settings.font} onChange={e=>change('font',e.target.value)}>{filteredFonts.map(f=><option key={f}>{f}</option>)}</select></label>
  <div className="inline-text-sample" style={{fontFamily:settings.font,fontWeight:settings.bold?'bold':'normal',fontStyle:settings.italic?'italic':'normal',color:hex}}>{preview&&previewBox?<svg viewBox={previewBox.join(' ')} role="img" aria-label="Actual planned stitches">{preview.blocks.map((b,i)=><g key={i} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".24" strokeLinecap="round" strokeLinejoin="round">{b.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg>:settings.text}</div><small role="status">{previewPending?'Planning stitches…':preview?preview.stitches.toLocaleString()+' stitch points · '+(previewBox![2]-4).toFixed(1)+' × '+(previewBox![3]-4).toFixed(1)+' mm':'Font sample'}</small>
  <div className="lettering-size-presets" role="group" aria-label="Quick sizes">{[8,12,20,30].map(n=><button key={n} aria-pressed={settings.size===n} onClick={()=>change('size',n)}>{n} mm</button>)}</div><div className="inline-lettering-grid"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.1" value={settings.size} onChange={e=>change('size',Number(e.target.value))}/></label><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={settings.spacing} onChange={e=>change('spacing',Number(e.target.value))}/></label></div>
