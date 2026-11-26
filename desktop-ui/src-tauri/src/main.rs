@@ -2402,6 +2402,64 @@ async fn digitize_artwork(
     Ok(review)
 }
 
+// Batch review stages editable projects separately from the active editor and library.
+fn batch_dir(app:&tauri::AppHandle,approved:bool)->Result<std::path::PathBuf,String>{
+ use tauri::Manager;
+ let dir=app.path().app_local_data_dir().map_err(|e|e.to_string())?.join(if approved{"approved-batch-projects"}else{"batch-review"});
+ std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
+ Ok(dir)
+}
+fn batch_token_path(app:&tauri::AppHandle,token:&str)->Result<std::path::PathBuf,String>{
+ if token.is_empty()||token.len()>100||!token.bytes().all(|c|c.is_ascii_alphanumeric()||c==b'-'){return Err("Invalid batch token".into())}
+ Ok(batch_dir(app,false)?.join(format!("{token}.stitchstudio")))
+}
+#[tauri::command]
+async fn stage_batch_draft(id:u64,strength:u8,token:String,app:tauri::AppHandle)->Result<(),String>{
+ use tauri::Manager;
+ let path=batch_token_path(&app,&token)?;
+ let project={
+  let state=app.state::<Mutex<Workspace>>();let w=state.lock().map_err(|e|e.to_string())?;
+  let d=w.digitizer_draft.as_ref().filter(|d|d.id==id).ok_or("Digitizing draft expired")?;
+  let (doc,plan)=if strength==0{(&d.document,&d.design)}else{let (_,doc,plan)=d.alternatives.iter().find(|(n,_,_)|*n==strength).ok_or("Preview unavailable")?;(doc,plan)};
+  let b=plan.bounds();
+  let width=(b.min.x.abs().max(b.max.x.abs())/5.+4.).max(100.);
+  let height=(b.min.y.abs().max(b.max.y.abs())/5.+4.).max(100.);
+  let staged=Workspace{source:Some(doc.clone()),current:Some(plan.clone()),..Default::default()};
+  Project::capture(&staged,width,height,"dst".into())?.ok_or("Empty draft")?
+ };
+ tauri::async_runtime::spawn_blocking(move||write_project(&path,&project)).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+async fn approve_batch_draft(token:String,app:tauri::AppHandle)->Result<LibraryEntry,String>{
+ let path=batch_token_path(&app,&token)?;let dir=batch_dir(&app,true)?;
+ tauri::async_runtime::spawn_blocking(move||{
+  let p=Project::load(&path)?;p.validate()?;
+  let stem: String=p.name.chars().map(|c|if c.is_alphanumeric()||c=='-'||c=='_'{c}else{'_'}).take(100).collect();
+  let dest=dir.join(format!("{}-{}.stitchstudio",stem,token));
+  if !dest.exists(){write_project(&dest,&p)?;}
+  let meta=std::fs::metadata(&dest).map_err(|e|e.to_string())?;
+  let entry=LibraryEntry{file:dest.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0),created:meta.created().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs())};
+  let _=std::fs::remove_file(path);Ok(entry)
+ }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+fn discard_batch_draft(token:String,app:tauri::AppHandle)->Result<(),String>{
+ let p=batch_token_path(&app,&token)?;
+ match std::fs::remove_file(p){Ok(())=>Ok(()),Err(e) if e.kind()==std::io::ErrorKind::NotFound=>Ok(()),Err(e)=>Err(e.to_string())}
+}
+#[tauri::command]
+async fn approved_batch_projects(app:tauri::AppHandle)->Result<Vec<LibraryEntry>,String>{
+ let dir=batch_dir(&app,true)?;
+ tauri::async_runtime::spawn_blocking(move||{
+  let mut out=Vec::new();
+  for entry in std::fs::read_dir(dir).map_err(|e|e.to_string())?.flatten().take(10000){
+   let path=entry.path();let Ok(meta)=std::fs::symlink_metadata(&path) else{continue};
+   if !meta.is_file()||!path.extension().is_some_and(|e|e=="stitchstudio"){continue}
+   let Ok(p)=Project::load(&path) else{continue};
+   out.push(LibraryEntry{file:path.to_string_lossy().into_owned(),name:p.name,stitches:p.blocks.iter().flat_map(|b|&b.runs).map(|r|r.points.len()).sum(),colors:p.blocks.len(),width:p.width,height:p.height,modified:meta.modified().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs()).unwrap_or(0),created:meta.created().ok().and_then(|t|t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d|d.as_secs())});
+  }Ok(out)
+ }).await.map_err(|e|e.to_string())?
+}
 // Compare against the same digitized source without changing the editor.
 #[tauri::command]
 async fn compare_digitizer_draft(id:u64,app:tauri::AppHandle)->Result<Vec<SimplifyVariant>,String>{
@@ -2736,7 +2794,7 @@ fn set_canvas_fullscreen(window: tauri::WebviewWindow, fullscreen: bool) -> Resu
 async fn check_beta_update()->Result<Option<String>,String>{
  Err("Automatic updates are not configured for this beta. Install newer builds manually.".into())
 }
-fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![path_edit::artwork_path,path_edit::update_artwork_path,history_labels,preview_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){tauri::Builder::default().manage(Mutex::new(Workspace::default())).invoke_handler(tauri::generate_handler![stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,preview_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,check_beta_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
