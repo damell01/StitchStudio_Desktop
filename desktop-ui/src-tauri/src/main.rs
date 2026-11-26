@@ -624,7 +624,8 @@ fn simplify_needle_path(points:&[zigzag::geom::P],max_length:f64,tolerance:f64)-
 fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool)->Option<(zigzag::document::Document,Design)>{
     use zigzag::{params::Kind,svg::Geometry,bezier::{Anchor,SubPath}};
     if original.stitch_count()==0||original.stitch_count()>200_000{return None}
-    let selected=|uid:usize|uids.is_none_or(|ids|ids.contains(&uid));
+    let protected: std::collections::HashSet<_> = source.shapes.iter().filter(|s| source.layer_properties(&s.id).is_some_and(|l| l.locked || l.hidden) || s.params.stop == Some(true) || s.params.trim == Some(true) || s.params.kind == Some(Kind::Applique)).map(|s| s.uid).collect();
+    let selected=|uid:usize|uids.is_none_or(|ids|ids.contains(&uid)) && !protected.contains(&uid);
     let mut best=None;let cost=|d:&Design|d.stitch_count().saturating_add(d.trim_count().saturating_mul(40));
     let before=measure_stitches(original);let original_bounds=original.bounds();
     for factor in [1.05,1.10,1.18,1.25].into_iter().take(strength.clamp(1,3) as usize+1){
