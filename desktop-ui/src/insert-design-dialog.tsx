@@ -255,6 +255,14 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert }: {
                 onChange={event => setWidth(event.target.value)} aria-invalid={!widthValid}/>
               {!widthValid && <small>Enter a width from 5 to 250 mm.</small>}
             </label>}
+        <div className="studio-insert-files" role="group" aria-label="Quick placement">
+          <button disabled={busy} onClick={()=>{setOffset(false);setX('0');setY('0')}}>Hoop center</button>
+          <button disabled={busy||!widthValid} onClick={()=>{setOffset(true);setX('0');setY(String(-Number(width)*0.65))}}>Above center</button>
+          <button disabled={busy||!widthValid} onClick={()=>{setOffset(true);setX('0');setY(String(Number(width)*0.65))}}>Below center</button>
+          <button disabled={busy||!widthValid} onClick={()=>{setOffset(true);setX(String(-Number(width)*0.65));setY('0')}}>Left of center</button>
+          <button disabled={busy||!widthValid} onClick={()=>{setOffset(true);setX(String(Number(width)*0.65));setY('0')}}>Right of center</button>
+        </div>
+        <small>Quick positions are relative to the hoop. Fine-tune placement using the offsets or canvas after insertion.</small>
         <label className="studio-insert-offset"><input type="checkbox" checked={offset} disabled={busy}
           onChange={event => setOffset(event.target.checked)}/> Offset from hoop center</label>
         {offset && <div className="studio-insert-offset-fields">
