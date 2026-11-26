@@ -15,6 +15,23 @@ Baseline `Dev` commit `4075876`. The checkout contains a shared Rust engine, a l
 
 The current `digitizing_benchmark` run encoded and reopened all six formats on three generated designs. The badge used 8,553 needle points, the thin edge design used 4,562, and the textured oval used 5,364. The textured oval had four planned trims and 207.29 mm of DST jump travel. The earlier table below records a different planner revision. These are digital measurements.
 
+## ZigZag tools in the desktop editor
+
+The desktop editor uses the shared ZigZag engine. Its **Stitches** inspector opens object-linked Design Issues and exports a separate, labeled Test Swatches sheet. Its **Edit** inspector exposes Unite, Subtract Front, Intersect, Exclude, Outline Stroke, Offset Path, Round Corners and Simplify Outline for eligible selections. Simplify Outline reduces vector points. The Simplify design dialog evaluates stitch count, coverage and trims.
+
+| Area | ZigZag capabilities to expose more fully in Stitch Studio Desktop |
+| --- | --- |
+| Drawing | Pen and freehand brush on the main canvas, direct drawing of basic shapes and manual stitches, smooth and erase brushes, joining endpoints, and snapping new geometry to anchors and intersections. The current editor already has direct node editing and move snapping. |
+| Path editing | Direct corner handles and chamfer/inverted styles, live outline simplification, compound-path release, and a cleanup preview with counts for stray points and unsewable specks. |
+| Stitch controls | Draw satin rails and rungs, drag fill angles and sewing start/end markers, adjust explicit trims and stops, reverse path direction, and copy/paste stitch settings or select all objects of one stitch type. Expose per-type controls for satin variants and underlay, ring/spiral contours, cross-stitch cells, and tartan stripes. Numeric fill angle, spacing, length, pull and a basic underlay control already exist. |
+| Digitizing and routing | Direct minimum-detail sizing, optional cap sewing order and gap-connection controls, object-linked quality navigation from the digitizer, editable trace compare, and benchmarks for very small lettering, multicolor artwork, gradients and photographs. The current digitizer already has automatic trace, color choices and a stitch goal. |
+| Lettering | Direct canvas caret editing, picking a baseline path on the canvas, richer multiline and case controls, and round-trip conversion between editable text and outlines. Desktop already has system fonts, arc settings and lettering preview. |
+| Thread and view | Starter thread-kit palettes, more ways to select or remap all related threads, sewing-order labels and satin rails on the canvas, and a snapping measure tool with explicit unit entry. Thread order and thread substitution already exist. |
+| Workspace | Multiple open designs with independent undo, view and recovery, plus tabbed or floating inspectors. Desktop already has collapsible docks, project saving and a recovery copy. |
+| Machine output | Expose compatible device-transfer workflows only after model-specific testing. ZigZag's Skitch workflow is specific to that machine family. Complete desktop batch export and verify the existing machine output on the Poolin EOM. |
+
+MCP is available in the legacy studio and bridge. The Stitch Studio Desktop assistant matches supported commands locally. The editor tools above operate directly through the desktop application.
+
 ## Phase and acceptance tracker
 
 | Phase | Working implementation and evidence | Remaining acceptance work |

@@ -3,105 +3,19 @@
 //! test piece shows which spacing, pull compensation or width suits the
 //! fabric (Ink/Stitch's Generate Test Swatches).
 
-use crate::app::{Studio, shape_bounds};
+use crate::app::Studio;
 use crate::theme::space;
 use eframe::egui::{self, Color32, Key, Vec2};
-use zigzag::document::TextSpec;
-use zigzag::geom::P;
-use zigzag::params::{Kind, Params};
+use zigzag::document::{SwatchSetting as Setting, swatch_values as values};
+use zigzag::params::Kind;
 
-/// The setting a swatch grid steps.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Setting {
-    Spacing,
-    Length,
-    Pull,
-    Width,
-    Angle,
-}
-
-impl Setting {
-    pub const ALL: [Setting; 5] = [
-        Setting::Spacing,
-        Setting::Length,
-        Setting::Pull,
-        Setting::Width,
-        Setting::Angle,
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Setting::Spacing => "Spacing",
-            Setting::Length => "Stitch length",
-            Setting::Pull => "Pull compensation",
-            Setting::Width => "Satin width",
-            Setting::Angle => "Fill angle",
-        }
+fn setting_label(setting: Setting, value: f64, include_unit: bool) -> String {
+    if !setting.is_length() {
+        return format!("{value:.0}°");
     }
-
-    fn is_length(self) -> bool {
-        self != Setting::Angle
-    }
-
-    /// Does the setting mean anything for this stitch type?
-    pub fn applies(self, kind: Kind) -> bool {
-        match self {
-            Setting::Spacing => matches!(kind, Kind::Fill | Kind::Satin | Kind::Contour),
-            Setting::Length => matches!(kind, Kind::Fill | Kind::Run | Kind::Contour),
-            Setting::Pull => matches!(kind, Kind::Fill | Kind::Satin),
-            Setting::Width => kind == Kind::Satin,
-            Setting::Angle => kind == Kind::Fill,
-        }
-    }
-
-    /// A sensible range to try, around what the object has now.
-    pub fn default_range(self, p: &Params, f: &zigzag::params::Fabric, width: f64) -> (f64, f64) {
-        let round = |v: f64| (v * 100.0).round() / 100.0;
-        match self {
-            Setting::Spacing => {
-                let s = p.spacing.unwrap_or(f.fill_spacing);
-                (round(s * 0.7), round(s * 1.3))
-            }
-            Setting::Length => (2.0, 4.0),
-            Setting::Pull => (0.0, 0.4),
-            Setting::Width => (round(width * 0.7), round(width * 1.3)),
-            Setting::Angle => (0.0, 90.0),
-        }
-    }
-
-    pub fn set(self, p: &mut Params, v: f64) {
-        match self {
-            // (The limits the panel and the tools keep to.)
-            Setting::Spacing => p.spacing = Some(v.clamp(0.1, 2.0)),
-            Setting::Length => p.len = Some(v.clamp(0.5, 10.0)),
-            Setting::Pull => p.pull = Some(v.clamp(0.0, 1.0)),
-            Setting::Width => p.width = Some(v.clamp(0.3, 15.0)),
-            Setting::Angle => p.angle = Some(v),
-        }
-    }
-
-    /// The value as a readout, in the current unit.
-    pub fn label(self, v: f64) -> String {
-        if self.is_length() {
-            let u = crate::units::current();
-            format!(
-                "{} {}",
-                zigzag::params::fmt_num(u.amount(v * 10.0)),
-                u.suffix()
-            )
-        } else {
-            format!("{v:.0}°")
-        }
-    }
-
-    /// The value alone, short, for the lettering under a swatch.
-    fn short(self, v: f64) -> String {
-        if self.is_length() {
-            zigzag::params::fmt_num(crate::units::current().amount(v * 10.0))
-        } else {
-            format!("{v:.0}°")
-        }
-    }
+    let units = crate::units::current();
+    let number = zigzag::params::fmt_num(units.amount(value * 10.));
+    if include_unit { format!("{number} {}", units.suffix()) } else { number }
 }
 
 #[derive(Clone)]
@@ -112,22 +26,6 @@ pub struct SwatchDialog {
     pub steps: usize,
     pub columns: usize,
     pub labels: bool,
-}
-
-/// The values `steps` swatches take, `from` to `to` inclusive.
-pub fn values(from: f64, to: f64, steps: usize) -> Vec<f64> {
-    let n = steps.max(1);
-    (0..n)
-        .map(|k| {
-            let t = if n == 1 {
-                0.0
-            } else {
-                k as f64 / (n - 1) as f64
-            };
-            let v = from + (to - from) * t;
-            (v * 1000.0).round() / 1000.0
-        })
-        .collect()
 }
 
 impl Studio {
@@ -245,8 +143,8 @@ impl Studio {
                     self.status = format!(
                         "Made {n} swatches, {} from {} to {}.",
                         d.setting.name().to_lowercase(),
-                        d.setting.label(d.from),
-                        d.setting.label(d.to)
+                        setting_label(d.setting, d.from, true),
+                        setting_label(d.setting, d.to, true)
                     )
                 }
                 Err(e) => self.status = format!("Couldn't make swatches: {e:#}"),
@@ -260,68 +158,21 @@ impl Studio {
     /// each with its value set and (optionally) lettered underneath. One
     /// undo step; the new objects are selected.
     pub fn make_swatches(&mut self, d: &SwatchDialog) -> anyhow::Result<usize> {
-        let idx = self.sel_indices();
-        if idx.is_empty() {
-            anyhow::bail!("select the object to test first");
-        }
-        let mut b = zigzag::geom::Bounds::empty();
-        for &i in &idx {
-            let sb = shape_bounds(&self.doc.shapes[i]);
-            b.add(sb.min);
-            b.add(sb.max);
-        }
-        let vals = values(d.from, d.to, d.steps);
-        let gap = 30.0; // 3 mm between swatches
-        let label_h = if d.labels { 35.0 } else { 0.0 };
-        // Cells wide enough for the longest label (2.5 mm letters).
-        let label_w = if d.labels {
-            vals.iter()
-                .map(|&v| d.setting.short(v).len())
-                .max()
-                .unwrap_or(0) as f64
-                * 18.0
+        let selected = self.sel_indices();
+        let values = values(d.from, d.to, d.steps);
+        let labels = if d.labels {
+            values.iter().map(|&value| setting_label(d.setting, value, false)).collect()
         } else {
-            0.0
+            Vec::new()
         };
-        let (w, h) = (b.width().max(label_w) + gap, b.height() + gap + label_h);
-        let cols = d.columns.max(1);
-        let color = self.doc.shapes[idx[0]].color;
-        let setting = d.setting;
-        let labels = d.labels;
-        let mut made = Vec::new();
+        let mut added = Vec::new();
         self.structural(|doc| {
-            for (k, &v) in vals.iter().enumerate() {
-                let (col, row) = (k % cols, k / cols);
-                let off = P::new((col + 1) as f64 * w, row as f64 * h);
-                let new = doc.duplicate(&idx, off)?;
-                for &j in &new {
-                    let p = &mut doc.shapes[j].params;
-                    if setting.applies(p.kind.unwrap_or(Kind::Fill)) {
-                        setting.set(p, v);
-                    }
-                }
-                made.extend(new);
-                if labels {
-                    let spec = TextSpec {
-                        text: setting.short(v),
-                        size_mm: 2.5,
-                        bold: false,
-                        color,
-                        kind: Kind::Run,
-                        ..TextSpec::default()
-                    };
-                    let c = b.center() + off;
-                    let under = (c.x / 10.0, (b.max.y + off.y + gap * 0.5 + 12.0) / 10.0);
-                    let t = doc.add_lettering(&spec, under)?;
-                    made.push(t);
-                }
-            }
+            added = doc.add_test_swatches(&selected, d.setting, &values, &labels, d.columns)?;
             Ok(())
         })?;
         self.replan();
-        let n = made.len();
-        self.set_selection(&made);
-        Ok(n.min(vals.len()))
+        self.set_selection(&added);
+        Ok(added.len().min(values.len()))
     }
 }
 

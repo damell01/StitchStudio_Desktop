@@ -18,6 +18,8 @@ mod glyphs;
 mod lettering;
 mod layers;
 mod paths;
+mod swatches;
+pub use swatches::{SwatchSetting, swatch_values};
 pub use cleanup::{CleanUp, CleanUpReport};
 pub use edit::Fragment;
 pub use glyphs::{Carets, GlyphBox};

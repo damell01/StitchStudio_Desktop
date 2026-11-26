@@ -95,3 +95,11 @@
   font-size: 11px;
 }
 .inspector-selection strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.stitch-tools-controls { display: grid; gap: 10px; }
+.stitch-tools-controls p { margin: 0; }
+.stitch-tools-controls fieldset { border: 0; padding: 0; margin: 0; }
+.stitch-tools-issues { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.stitch-tools-issues li { display: grid; gap: 5px; padding: 8px; border: 1px solid var(--workspace-border); border-radius: 8px; }
+.stitch-tools-issues button { justify-self: start; }
+.swatch-preview { display: block; width: 100%; max-height: 220px; background: #eee9f2; border-radius: 8px; }
