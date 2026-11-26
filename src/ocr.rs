@@ -11,7 +11,9 @@ pub struct RecognizedLine {
 pub fn recognize_rgba(w: u32, h: u32, rgba: &[u8]) -> anyhow::Result<Vec<RecognizedLine>> {
     use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem};
     use rten::Model;
-    let mut rgb = Vec::with_capacity(rgba.len()/4*3);
+    let pixels=(w as usize).checked_mul(h as usize).ok_or_else(||anyhow::anyhow!("Artwork dimensions overflow"))?;
+    anyhow::ensure!(pixels>0 && pixels<=40_000_000 && pixels.checked_mul(4)==Some(rgba.len()), "Invalid or oversized OCR artwork");
+    let mut rgb = Vec::with_capacity(pixels*3);
     for px in rgba.chunks_exact(4) {
         let a = u16::from(px[3]);
         for &v in &px[..3] {
@@ -190,6 +192,8 @@ fn recommend_font(line: &RecognizedLine, fonts: &[String], w:u32,h:u32,rgb:&[u8]
 
 pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[RecognizedLine], mm_per_px: f64) -> anyhow::Result<()> {
     use crate::{document::TextSpec, svg::shapes_bounds};
+    anyhow::ensure!(mm_per_px.is_finite() && mm_per_px>0.0,"Invalid artwork scale");
+    anyhow::ensure!(lines.iter().filter(|l|l.enabled).count()<=64,"Select at most 64 lettering regions per reconstruction");
     let fonts = crate::document::font_families();
     let mut candidate = doc.clone();
     for line in lines.iter().filter(|l| l.enabled) {
@@ -312,6 +316,10 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
                 if block.color!=color{continue;}
                 for run in &block.runs{
                     for w in run.pts.windows(2){
+                        // Reject segments outside the region before sampling.
+                        if w[0].x.max(w[1].x)<fitted.min.x || w[0].x.min(w[1].x)>fitted.max.x ||
+                           w[0].y.max(w[1].y)<fitted.min.y || w[0].y.min(w[1].y)>fitted.max.y {continue;}
+
                         let n=(w[0].dist(w[1])/0.5).ceil().clamp(1.0,2048.0) as usize;
                         for j in 0..=n{
                             let p=w[0].lerp(w[1],j as f64/n as f64);
