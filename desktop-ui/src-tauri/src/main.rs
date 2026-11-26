@@ -2741,13 +2741,45 @@ async fn digitize_artwork(
             }
         }
         let mut optimization = None;
-        // Automatic balanced optimization uses the same guarded candidate
-        // search as the editor, without deleting artwork or changing text.
+        // Prefer a production-efficient plan at the original requested size.
+        // 10k is a soft goal, 15k a review threshold, never a destructive cap.
         if design.stitch_count() <= 100_000 {
             let before=design.stitch_count();
-            let candidate=simplify_design_candidate(&document,&design,2,None,false)
-                .or_else(||optimized_density(&document,&design));
-            if let Some((next,plan))=candidate {
+            let original=design.clone();
+            let budget=SimplifyBudget::new(std::time::Duration::from_secs(10));
+            let opts=SimplifyOptions{quick:true,merge:true,auto_types:true,
+                target_stitches:Some(10_000),budget:Some(budget),..Default::default()};
+            let mut best:Option<(zigzag::document::Document,Design)>=None;
+            let eligible=|p:&Design|{
+                let a=original.bounds();let b=p.bounds();
+                let audit=measure_stitches(p);let baseline=measure_stitches(&original);
+                p.stitch_count()>0&&p.stitch_count()<before
+                    &&p.trim_count()<=original.trim_count()
+                    &&audit.long<=baseline.long&&audit.zero<=baseline.zero
+                    &&a.min.dist(b.min)<=5.&&a.max.dist(b.max)<=5.
+                    &&original.blocks.iter().map(|b|b.color).eq(p.blocks.iter().map(|b|b.color))
+                    &&optimization_quality(&original,p,800.,3.).coverage>=90.
+            };
+            // The aggressive pass comes first for expensive designs, so the
+            // time budget is not spent entirely on marginal improvements.
+            let levels:&[u8]=if before>15_000{&[3,2]}else{&[2]};
+            for &level in levels{
+                if opts.exhausted(){break}
+                if let Ok((d,p))=choose_simplification(&document,&original,level,None,false,&opts){
+                    if eligible(&p)&&best.as_ref().is_none_or(|(_,old)|p.stitch_count()<old.stitch_count()){
+                        best=Some((d,p));
+                    }
+                }
+                if best.as_ref().is_some_and(|(_,p)|p.stitch_count()<=10_000){break}
+            }
+            if before>15_000&&!opts.exhausted()&&best.as_ref().is_none_or(|(_,p)|p.stitch_count()>10_000){
+                if let Ok((d,p))=choose_fast_stitch(&document,&original,None,&opts){
+                    if eligible(&p)&&best.as_ref().is_none_or(|(_,old)|p.stitch_count()<old.stitch_count()){
+                        best=Some((d,p));
+                    }
+                }
+            }
+            if let Some((next,plan))=best {
                 optimization=Some([before,plan.stitch_count()]);
                 document=next;design=plan;
             }
@@ -2792,6 +2824,7 @@ async fn digitize_artwork(
         warnings.retain(|message| seen.insert(message.clone()));
         lettering_warnings.append(&mut warnings);
         let mut warnings = lettering_warnings;
+        if count>15_000 {warnings.insert(0,format!("Efficiency goal not reached: {count} stitch points at the requested size. Consider a smaller design or simpler artwork; coverage was preserved rather than forcing a stitch cap."));}
         warnings.truncate(12);
         let review = DigitizerReview {
             id,
@@ -2917,7 +2950,7 @@ async fn compare_digitizer_draft(id:u64,quick:Option<bool>,app:tauri::AppHandle)
                 }
                 continue
             }
-            let options=SimplifyOptions{quick,solid:strength==3,merge:strength>=2,auto_types:strength>=2,..Default::default()};
+            let options=SimplifyOptions{quick,solid:strength==3,merge:strength>=2,auto_types:strength>=2,target_stitches:Some(10_000),..Default::default()};
             match choose_simplification(&doc,&original,strength,None,strength==3,&options){
                 Ok((d,plan))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&plan)),reason:None,quality:Some(optimization_quality(&original,&plan,800.,3.))});alternatives.push((strength,d,plan));}
                 Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
