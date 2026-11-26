@@ -5,7 +5,7 @@ use zigzag::{
     bezier, document::Document, geom::P, params::Kind, stitch::satin::rails_from_subpaths,
 };
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, Copy, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum Drawing {
     Pen,
@@ -64,9 +64,12 @@ fn add(
     field: [f64; 2],
     color: [u8;3],
     satin_width: f64,
+    polygon_sides: usize,
+    star_ratio: f64,
 ) -> Result<usize, String> {
     let pts = drawing_points(points, field)?;
     if !(0.5..=10.0).contains(&satin_width){return Err("Satin width must be 0.5–10 mm".into())}
+    if !(3..=12).contains(&polygon_sides)||!(0.2..=0.85).contains(&star_ratio){return Err("Invalid polygon settings".into())}
     match tool {
         Drawing::SatinColumn => return Err("Draw two rails for the satin column.".into()),
         Drawing::Pen => document.add_drawing(&pts, false, color, Kind::Run),
@@ -90,13 +93,13 @@ fn add(
             let path = if matches!(tool, Drawing::Rectangle) {
                 format!("M {left} {top} H {right} V {bottom} H {left} Z")
             } else if matches!(tool, Drawing::Star | Drawing::Hexagon | Drawing::Triangle) {
-                let count = match tool { Drawing::Star => 10, Drawing::Triangle => 3, _ => 6 };
+                let count = match tool { Drawing::Star => polygon_sides*2, Drawing::Triangle => 3, _ => polygon_sides };
                 let cx = (left+right)/2.0;
                 let cy = (top+bottom)/2.0;
                 let mut path=String::new();
                 for i in 0..count {
                     let angle=std::f64::consts::TAU*i as f64/count as f64-std::f64::consts::FRAC_PI_2;
-                    let radius=if matches!(tool, Drawing::Star)&&i%2==1 {0.45} else {1.0};
+                    let radius=if matches!(tool, Drawing::Star)&&i%2==1 {star_ratio} else {1.0};
                     let x=cx+(right-left)/2.0*radius*angle.cos();
                     let y=cy+(bottom-top)/2.0*radius*angle.sin();
                     path.push_str(&format!("{} {x} {y} ",if i==0 {"M"} else {"L"}));
@@ -154,6 +157,8 @@ pub(super) async fn draw_canvas_shape(
     subpaths: Option<Vec<Vec<[f64; 2]>>>,
     color: Option<[u8;3]>,
     satin_width: Option<f64>,
+    polygon_sides: Option<usize>,
+    star_ratio: Option<f64>,
     app: tauri::AppHandle,
 ) -> Result<Preview, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -164,7 +169,7 @@ pub(super) async fn draw_canvas_shape(
         let index = if matches!(tool, Drawing::SatinColumn) {
             add_column(&mut document, subpaths.unwrap_or_default(), field,color)?
         } else {
-            add(&mut document, tool, points, field,color,satin_width.unwrap_or(2.5))?
+            add(&mut document, tool, points, field,color,satin_width.unwrap_or(2.5),polygon_sides.unwrap_or(if matches!(tool,Drawing::Star){5}else{6}),star_ratio.unwrap_or(0.45))?
         };
         let design = document.plan_cached(&mut workspace.plan_cache);
         if design.per_shape.get(index).copied().unwrap_or_default() == 0 {
@@ -229,7 +234,7 @@ mod tests {
                 tool,
                 vec![[0.0, 0.0], [12.0, 8.0], [22.0, 5.0]],
                 [130.0, 180.0],
-                [20,40,60],2.5,
+                [20,40,60],2.5,5,0.45,
             )
             .unwrap();
             assert_eq!(document.shapes[index].params.kind, Some(kind));
