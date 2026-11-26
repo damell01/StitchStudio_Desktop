@@ -211,13 +211,4 @@ jobs:
           HOSTINGER_FEED_DIR: ${{ vars.HOSTINGER_FEED_DIR }}
           HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
           HOSTINGER_KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
-        run: |
-          [[ "$STITCH_FEED_ACCESS_KEY" =~ ^[a-f0-9]{64}$ && "$STITCH_UPDATE_FEED" == https://* ]]
-          [[ $(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$STITCH_UPDATE_FEED") == 401 ]]
-          authenticated() {
-            printf 'header = "Authorization: Bearer %s"\n' "$STITCH_FEED_ACCESS_KEY" |
-              curl -fsS -K - --max-time 15 "$STITCH_UPDATE_FEED"
-          }
-          authenticated > /dev/null
-          bash .github/scripts/deploy-hostinger-update.sh "$UPDATE_VERSION" update-feed
-          authenticated | jq -e --arg version "$UPDATE_VERSION" '.version == $version' > /dev/null
+        run: bash .github/scripts/deploy-hostinger-update.sh "$UPDATE_VERSION" update-feed
