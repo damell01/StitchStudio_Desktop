@@ -432,14 +432,21 @@ fn import_text(text: &usvg::Text, inherited: &Inherit, out: &mut Vec<Shape>) {
     // not disappear when it has no fill (double-outline lettering).
     let mut strokes = Vec::new();
     collect_glyph_strokes(text.flattened(), text.abs_transform(), &mut strokes);
+    // A single editable SVG text object must produce a single stitch object.
+    // Flattened glyphs may be separate paths, including holes in letters.
+    let mut combined = Vec::new();
+    let mut paint = None;
     for (lines, width, color) in strokes {
-        if lines.is_empty() { continue; }
+        if paint.is_none() { paint = Some((width, color)); }
+        combined.extend(lines);
+    }
+    if let Some((width, color)) = paint.filter(|_| !combined.is_empty()) {
         let params = Params {
             kind: Some(ctx.base.kind.unwrap_or(Kind::Satin)),
             ..ctx.base.clone()
         };
         push(out, text.id(), Part::Stroke, &ctx, color,
-             Geometry::Stroke { lines, width }, params);
+             Geometry::Stroke { lines: combined, width }, params);
     }
 }
 
@@ -661,6 +668,14 @@ pub fn display_names(shapes: &[Shape]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn outlined_svg_text_produces_stitchable_stroke_geometry() {
+        let family = crate::document::default_font();
+        let svg = format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100"><text id="sample_satin" x="10" y="40" font-family="{}" font-size="20" fill="none" stroke="#aabbcc" stroke-width="2">AB</text></svg>"##, family);
+        let shapes = load(svg.as_bytes()).unwrap();
+        assert!(shapes.iter().any(|s| matches!(&s.geometry, Geometry::Stroke {lines, width} if !lines.is_empty() && *width > 0.0)), "Outlined lettering must produce actual stitch paths");
+    }
 
     #[test]
     fn names_keep_numbers_and_drop_settings() {
