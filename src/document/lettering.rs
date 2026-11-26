@@ -124,6 +124,14 @@ pub struct TextSpec {
     pub bean: bool,
     /// Dense satin preset for foam embroidery; requires a sew-out test.
     pub puff: bool,
+    /// Editable multi-layer embroidery effect.
+    pub effect: Option<String>,
+    pub effect_color: [u8; 3],
+    pub inner_color: [u8; 3],
+    pub outer_width: f64,
+    pub inner_width: f64,
+    pub shadow_x: f64,
+    pub shadow_y: f64,
     /// Line spacing as a multiple of the cap height (1.5 ≈ normal).
     pub leading: f64,
     pub align: Align,
@@ -158,6 +166,13 @@ impl Default for TextSpec {
             kind: Kind::Satin,
             bean: false,
             puff: false,
+            effect: None,
+            effect_color: [28, 35, 55],
+            inner_color: [245, 245, 245],
+            outer_width: 2.4,
+            inner_width: 1.0,
+            shadow_x: 1.5,
+            shadow_y: 1.5,
             leading: 1.5,
             align: Align::Center,
             h_scale: 100.0,
@@ -398,6 +413,12 @@ impl TextSpec {
             self.bold as u8,
             self.italic as u8
         );
+        if let Some(effect) = &self.effect {
+            s.push_str(&format!(";effect={};ec={:02x}{:02x}{:02x};ic={:02x}{:02x}{:02x};ow={};iw={};sx={};sy={}",
+                effect, self.effect_color[0], self.effect_color[1], self.effect_color[2],
+                self.inner_color[0], self.inner_color[1], self.inner_color[2],
+                n(self.outer_width), n(self.inner_width), n(self.shadow_x), n(self.shadow_y)));
+        }
         if self.puff { s.push_str(";puff=1"); }
         if self.bean { s.push_str(";bean=1"); }
         if self.leading != 1.5 {
@@ -455,6 +476,13 @@ impl TextSpec {
                 "arc" => s.arc_mm = num.unwrap_or(0.0),
                 "bold" => s.bold = v == "1",
                 "italic" => s.italic = v == "1",
+                "effect" => { if matches!(v, "outline" | "shadow" | "gradient") { s.effect = Some(v.into()); } },
+                "ec" => { if let Some(color) = parse_effect_color(v) { s.effect_color = color; } },
+                "ic" => { if let Some(color) = parse_effect_color(v) { s.inner_color = color; } },
+                "ow" => s.outer_width = num.unwrap_or(2.4).clamp(0.5, 6.0),
+                "iw" => s.inner_width = num.unwrap_or(1.0).clamp(0.3, 4.0),
+                "sx" => s.shadow_x = num.unwrap_or(1.5).clamp(-10.0, 10.0),
+                "sy" => s.shadow_y = num.unwrap_or(1.5).clamp(-10.0, 10.0),
                 "puff" => s.puff = v == "1",
                 "bean" => s.bean = v == "1",
                 "leading" => s.leading = num.unwrap_or(1.5).clamp(0.5, 5.0),
@@ -477,6 +505,38 @@ impl TextSpec {
             }
         }
         s
+    }
+
+    /// Generate real stitchable SVG layers, while retaining one editable text.
+    /// The generated siblings are rebuilt whenever the text is edited.
+    fn layered_element(&self, id: &str, arc_id: &str, transform: Option<&str>) -> String {
+        let base = self.element(id, arc_id, transform);
+        let Some(effect) = self.effect.as_deref() else { return base; };
+        let mut layer = |tag: &str, color: [u8; 3], stroke: Option<f64>| {
+            let mut copy = self.clone();
+            copy.color = color;
+            copy.effect = None;
+            copy.puff = false;
+            copy.bean = false;
+            let effect_id = format!("tl-effect-{tag}-{id}_{}", if stroke.is_some() { "satin" } else { "fill" });
+            let mut xml = copy.element(&effect_id, &format!("{arc_id}-{tag}"), transform);
+            xml = xml.replace(&format!(" data-tl-lettering=\\\"{}\\\"", xml_escape(&copy.data_attr())), "");
+            if let Some(width) = stroke {
+                let hex = format!("#{:02x}{:02x}{:02x}", color[0], color[1], color[2]);
+                xml = xml.replace(&format!("fill=\\\"{hex}\\\""),
+                    &format!("fill=\\\"none\\\" stroke=\\\"{hex}\\\" stroke-width=\\\"{}\\\"", crate::params::fmt_num(width)));
+            }
+            xml
+        };
+        match effect {
+            "outline" => format!("{}{}{}",
+                layer("outer", self.effect_color, Some(self.outer_width)),
+                layer("inner", self.inner_color, Some(self.inner_width)), base),
+            "shadow" => format!("<g id=\\\"tl-effect-shadow-{id}\\\" transform=\\\"translate({} {})\\\">{}{}</g>",
+                crate::params::fmt_num(self.shadow_x), crate::params::fmt_num(self.shadow_y),
+                layer("shadow", self.effect_color, None), "").replace("</g>", &format!("</g>{base}")),
+            _ => base,
+        }
     }
 
     /// The `<text>` element (plus its baseline path, if any), in mm around
@@ -589,6 +649,29 @@ impl TextSpec {
     }
 }
 
+fn parse_effect_color(value: &str) -> Option<[u8; 3]> {
+    if value.len() != 6 { return None; }
+    Some([
+        u8::from_str_radix(&value[0..2], 16).ok()?,
+        u8::from_str_radix(&value[2..4], 16).ok()?,
+        u8::from_str_radix(&value[4..6], 16).ok()?,
+    ])
+}
+
+fn set_lettering_stitches(p: &mut crate::params::Params, spec: &TextSpec) {
+    p.kind = Some(spec.kind);
+    p.foam_caps = Some(spec.puff && spec.kind == Kind::Satin);
+    if spec.puff && spec.kind == Kind::Satin { apply_puff_preset(p); }
+    if spec.kind == Kind::Run { p.repeats = Some(if spec.bean { 3 } else { 1 }); }
+    if spec.kind == Kind::Satin && spec.effect.as_deref() == Some("gradient") {
+        p.colors = Some(vec![spec.color, spec.effect_color]);
+        p.blend = Some(true);
+    } else {
+        p.colors = None;
+        p.blend = Some(false);
+    }
+}
+
 fn apply_puff_preset(p: &mut crate::params::Params) {
     p.spacing = Some(0.25);
     p.satin_underlay = Some(0);
@@ -678,7 +761,7 @@ impl Document {
             self.next_group += 1;
         }
         let n = self.next_group;
-        let el = spec.element(&id, &format!("tl-arc-{n}"), None);
+        let el = spec.layered_element(&id, &format!("tl-arc-{n}"), None);
         let group = format!(
             "<g id=\"tl-lettering-{n}\" transform=\"matrix({} {} {} {} {} {})\">{el}</g>\n",
             m[0], m[1], m[2], m[3], m[4], m[5]
@@ -695,9 +778,7 @@ impl Document {
             .iter()
             .position(|s| s.id == id)
             .ok_or_else(|| anyhow!("the font produced no outlines for that text"))?;
-        self.shapes[i].params.kind = Some(spec.kind);
-        if spec.puff && spec.kind == Kind::Satin { apply_puff_preset(&mut self.shapes[i].params); }
-        if spec.kind == Kind::Run && spec.bean { self.shapes[i].params.repeats = Some(3); }
+        set_lettering_stitches(&mut self.shapes[i].params, spec);
         // Arcs hang off their baseline: center the letters themselves on the
         // point asked for. Text on a path stays put: the point is the
         // path's center, which the baseline is relative to.
@@ -705,7 +786,11 @@ impl Document {
         let shift = P::new(center_mm.0 * 10.0, center_mm.1 * 10.0) - b.center();
         if shift.len() > 1.0 && spec.path.is_none() {
             let uid = self.shapes[i].uid;
-            self.transform(&[i], crate::geom::translation(shift))?;
+            // Keep generated outlines and shadows attached to their live text.
+            let siblings: Vec<usize> = self.shapes.iter().enumerate()
+                .filter(|(_, s)| s.groups.iter().any(|g| g == &format!("tl-lettering-{n}")))
+                .map(|(k, _)| k).collect();
+            self.transform(&siblings, crate::geom::translation(shift))?;
             return self
                 .shapes
                 .iter()
@@ -811,15 +896,26 @@ impl Document {
             format!("tl-arc-{}", self.next_group)
         });
         // Keep the stitch settings already in the id.
-        let el = spec.element(&id, &arc_id, transform.as_deref());
+        let el = spec.layered_element(&id, &arc_id, transform.as_deref());
+        let replacement = n.parent_element()
+            .filter(|g| g.tag_name().name() == "g" && g.attribute("id").is_some_and(|id| id.starts_with("tl-lettering-")))
+            .map(|g| {
+                let group_range = g.range();
+                let existing = &self.xml[group_range.clone()];
+                let open = existing.find('>').unwrap() + 1;
+                let close = existing.rfind("</g>").unwrap();
+                (group_range, format!("{}{}{}", &existing[..open], el, &existing[close..]))
+            });
         drop(doc);
-        self.xml.replace_range(range, &el);
+        if let Some((group_range, group_xml)) = replacement {
+            self.xml.replace_range(group_range, &group_xml);
+        } else {
+            self.xml.replace_range(range, &el);
+        }
         let map = self.uid_map(&HashMap::new());
         self.import(&map)?;
         if let Some(s) = self.shapes.iter_mut().find(|s| s.uid == uid) {
-            s.params.kind = Some(spec.kind);
-            if spec.puff && spec.kind == Kind::Satin { apply_puff_preset(&mut s.params); }
-            if spec.kind == Kind::Run { s.params.repeats = Some(if spec.bean { 3 } else { 1 }); }
+            set_lettering_stitches(&mut s.params, spec);
             s.color = spec.color;
             s.paint = spec.color;
         }
