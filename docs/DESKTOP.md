@@ -32,6 +32,17 @@ Run the resulting setup executable to install the app. Use Windows **Installed a
 - Select an object. Choose **Edit artwork nodes** or **Edit stitch points** to move, add, or erase individual points. Applying changes creates one undo step.
 - Open **Garment mockup** to choose clothing, fabric color and placement. Choose **Save mockup PNG** to save the flat preview or the current 3D hoodie view.
 
+## Offline design assistant
+
+Open **Design assistant** from the editor toolbar. Pick a quick action or describe one edit in your own words. For example:
+
+- “Could you replace all black thread with navy blue?”
+- “Fit my design in my 8 × 9 hoop.”
+- “Make this design take less than 15 minutes.”
+- “Simplify the bow into a solid shape.” The assistant matches named layers in the current design.
+
+The proposal shows what the action will change. Simplification shows the existing and proposed stitch paths, point counts, trims, and estimated sewing times. Use **Apply change** to run the native edit, or **Skip** to keep the design as it is. Named thread colors map to exact RGB values. Confirm dimensions against your machine's usable sewing field. The timing estimate uses your saved machine speed and trim settings.
+
 ## macOS development and packaging
 
 Use macOS with Xcode Command Line Tools, Node.js 22 or newer, and Rust 1.95 or newer.

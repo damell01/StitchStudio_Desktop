@@ -1,0 +1,83 @@
+.assistant-chat {
+  --assistant-surface: var(--workspace-surface, var(--panel, #fff));
+  --assistant-soft: var(--workspace-soft, #eee6fb);
+  --assistant-line: var(--workspace-border, #ded3ed);
+  --assistant-text: var(--workspace-text, #352744);
+  --assistant-muted: var(--workspace-muted, #665b72);
+  --assistant-purple: var(--workspace-accent, #6945a2);
+  width: min(690px, calc(100vw - 36px));
+  max-width: none;
+  max-height: min(690px, calc(100dvh - 28px));
+  padding: 0;
+  border: 1px solid var(--assistant-line);
+  border-radius: 18px;
+  background: var(--assistant-surface);
+  color: var(--assistant-text);
+  overflow: hidden;
+  box-shadow: 0 20px 72px #28183b4a;
+}
+.assistant-chat[open] {display: grid; grid-template-rows: auto minmax(0, 1fr) auto;}
+.assistant-chat::backdrop {background: #24173769;}
+.assistant-chat-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--assistant-line);
+}
+.assistant-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  background: var(--assistant-soft);
+  color: var(--assistant-purple);
+  border-radius: 11px;
+}
+.assistant-chat-heading h2 {margin: 0; font-size: 18px;}
+.assistant-chat-heading p {display: flex; align-items: center; gap: 5px; margin: 3px 0 0; color: var(--assistant-muted); font-size: 12px;}
+.assistant-chat-heading p span {width: 6px; height: 6px; background: currentColor; border-radius: 50%;}
+.assistant-chat-heading > button {margin-left: auto;}
+.assistant-chat-feed {
+  min-height: min(225px, 30dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.assistant-intro {padding: 12px 14px; background: var(--assistant-soft); border-radius: 10px; align-self: flex-start;}
+.assistant-intro p {margin: 0 0 4px;}
+.assistant-intro small, .assistant-working {color: var(--assistant-muted);}
+.assistant-msg {display: grid; gap: 3px; max-width: min(90%, 60ch); align-self: flex-start;}
+.assistant-msg > span {color: var(--assistant-muted); font-size: 11px; font-weight: 650;}
+.assistant-msg > p {margin: 0; border: 1px solid var(--assistant-line); border-radius: 4px 10px 10px; padding: 8px 11px; overflow-wrap: anywhere; white-space: pre-line;}
+.assistant-msg[data-speaker='You'] {align-self: flex-end;}
+.assistant-msg[data-speaker='You'] > span {text-align: right;}
+.assistant-msg[data-speaker='You'] > p {border-radius: 10px 4px 10px 10px; background: var(--assistant-soft);}
+.assistant-proposal {padding: 11px; border: 1px solid var(--assistant-line); border-radius: 11px; background: var(--assistant-soft);}
+.assistant-proposal-heading {display: flex; align-items: center; gap: 7px;}
+.assistant-proposal-heading svg {color: var(--assistant-purple);}
+.assistant-proposal p {margin: 6px 0 10px; overflow-wrap: anywhere;}
+.assistant-proposal-actions {display: flex; gap: 6px; justify-content: flex-end;}
+.assistant-proposal-actions button, .assistant-quick-actions button {display: inline-flex; align-items: center; justify-content: center; gap: 5px;}
+.assistant-comparison {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px;}
+.assistant-comparison figure {margin: 0; background: var(--assistant-surface); border: 1px solid var(--assistant-line); border-radius: 8px; overflow: hidden;}
+.assistant-comparison svg[role='img'] {display: block; width: 100%; height: 105px; background: #faf7ef;}
+.assistant-comparison figcaption {display: grid; gap: 2px; padding: 6px 8px; font-size: 11px;}
+.assistant-comparison figcaption span {display: flex; gap: 3px; align-items: center;}
+.assistant-working {margin: 0; font-size: 12px;}
+.assistant-controls {display: grid; gap: 9px; padding: 10px 18px 14px; border-top: 1px solid var(--assistant-line);}
+.assistant-quick-actions {display: flex; flex-wrap: wrap; gap: 5px;}
+.assistant-quick-actions button {min-height: 28px; font-size: 11px;}
+.assistant-controls form {display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; align-items: stretch;}
+.assistant-controls input {min-width: 0; border: 1px solid var(--assistant-line); border-radius: 8px; padding: 8px 10px; background: var(--assistant-surface); color: var(--assistant-text);}
+.assistant-controls form button {display: grid; place-items: center; min-width: 38px;}
+.assistant-chat :is(button,input):focus-visible {outline: 2px solid var(--assistant-purple); outline-offset: 2px;}
+@media(max-height: 520px) {
+  .assistant-chat-heading {padding-block: 7px;}
+  .assistant-chat-feed {min-height: 0; padding-block: 8px;}
+  .assistant-controls {padding-block: 7px;}
+}

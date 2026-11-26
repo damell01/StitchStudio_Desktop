@@ -60,3 +60,19 @@ test('scoped transforms preserve units and reject invalid bounds',()=>{
  for(const [input,expected] of cases)expect(assistantIntent(input),input).toEqual(expected);
  for(const input of ['Move selected objects 501 mm right','Move selected objects 0 mm right','Move selected objects 1 yard left','Scale selected objects to 0%','Make selected objects 100% smaller','Rotate selected objects 361 degrees'])expect(assistantIntent(input),input).toBeNull();
 });
+
+test('understands conversational requests, thread names, and physical goals offline', () => {
+  expect(assistantIntent('Could you make my design fit in my 8 × 9 hoop?')).toEqual({kind:'fitDimensions',width:203.2,height:228.6});
+  expect(assistantIntent('Fit the design to a 130 x 180 mm hoop')).toEqual({kind:'fitDimensions',width:130,height:180});
+  expect(assistantIntent('Make this design take less than 15 minutes.')).toEqual({kind:'targetTime',value:15});
+  expect(assistantIntent('Could you please replace all black thread with navy blue?')).toEqual({kind:'recolor',previous:[0,0,0],color:[0,0,128]});
+  expect(assistantIntent('I want to prepare this design for a sweatshirt.')).toEqual({kind:'fabric',fabric:'sweatshirt'});
+  expect(assistantIntent('Please insert the name “Ella Mae” at 1 inch tall.')).toEqual({kind:'lettering',text:'Ella Mae',size:25.4});
+  expect(assistantIntent('Simplify the selected objects')).toEqual({kind:'simplify',selected:true});
+  expect(assistantIntent('Simplify the bow into a solid shape.')).toEqual({kind:'simplify',text:'bow',selected:true,value:4});
+  expect(assistantIntent('Remove unnecessary thread cuts.')).toEqual({kind:'reduceTrims'});
+  expect(assistantIntent('Could you center it in my hoop, please?')).toEqual({kind:'center'});
+  for (const prompt of ['Fit my 0 × 9 hoop','Target 900 minutes','Replace black with navy and undo','Can you delete everything?']) {
+    expect(assistantIntent(prompt),prompt).toBeNull();
+  }
+});

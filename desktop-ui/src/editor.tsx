@@ -1,6 +1,7 @@
 import {PricingCalculator} from './pricing-calculator';
 import {PathEditor} from './path-editor';
 import {assistantIntent} from './assistant-intent';
+import {AssistantChat,type AssistantProposal} from './assistant-chat';
 import {rememberProject,thumbnailOf,type Project} from './library';
 import {InlineLettering} from './lettering';
 import {Type,Clock3,Sparkles,ArrowUp,ArrowDown,ArrowLeft,ArrowRight} from 'lucide-react';
@@ -133,11 +134,13 @@ function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
  if(show)setGuides({x:gx,y:gy});return [x,y]
 }
 const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
-const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(false);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [assistantText,setAssistantText]=useState('');const [assistantReply,setAssistantReply]=useState('Describe a supported edit, or choose a suggestion. No model or internet required.');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
+const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(false);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);function openText(uid:number|null=null){setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
 const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>localStorage.getItem('studio-default-machine')||''),[hoop,setHoop]=useState(()=>localStorage.getItem('studio-default-hoop')||'');const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState('dst'),[width,setWidth]=useState(130),[height,setHeight]=useState(180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
+const assistantContext = useRef({plan, width, height, machine, hoop, objects});
+assistantContext.current = {plan, width, height, machine, hoop, objects};
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 const editLock=useRef(false);const [inlineWork,setInlineWork]=useState('');
-async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return;editLock.current=true;setInlineWork(command==='maximize_in_hoop'?'Fitting design and regenerating stitches…':command==='resize_artwork_selection'?'Regenerating stitches at new size…':command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null)}catch(e){setMessage(String(e))}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview([1,1]);setRotationPreview(0);setBusy(false)}}
+async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return {plan:null,error:'The editor is busy. Try again when it finishes.'};editLock.current=true;setInlineWork(command==='maximize_in_hoop'?'Fitting design and regenerating stitches…':command==='resize_artwork_selection'?'Regenerating stitches at new size…':command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null);return {plan:next,error:null}}catch(e){const error=String(e);setMessage(error);return {plan:null,error}}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview([1,1]);setRotationPreview(0);setBusy(false)}}
 useEffect(()=>{if(!plan||busy)return;const save=()=>{invoke('recovery_save',{width,height,format,threadAssignments}).then(()=>setRecoveryStatus('Recovery copy saved')).catch(e=>setRecoveryStatus('Recovery save failed: '+String(e)))};const timer=setTimeout(save,1500);return()=>clearTimeout(timer)},[plan,width,height,format,busy,threadAssignments]);
 async function recover(){if(plan&&!await confirmAction('Replace the current design with the recovery copy?'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string;thread_assignments?:ThreadAssignments}|null>('recovery_open');if(p){setThreadAssignments(p.thread_assignments??{});setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null);setMessage('Recovery copy opened. Save as a project to keep it.')}else setMessage('No recovery copy found.')}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 function openSimplify(){if(!plan||busy||editLock.current)return;const scope=movementIds.length&&movementIds.length<objects.length?'selection':'all';setSimplifyScope(scope);setSimplifyDetail(false);setSimplifyReview(null);setSimplifyBefore(plan);setSimplifyError('');setSimplifyOpen(true);void simplify(scope,true);}
@@ -145,87 +148,219 @@ async function simplify(scope=simplifyScope,automatic=false){if(!plan||busy||edi
 async function applySimplify(){if(!simplifyReview||busy||editLock.current)return;editLock.current=true;setBusy(true);setInlineWork('Applying selected stitch plan…');try{const next=await invoke<Plan>('apply_simplification',{id:simplifyReview.id,strength:simplifyLevel});setPlan(next);setPlayhead(null);setSimplifyOpen(false);}catch(e){setSimplifyError(String(e));setSimplifyReview(null)}finally{editLock.current=false;setBusy(false);setInlineWork('')}}
 
 function transform(s:number,r:number,x:number,y:number){return edit('transform_design',{scale:s,rotation:r,dx:x,dy:y})}
-async function runAssistant(input:string){
- if(busy)return;
- const intent=assistantIntent(input);
- if(!intent){setAssistantReply('Try centering, fitting, rotation, scaling, checking quality, recommending a hoop, optimizing for a fabric, replacing exact hex colors, or explaining underlay. Open-ended requests are not supported yet.');return}
- if(intent.kind==='help'){
- const s=input.toLowerCase();
- const tips=[['underlay','Underlay supports top stitches and stabilizes the fabric. Choose it by fabric and stitch type.'],['density','Density is the spacing between stitch rows. Smaller spacing means more penetrations. Start with the fabric preset and test sew.'],['pull compensation','Pull compensation extends stitch edges to offset fabric contraction. Adjust in small increments after a test sew.'],['satin stitches','Satin uses alternating stitches across a narrow column. Wide areas may need split satin or fill.'],['stabilizer','Use an appropriate backing for the garment; stretchy knits typically need cutaway. Test your fabric and design together.'],['thread trims','Trims cut thread between separated areas. Optimize covered travel and color order rather than connecting across empty artwork.']];
- setAssistantReply(tips.find(([key])=>s.includes(key))?.[1]??'Choose a topic such as underlay or density.');return;
- }
- if(intent.kind==='clearSelection'){setMulti([]);setSelectedObject(null);setActiveGroup(null);setContext(null);setAssistantReply('Selection cleared.');return}
- if(intent.kind==='selectColor'||intent.kind==='selectLabel'||intent.kind==='selectKind'){
-  const matches=objects.filter(o=>intent.kind==='selectColor'?o.color.join(',')===intent.color?.join(','):intent.kind==='selectLabel'?o.label.toLowerCase().includes(intent.text??''):o.kind.toLowerCase()===intent.text);
-  if(!matches.length){setAssistantReply('No editable objects matched. Check the Layers panel for exact colors, labels and stitch types.');return}
-  setCanvasMode('select');setMulti(matches.map(o=>o.uid));setSelectedObject(null);setActiveGroup(null);setContext(null);showLayers(true);setLayerTab('objects');
-  setAssistantReply('Selected '+matches.length+' matching object'+(matches.length===1?'':'s')+'. Use Properties to modify the selection. Whole-design commands still affect the entire canvas.');return;
- }
- if(['moveSelected','scaleSelected','rotateSelected'].includes(intent.kind)){
-  const ids=selectionIds.length?selectionIds:selectedObject!==null&&objects.some(o=>o.uid===selectedObject)?[selectedObject]:activeGroup!==null?designGroups.find(g=>g.key===activeGroup)?.members.filter(o=>!o.locked&&!o.hidden).map(o=>o.uid)??[]:[];
-  if(!ids.length){setAssistantReply('Select editable objects or a design group before using a selected-object command. Nothing was changed.');return}
-  if(!await confirmAction('Apply to '+ids.length+' selected object(s) only: '+input+'?'))return;
-  if(editLock.current)return;
-  setAssistantReply('Updating the selected objects only. Review the canvas and editor status; use Undo to reverse the change.');
-  if(intent.kind==='moveSelected')await edit('move_artwork_objects',{uids:ids,dx:intent.dx,dy:intent.dy});
-  else await edit('transform_artwork_group',{uids:ids,scale:intent.kind==='scaleSelected'?intent.value:1,rotation:intent.kind==='rotateSelected'?intent.value:0});
-  return;
- }
- if(intent.kind==='lettering'){
-  try {
-   const fonts=await invoke<string[]>('lettering_fonts');
-   const font=fonts.find(f=>f==='Arial')||fonts[0];
-   if(!font){setAssistantReply('No installed lettering font found. Import or install a font first.');return}
-   if(!await confirmAction('Add "'+intent.text+'" at '+intent.size+' mm using '+font+'? Existing artwork will be retained.'))return;
-   if(editLock.current)return;
-   await edit('insert_lettering_settings',{settings:{text:intent.text,font,size:intent.size,spacing:.4,arc:0,bold:true,italic:false,color:[105,69,162],align:'center'}});
-   setAssistantReply('Review the lettering on the canvas and the editor status. Select it in Layers to change its font, placement or stitch settings.');
-  }catch(e){setAssistantReply(String(e))}
-  return;
- }
- if(!plan?.stitches){setAssistantReply('Open a design before running an editing command.');return}
- if(intent.kind==='review'){
-  try {
-   const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');
-   const tips=[plan.stitches.toLocaleString()+' planned points · '+plan.blocks.length+' color blocks · '+plan.trims+' trims.'];
-   if(outside||machineExceeded||incompatibleHoop||invalidField)tips.push('Resolve the hoop or machine fit warning before export.');
-   if(a.long>0)tips.push(a.long+' movements exceed 12 mm. Review long stitches and satin split settings.');
-   if(a.short>30&&a.short/Math.max(1,a.segments)>.1)tips.push('Many short stitches: inspect tight corners and dense areas.');
-   if(a.zero>0)tips.push('Near-zero movements found; some may be intentional ties.');
-   if(plan.trims/Math.max(1,plan.stitches)*1000>8)tips.push('Frequent trims relative to stitch count. Inspect isolated regions and thread sequencing.');
-   tips.push('These are screening heuristics, not a guarantee of sewability. Test sew before production.');
-   setAssistantReply(tips.join(' '));
-  }catch(e){setAssistantReply(String(e))}
-  return;
- }
+async function prepareAssistant(input: string): Promise<string | AssistantProposal> {
+  const intent = assistantIntent(input);
+  if (!intent) {
+    return 'I couldn’t match that request to an editor action. Try a quick action, or describe one edit with a measurement or color.';
+  }
 
- if(intent.kind==='recommendHoop'){
-  if(!designBounds){setAssistantReply('No stitch bounds available.');return}
-  const w=designBounds.width,h=designBounds.height;
-  const choices=compatibleHoops.filter(hp=>hp.width>=w+4&&hp.height>=h+4).sort((a,b)=>a.width*a.height-b.width*b.height);
-  const best=choices[0];
-  setAssistantReply(best?'Recommended saved hoop: '+best.name+' ('+best.width+' × '+best.height+' mm). Center the design before sewing.':'No saved compatible hoop has at least 2 mm of margin per side. Choose a larger compatible hoop or reduce the design.');
-  return;
- }
- if(intent.kind==='recolor'&&!plan.blocks.some(b=>b.color.join(',')===intent.previous?.join(','))){setAssistantReply('The original RGB color is not in this design. Use an exact six-digit hex color from the design palette.');return}
- if((intent.kind==='fabric'||intent.kind==='optimize')&&!objects.some(o=>o.kind!=='manual'&&o.kind!=='skip')){setAssistantReply('Optimization needs editable artwork, not fixed stitches.');return}
+  if (intent.kind === 'help') {
+    const tips = [
+      ['underlay', 'Underlay supports the top stitches and stabilizes the fabric. Choose it by fabric and stitch type.'],
+      ['density', 'Density is the spacing between rows. Smaller spacing increases needle penetrations. Start with the fabric preset and test sew.'],
+      ['pull compensation', 'Pull compensation extends stitch edges to offset fabric contraction. Adjust in small increments after a test sew.'],
+      ['satin stitches', 'Satin stitches cross a narrow column. Wider areas may need split satin or fill.'],
+      ['stabilizer', 'Match backing to the garment. Stretchy knits typically need cutaway. Test your fabric and design together.'],
+      ['thread trims', 'Trims cut the thread between regions. Covered travel and color order can reduce trims.'],
+    ];
+    return tips.find(([key]) => input.toLowerCase().includes(key))?.[1] ?? 'Choose a topic such as underlay or density.';
+  }
+  if (intent.kind === 'clearSelection') {
+    setMulti([]); setSelectedObject(null); setActiveGroup(null); setContext(null);
+    return 'Selection cleared.';
+  }
+  if (intent.kind === 'selectColor' || intent.kind === 'selectLabel' || intent.kind === 'selectKind') {
+    const matches = objects.filter(object => {
+      if (object.locked || object.hidden) return false;
+      if (intent.kind === 'selectColor') return object.color.join(',') === intent.color?.join(',');
+      if (intent.kind === 'selectLabel') return object.label.toLowerCase().includes(intent.text?.toLowerCase() ?? '');
+      return object.kind.toLowerCase() === intent.text;
+    });
+    if (!matches.length) return 'No editable objects matched. Check the names, colors and stitch types in Layers.';
+    setCanvasMode('select'); setMulti(matches.map(object => object.uid)); setSelectedObject(null);
+    setActiveGroup(null); setContext(null); showLayers(true); setLayerTab('objects');
+    return 'Selected ' + matches.length + (matches.length === 1 ? ' matching object.' : ' matching objects.');
+  }
 
- if(intent.kind==='audit'){setAssistantReply('Running the native stitch-quality check. Review the result in the editor status.');await audit();return}
- if(!await confirmAction('Apply to the whole design: '+input+'? You can undo this change.'))return;
- setAssistantReply('Command submitted. Review the canvas and editor status for the result.');
- switch(intent.kind){
- case 'optimize':await edit('optimize_editable_design',{});break;
- case 'fabric':await edit('apply_fabric_profile',{fabric:intent.fabric});break;
- case 'recolor':await edit('replace_design_color',{previous:intent.previous,color:intent.color});break;
- case 'center':await edit('center_design',{});break;
- case 'fit':if(invalidField||machineExceeded||incompatibleHoop){setAssistantReply('Choose a valid compatible hoop first.');return}fit();break;
- case 'rotate':await transform(1,intent.value!,0,0);break;
- case 'scale':await transform(intent.value!,0,0,0);break;
- case 'flipH':await edit('mirror_design',{horizontal:true});break;
- case 'flipV':await edit('mirror_design',{horizontal:false});break;
- case 'undo':await edit('history_step',{redo:false});break;
- case 'redo':await edit('history_step',{redo:true});break;
- }
+  const native = (
+    title: string, detail: string, command: string, args: Record<string, unknown>,
+    afterApply?: () => void,
+  ): AssistantProposal => ({
+    title,
+    detail,
+    async apply() {
+      const current = assistantContext.current;
+      const uids = Array.isArray(args.uids) ? args.uids : [];
+      const stale = current.plan !== plan || current.width !== width || current.height !== height ||
+        current.hoop !== hoop || current.machine !== machine || uids.some(uid =>
+          !current.objects.some(object => object.uid === uid && !object.locked && !object.hidden));
+      if (stale) return 'The design or sewing field changed while this request was open. Ask again to review the current design.';
+      const result = await edit(command, args);
+      if (!result.plan) return result.error;
+      afterApply?.();
+      return title + ' applied. ' + result.plan.stitches.toLocaleString() + ' stitch points · ' +
+        result.plan.trims + ' trims. Use Undo to reverse this edit.';
+    },
+  });
+
+  if (intent.kind === 'lettering') {
+    const fonts = await invoke<string[]>('lettering_fonts');
+    const font = fonts?.find(name => name === 'Arial') ?? fonts?.[0];
+    if (!font) return 'No installed lettering font found. Import or install a font first.';
+    return native('Add lettering', '“' + intent.text + '” · ' + intent.size + ' mm · ' + font +
+      '. Adds a new object at the hoop center.', 'insert_lettering_settings', {settings:{
+      text:intent.text, font, size:intent.size, spacing:.4, arc:0, bold:true, italic:false, color:[105,69,162], align:'center',
+    }});
+  }
+
+  if (intent.kind === 'undo' || intent.kind === 'redo') {
+    const redo = intent.kind === 'redo';
+    const last = historyLabels[redo ? 1 : 0].at(-1);
+    if (!last) return redo ? 'There is no edit to redo.' : 'There is no edit to undo.';
+    return native(redo ? 'Redo edit' : 'Undo edit', last, 'history_step', {redo});
+  }
+
+  if (!plan?.stitches) return 'Open or insert a design to use this action.';
+  const measurement = (value: number) => value.toLocaleString(undefined, {maximumFractionDigits: 2});
+  const percentage = (value: number) => measurement(value * 100) + '%';
+  const rotationLabel = (degrees: number) => measurement(Math.abs(degrees)) + '° ' + (degrees < 0 ? 'counterclockwise' : 'clockwise');
+
+  if (intent.kind === 'moveSelected' || intent.kind === 'scaleSelected' || intent.kind === 'rotateSelected') {
+    const uids = movementIds;
+    if (!uids.length) return 'Select unlocked, visible objects or a design group first.';
+    const target = uids.length === 1 ? objects.find(object => object.uid === uids[0])?.label || 'Selected object' : uids.length + ' selected objects';
+    if (intent.kind === 'moveSelected') {
+      const dx = intent.dx ?? 0, dy = intent.dy ?? 0;
+      const distance = (dx ? measurement(Math.abs(dx)) + ' mm ' + (dx < 0 ? 'left' : 'right') :
+        measurement(Math.abs(dy)) + ' mm ' + (dy < 0 ? 'up' : 'down'));
+      return native('Move selection', target + ' · ' + distance + '.', 'move_artwork_objects', {uids, dx, dy});
+    }
+    const scaling = intent.kind === 'scaleSelected';
+    const value = intent.value!;
+    return native(scaling ? 'Resize selection' : 'Rotate selection',
+      target + ' · ' + (scaling ? percentage(value) + ' of current size' : rotationLabel(value)) + '.',
+      'transform_artwork_group', {uids, scale:scaling ? value : 1, rotation:scaling ? 0 : value});
+  }
+
+  if (intent.kind === 'audit' || intent.kind === 'review') {
+    const audit = await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');
+    const notes = [plan.stitches.toLocaleString() + ' stitch points · ' + plan.blocks.length + ' color blocks · ' + plan.trims + ' trims.',
+      audit.short + ' short · ' + audit.long + ' over 12 mm · ' + audit.zero + ' near-zero movements.'];
+    if (outside || machineExceeded || incompatibleHoop || invalidField) notes.push('Check the hoop and machine fit before export.');
+    if (audit.long > 0) notes.push('Inspect the long stitches and satin split settings.');
+    if (audit.short > 30 && audit.short / Math.max(1, audit.segments) > .1) notes.push('Inspect tight corners and dense areas.');
+    if (audit.zero > 0) notes.push('Some near-zero movements may be intentional ties.');
+    if (plan.trims / Math.max(1, plan.stitches) * 1000 > 8) notes.push('Inspect isolated areas and thread sequencing for frequent trims.');
+    notes.push('Test sew before production.');
+    return notes.join('\n');
+  }
+
+  if (intent.kind === 'recommendHoop') {
+    if (!designBounds) return 'No stitch bounds available.';
+    const {width: designWidth, height: designHeight} = designBounds;
+    const best = compatibleHoops.filter(profile => profile.width >= designWidth + 4 && profile.height >= designHeight + 4)
+      .sort((a,b) => a.width * a.height - b.width * b.height)[0];
+    return best ? 'Recommended saved hoop: ' + best.name + ' (' + best.width + ' × ' + best.height + ' mm). Center the design before sewing.'
+      : 'No saved compatible hoop has 2 mm of margin per side. Choose a larger compatible hoop or reduce the design.';
+  }
+
+  const transformProposal = (title: string, detail: string, scale: number, rotation: number) =>
+    native(title, detail, 'transform_design', {scale, rotation, dx:0, dy:0});
+  switch (intent.kind) {
+    case 'optimize':
+    case 'fabric': {
+      if (!objects.some(object => object.kind !== 'manual' && object.kind !== 'skip' && !object.hidden)) {
+        return 'This action needs editable artwork. Imported needle points can be adjusted individually or resized.';
+      }
+      if (intent.kind === 'optimize') return native('Optimize stitch density',
+        'Checks for a conservative improvement across the entire design and keeps the current plan if the checks fail.',
+        'optimize_editable_design', {});
+      const display = intent.fabric === 'standard' ? 'stable woven' : intent.fabric?.replace(/-/g,' ');
+      return native('Apply fabric profile', 'Use the ' + display + ' preset to regenerate stitches for the entire design.',
+        'apply_fabric_profile', {fabric:intent.fabric});
+    }
+    case 'targetTime':
+    case 'reduceTrims':
+    case 'simplify': {
+      const namedObjects = intent.kind === 'simplify' && intent.text ?
+        objects.filter(object => !object.locked && !object.hidden && matchesName(object.label, intent.text!)) : null;
+      const ids = namedObjects?.map(object => object.uid) ?? (intent.selected ? movementIds : null);
+      if (ids && !ids.length) return namedObjects ? 'No visible, unlocked layers matched “' + intent.text + '.” Check the Layers panel.'
+        : 'Select the objects to simplify first.';
+      const minutes = intent.kind === 'targetTime' ? intent.value ?? 0 : 0;
+      const estimate = (candidate: Plan) => candidate.stitches / sewingSpm + candidate.trims * trimSeconds / 60 +
+        Math.max(0, candidate.blocks.length - 1) * changeSeconds / 60;
+      const beforeMinutes = estimate(plan);
+      if (minutes > 0 && beforeMinutes <= minutes) {
+        return 'The current estimated sewing time is ' + beforeMinutes.toFixed(1) + ' min, within your ' + minutes + '-minute target.';
+      }
+      const solid = intent.kind === 'simplify' && intent.value === 4;
+      const fewerTrims = intent.kind === 'reduceTrims';
+      const review = await invoke<{
+        id: number;
+        variants: {strength: number; plan: Plan | null; reason: string | null; quality?: {coverage: number} | null}[];
+      }>('preview_simplification', {uids:ids, removeDetail:solid,
+        options:{solid, merge:true, autoTypes:true, lighterUnderlay:false, targetMinutes:minutes || null, speed:sewingSpm, trimSeconds}});
+      const eligible = review.variants.flatMap(variant => {
+        if (!variant.plan) return [];
+        if (solid) return variant.strength === 4 ? [{...variant, plan:variant.plan}] : [];
+        if (variant.strength === 4 || (variant.quality?.coverage ?? 0) < 85) return [];
+        if (fewerTrims ? variant.plan.trims >= plan.trims : estimate(variant.plan) >= beforeMinutes) return [];
+        return [{...variant, plan:variant.plan}];
+      }).sort((a,b) => (fewerTrims ? a.plan.trims - b.plan.trims : 0) || estimate(a.plan) - estimate(b.plan));
+      const best = eligible[0];
+      if (!best) return solid ? 'A solid silhouette could not be generated for this artwork.'
+        : fewerTrims ? 'No stitch plan with fewer trims passed the coverage checks.' : 'No faster stitch plan passed the coverage checks.';
+      const afterMinutes = estimate(best.plan);
+      const variantName = ['Current','Gentle','Balanced','Maximum','Solid silhouette','Fast Stitch'][best.strength];
+      const timeNote = minutes > 0 ? (afterMinutes <= minutes ? ' Meets the ' + minutes + '-minute estimate.'
+        : ' The best eligible plan is still above your ' + minutes + '-minute target.') : '';
+      const scope = namedObjects ? namedObjects.length + ' matching ' + (namedObjects.length === 1 ? 'layer' : 'layers') + ' (“' + intent.text + '”)'
+        : ids ? ids.length + (ids.length === 1 ? ' selected object' : ' selected objects') : 'the entire design';
+      return {
+        ...native(variantName + ' stitch plan', 'Stitch preview for ' + scope + '.' + timeNote,
+          'apply_simplification', {id:review.id, strength:best.strength}),
+        comparison:{before:plan, after:best.plan, beforeMinutes, afterMinutes},
+      };
+    }
+    case 'recolor': {
+      const count = plan.blocks.filter(block => block.color.join(',') === intent.previous?.join(',')).length;
+      if (!count) return 'That source color isn’t in this design. Open the Threads inspector to find the exact hex color.';
+      const hex = (color: number[] | undefined) => '#' + color?.map(channel => channel.toString(16).padStart(2,'0')).join('').toUpperCase();
+      return native('Replace thread color', hex(intent.previous) + ' → ' + hex(intent.color) + ' across ' +
+        count + (count === 1 ? ' sewing block.' : ' sewing blocks.'), 'replace_design_color', {previous:intent.previous, color:intent.color});
+    }
+    case 'center':
+      return native('Center design', 'Move the entire design to the center of the current hoop.', 'center_design', {});
+    case 'fit':
+    case 'fitDimensions': {
+      const changeField = intent.kind === 'fitDimensions';
+      const w = changeField ? intent.width! : width, h = changeField ? intent.height! : height;
+      if (changeField && selectedMachine && (w > selectedMachine.width || h > selectedMachine.height)) {
+        return 'That size exceeds the selected machine’s sewing field.';
+      }
+      if (!changeField && (invalidField || machineExceeded || incompatibleHoop)) {
+        return 'Choose a compatible machine and hoop before fitting the design.';
+      }
+      const saved = changeField ? compatibleHoops.find(profile => Math.abs(profile.width - w) < .02 && Math.abs(profile.height - h) < .02) : undefined;
+      const field = measurement(w) + ' × ' + measurement(h) + ' mm';
+      const detail = (changeField ? (saved ? 'Select ' + saved.name + ' with a ' + field + ' usable sewing field. ' : 'Set the custom usable sewing field to ' + field + '. ') : 'Use the current ' + field + ' usable sewing field. ') +
+        'Resize and center the design with a 2 mm margin per side.' + (changeField ? ' The sewing field can be edited in Hoop settings.' : '');
+      return native('Fit design to hoop', detail, 'maximize_in_hoop', {widthMm:w,heightMm:h,marginMm:2,stretch:false},
+        changeField ? () => {setWidth(w);setHeight(h);setHoop(saved?.id ?? '');} : undefined);
+    }
+    case 'rotate':
+      return transformProposal('Rotate design', 'Rotate the entire design ' + rotationLabel(intent.value!) + '.', 1, intent.value!);
+    case 'scale':
+      return transformProposal('Resize design', 'Scale the entire design to ' + percentage(intent.value!) + ' of its current size.', intent.value!, 0);
+    case 'flipH':
+    case 'flipV': {
+      const horizontal = intent.kind === 'flipH';
+      return native('Mirror design', 'Flip the entire design ' + (horizontal ? 'left to right.' : 'top to bottom.'),
+        'mirror_design', {horizontal});
+    }
+    default: return 'This action is unavailable.';
+  }
 }
 
 function fit(stretch=false){if(!plan||busy||invalidField||machineExceeded||incompatibleHoop)return;void edit('maximize_in_hoop',{widthMm:width,heightMm:height,marginMm:2,stretch});}
@@ -904,7 +1039,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {plan&&<div className="status-metrics">{designBounds&&<span title="Sewn design dimensions">{(designBounds.width/25.4).toFixed(2)} × {(designBounds.height/25.4).toFixed(2)} in</span>}<span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span title="Unique RGB thread colors">{uniqueColors} colors</span><span><Scissors size={16}/>{plan.trims} trims</span><button className="sewing-estimate" title={'Estimated machine time at '+sewingSpm+' stitches/min, '+trimSeconds+' seconds per trim and '+changeSeconds+' seconds per block transition. Excludes hooping, setup and interruptions.'} onClick={()=>{showInspector(true);setInspectorTab('hoop')}}><Clock3 size={15}/> Est. {sewingDuration}</button></div>}
   <span className="workspace-fit-status" data-outside={outside}>{outside?'Outside hoop':plan?'Fits hoop · '+recoveryStatus:recoveryStatus}</span>
 </footer>
-  {assistantOpen&&<div role="presentation" onClick={()=>setAssistantOpen(false)} style={{position:'fixed',inset:0,zIndex:1000,background:'#17102255',display:'grid',placeItems:'center'}}><section role="dialog" aria-modal="true" aria-label="Offline command assistant" onClick={e=>e.stopPropagation()} className="workspace-inspector-group" style={{background:'var(--panel,#fff)',padding:20,borderRadius:16,width:'min(480px,90vw)',maxHeight:'80vh',overflow:'auto'}}><button style={{float:'right'}} aria-label="Close assistant" onClick={()=>setAssistantOpen(false)}><X size={18}/></button><h3>Design assistant</h3><small>Offline commands · no model download</small><p role="status">{assistantReply}</p><form className="workspace-stack" onSubmit={e=>{e.preventDefault();void runAssistant(assistantText)}}><label>Describe your edit<input value={assistantText} maxLength={160} onChange={e=>setAssistantText(e.target.value)} placeholder="Rotate 90 degrees"/></label><button className="primary" disabled={busy||!assistantText.trim()}>Run command</button></form><div className="workspace-stack">{['Select all satin objects','Move selected objects 5 mm right','Make selected objects 20% larger','Rotate selected objects 90 degrees','Clear selection','Optimize design','Review design','Add text "Hello" at 12 mm','Center design','Fit to hoop','Check stitch quality','Recommend a hoop','Optimize for sweatshirt','Explain underlay','Rotate 90 degrees','Scale to 80%','Flip horizontally','Undo'].map(s=><button key={s} disabled={busy} onClick={()=>{setAssistantText(s);void runAssistant(s)}}>{s}</button>)}</div></section></div>}
+  <AssistantChat open={assistantOpen} busy={busy} onRequest={prepareAssistant} onClose={()=>setAssistantOpen(false)}/>
 
 {simplifyOpen&&<div role="presentation" onClick={()=>{if(!busy)setSimplifyOpen(false)}} style={{position:'fixed',inset:0,zIndex:1001,background:'#17102266',display:'grid',placeItems:'center'}}><section role="dialog" aria-modal="true" aria-label="Simplify design" aria-busy={busy} onClick={e=>e.stopPropagation()} className="workspace-inspector-group simplify-dialog" style={{background:'var(--panel,#fff)',padding:24,borderRadius:16,width:'min(1120px,94vw)',maxHeight:'85vh',overflow:'auto'}}><header className="simplify-dialog-heading"><h3><Scissors size={18}/> Simplify design</h3><button aria-label="Close simplification" disabled={busy} onClick={()=>setSimplifyOpen(false)}><X size={18}/></button></header><p>Reduce sewing time while preserving artwork outlines, lettering and thread order. Test sew before production.</p><details className="simplify-advanced"><summary>Adjust optimization options · {simplifyScope==='selection'?'Selected objects':'Entire design'}</summary><label>Apply to<select value={simplifyScope} disabled={busy||!!simplifyReview} onChange={e=>setSimplifyScope(e.target.value as 'all'|'selection')}><option value="all">Entire design</option><option value="selection" disabled={!movementIds.length}>Selected objects ({movementIds.length})</option></select></label><label><input type="checkbox" checked={simplifyDetail} disabled={busy||!!simplifyReview} onChange={e=>setSimplifyDetail(e.target.checked)}/> Remove tiny decorative details</label><small>Optional: may remove small marks and change artwork appearance. Review the canvas before sewing.</small><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,padding:'10px 0'}}><label><input type="checkbox" checked={solidMode} disabled={busy||!!simplifyReview} onChange={e=>setSolidMode(e.target.checked)}/> Solid artwork · close narrow texture gaps</label><label><input type="checkbox" checked={mergeShapes} disabled={busy||!!simplifyReview} onChange={e=>setMergeShapes(e.target.checked)}/> Merge compatible overlapping shapes</label><label><input type="checkbox" checked={autoTypes} disabled={busy||!!simplifyReview} onChange={e=>setAutoTypes(e.target.checked)}/> Automatically select stitch types</label><label><input type="checkbox" checked={lighterUnderlay} disabled={busy||!!simplifyReview} onChange={e=>setLighterUnderlay(e.target.checked)}/> Try lighter satin underlay</label></div><label>Target sewing time (minutes, optional)<input type="number" min="1" step="1" placeholder="Best available improvement" value={targetMinutes} disabled={busy||!!simplifyReview} onChange={e=>setTargetMinutes(e.target.value)}/></label><small>Uses your machine speed and trim time. A target is a goal, not a guarantee. Solid artwork and lighter underlay can change the sewn appearance.</small></details>{simplifyReview&&<p className="simplify-recommendation">{simplifyRecommended?'Recommended: '+['Original','Gentle','Balanced','Maximum','Solid silhouette','Fast Stitch'][simplifyRecommended]+' · fastest eligible plan with at least 85% footprint overlap.':'Original recommended · no faster plan met the automatic coverage threshold.'} You may choose another preview.</p>}{simplifyBefore&&simplifyReview&&<SimplificationGallery before={simplifyBefore} variants={simplifyReview.variants} selected={simplifyLevel} recommended={simplifyRecommended} onSelect={setSimplifyLevel} speed={sewingSpm} trim={trimSeconds} change={changeSeconds} target={Number(targetMinutes)}/>}
 {busy&&!simplifyReview&&<section className="simplify-loading" role="status" aria-live="polite"><div className="simplify-spinner" aria-hidden="true"/><div><strong>Generating stitch previews</strong><p>Analyzing artwork and generating stitch plan candidates. Your original design is unchanged.</p><div className="simplify-progress" aria-hidden="true"><span/></div><small>Complex designs can take longer. No changes are applied until you choose a preview.</small></div></section>}{simplifyBefore&&!simplifyReview&&<p>Original: {simplifyBefore.stitches.toLocaleString()} stitch points · {simplifyBefore.trims} trims. Compare stitch plans without changing the design.</p>}
