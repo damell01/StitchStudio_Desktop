@@ -1205,6 +1205,62 @@ mod tests {
     use super::*;
 
     #[test]
+    fn advanced_lettering_effects_generate_stitches_and_round_trip() {
+        for effect in ["outline", "shadow", "gradient"] {
+            let mut doc = Document::empty();
+            let spec = TextSpec {
+                text: "AB".into(),
+                size_mm: 18.0,
+                effect: Some(effect.into()),
+                effect_color: [220, 30, 80],
+                inner_color: [30, 120, 230],
+                outer_width: 2.5,
+                inner_width: 1.0,
+                shadow_x: 2.0,
+                shadow_y: 1.0,
+                ..TextSpec::default()
+            };
+            let i = doc.add_lettering(&spec, (0.0, 0.0)).unwrap();
+            doc.sync().unwrap();
+            let plan = doc.plan();
+            assert!(plan.stitch_count() > 0, "{effect} should generate stitches");
+            assert!(plan.blocks.iter().any(|b| b.color == spec.color), "{effect} must include its base thread");
+            assert!(plan.blocks.iter().any(|b| b.color == spec.effect_color), "{effect} must include its effect thread");
+            assert_eq!(doc.lettering(i).unwrap().effect.as_deref(), Some(effect));
+            let saved = doc.to_svg().unwrap();
+            let mut opened = Document::from_svg(&saved, "effects", None).unwrap();
+            let k = (0..opened.shapes.len()).find(|&k| opened.lettering(k).is_some()).unwrap();
+            let back = opened.lettering(k).unwrap();
+            assert_eq!(back.effect.as_deref(), Some(effect));
+            assert_eq!(back.effect_color, spec.effect_color);
+            assert_eq!(back.inner_color, spec.inner_color);
+            assert!((back.outer_width - spec.outer_width).abs() < 1e-8);
+            assert!((back.shadow_x - spec.shadow_x).abs() < 1e-8);
+            opened.set_lettering(k, &TextSpec { text: "CD".into(), ..back }).unwrap();
+            opened.sync().unwrap();
+            assert_eq!(opened.lettering(k).unwrap().text, "CD");
+            assert_eq!(opened.lettering(k).unwrap().effect.as_deref(), Some(effect));
+            let edited = opened.plan();
+            assert!(edited.stitch_count() > 0);
+            assert!(edited.blocks.iter().any(|b| b.color == spec.effect_color));
+        }
+    }
+
+    #[test]
+    fn foam_lettering_retains_caps_and_density() {
+        let mut d = Document::empty();
+        let s = TextSpec { text: "AB".into(), size_mm: 24.0, puff: true, ..TextSpec::default() };
+        let i = d.add_lettering(&s, (0.0, 0.0)).unwrap();
+        assert_eq!(d.shapes[i].params.foam_caps, Some(true));
+        assert_eq!(d.shapes[i].params.spacing, Some(0.25));
+        let file = d.to_svg().unwrap();
+        let reopened = Document::from_svg(&file, "foam", None).unwrap();
+        let k = (0..reopened.shapes.len()).find(|&k| reopened.lettering(k).is_some()).unwrap();
+        assert!(reopened.lettering(k).unwrap().puff);
+        assert!(reopened.plan().stitch_count() > 0);
+    }
+
+    #[test]
     fn lines_alignment_scale_and_case_round_trip() {
         let mut d = Document::empty();
         let spec = TextSpec {
