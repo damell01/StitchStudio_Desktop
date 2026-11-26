@@ -1309,16 +1309,19 @@ fn remove_covered_fill_candidate(source:&zigzag::document::Document,uids:Option<
         let old=area(ar,*af);
         if old<=0.||area(&overlap,FillRule::EvenOdd)<old*0.20{continue}
         let remaining=boolean::pathfinder(&parts,PathOp::MinusFront);
-        if remaining.is_empty(){remove.push(a.uid);continue}
-        if area(&remaining,FillRule::EvenOdd)>=old*0.80{continue}
+        if remaining.is_empty(){remove.push((a.uid,old));continue}
+        let saved=old-area(&remaining,FillRule::EvenOdd);
+        if saved<old*0.20{continue}
         let path=zigzag::bezier::from_rings(&remaining,0.2);
-        if !path.is_empty(){edits.push((i,path));}
+        if !path.is_empty(){edits.push((i,path,saved));}
     }
     if edits.is_empty()&&remove.is_empty(){return None}
     // Simultaneous subtraction could leave gaps if the later cover were
     // also edited. Process only one lower layer per candidate.
-    if let Some((i,path))=edits.into_iter().next(){doc.set_path(i,&path).ok()?;}
-    else if let Some(uid)=remove.first(){let i=doc.shapes.iter().position(|s|s.uid==*uid)?;doc.delete_many(&[i]).ok()?;}
+    edits.sort_by(|a,b|b.2.total_cmp(&a.2));remove.sort_by(|a,b|b.1.total_cmp(&a.1));
+    if remove.first().is_some_and(|r|edits.first().is_none_or(|e|r.1>e.2)){
+        let uid=remove[0].0;let i=doc.shapes.iter().position(|s|s.uid==uid)?;doc.delete_many(&[i]).ok()?;
+    }else if let Some((i,path,_))=edits.into_iter().next(){doc.set_path(i,&path).ok()?;}
     doc.sync().ok()?;let plan=doc.plan();Some((doc,plan))
 }
 // A bounded automatic texture pass: close narrow scratches and merge
@@ -1418,13 +1421,23 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         });
         let (mut doc,mut design)=candidates.into_iter().next().ok_or("No eligible improvement passed the checks. Original retained.")?;
         if strength==3 {
-            // Repeat only the inexpensive fill adjustment. Every accepted pass
-            // must still pass the checks against the original stitch plan.
-            for _ in 0..2 {
+            // Refine the winning plan, not the original. Each accepted step
+            // must independently pass the original-design quality guard.
+            // Revisit expensive overlap first, then fill economy; stop at
+            // the requested goals or the existing cooperative deadline.
+            for stage in 0..4 {
                 if options.exhausted(){break}
-                let Some((next_doc,next_plan))=economical_fill_candidate(&doc,&design,uids,3,0.0) else {break};
-                if next_plan.stitch_count()>design.stitch_count() || next_plan.trim_count()>design.trim_count()
-                    || seconds(&next_plan)>=seconds(&design) || !eligible(&next_plan){break}
+                if stitch_goal.is_some_and(|n|design.stitch_count()<=n)
+                    &&target.is_none_or(|t|seconds(&design)<=t){break}
+                let candidate=match stage{
+                    0=>remove_covered_fill_candidate(&doc,uids,options),
+                    1=>economical_fill_candidate(&doc,&design,uids,5,0.),
+                    2=>narrow_artwork_candidate(&doc,&design,uids,options),
+                    _=>economical_fill_candidate(&doc,&design,uids,3,0.),
+                };
+                let Some((next_doc,next_plan))=candidate else {continue};
+                if next_plan.stitch_count()>design.stitch_count()||next_plan.trim_count()>design.trim_count()
+                    ||seconds(&next_plan)>=seconds(&design)||!eligible(&next_plan){continue}
                 (doc,design)=(next_doc,next_plan);
             }
         }
