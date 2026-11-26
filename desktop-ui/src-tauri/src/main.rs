@@ -1031,6 +1031,7 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let score=|d:&Design|optimization_seconds(d,speed,trim);
     let mut choices=Vec::new();
+    if !options.exhausted(){if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){choices.push(v);}}choices.push((doc,plan));}}
     for angle in [0.,45.,90.] {
         if options.exhausted(){break}
         if let Some(v)=economical_fill_candidate(source,original,uids,5,angle)
@@ -1177,6 +1178,47 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
     } else { b.0.total_cmp(&a.0).then_with(||seconds(&a.2).total_cmp(&seconds(&b.2))) });
     candidates.into_iter().next().map(|(_,d,p)|(d,p)).ok_or("No eligible solid silhouette could be reconstructed".into())
 }
+// Rebuild consecutive ordinary same-thread fills as one union, removing
+// overlapping top stitches and duplicated underlay even when density or
+// angle differs. Never cross a protected object or a color boundary.
+fn union_redundant_fills(source:&zigzag::document::Document,uids:Option<&[usize]>,options:&SimplifyOptions)->Option<zigzag::document::Document>{
+    use zigzag::{params::Kind,svg::Geometry,boolean::{self,PathOp},geom::FillRule};
+    let mut doc=source.clone();let mut changed=false;let mut i=0;let mut attempts=0;
+    while i+1<doc.shapes.len()&&attempts<64&&!options.exhausted(){
+        attempts+=1;
+        let eligible=|j:usize|{
+            let s=&doc.shapes[j];
+            uids.is_none_or(|ids|ids.contains(&s.uid))&&!doc.records_text(j)
+            &&!doc.layer_properties(&s.id).is_some_and(|l|l.hidden||l.locked)
+            &&!s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")
+            &&doc.shapes.iter().filter(|q|q.id==s.id).count()==1
+            &&s.params.kind.unwrap_or(Kind::Fill)==Kind::Fill
+            &&s.params.start.is_none()&&s.params.end.is_none()&&s.params.colors.is_none()
+            &&s.params.stop!=Some(true)&&s.params.trim!=Some(true)
+        };
+        let a=&doc.shapes[i];let b=&doc.shapes[i+1];
+        if !eligible(i)||!eligible(i+1)||a.color!=b.color||a.groups!=b.groups {i+=1;continue}
+        // Match all settings other than fill density, length and angle.
+        let mut pa=a.params.clone();let mut pb=b.params.clone();
+        pa.spacing=None;pb.spacing=None;pa.len=None;pb.len=None;pa.angle=None;pb.angle=None;
+        if pa!=pb {i+=1;continue}
+        let (Geometry::Fill{rings:ar,rule:af},Geometry::Fill{rings:br,rule:bf})=(&a.geometry,&b.geometry) else{i+=1;continue};
+        let parts=[(ar.clone(),*af),(br.clone(),*bf)];
+        let overlap=boolean::pathfinder(&parts,PathOp::Intersect);
+        if overlap.is_empty(){i+=1;continue}
+        let union=boolean::pathfinder(&parts,PathOp::Unite);
+        if union.is_empty(){i+=1;continue}
+        // Exact boolean union retains the visible silhouette, including holes.
+        let path=zigzag::bezier::from_rings(&union,0.2);
+        if path.is_empty(){i+=1;continue}
+        let second=b.uid;
+        doc.set_path(i,&path).ok()?;
+        let j=doc.shapes.iter().position(|s|s.uid==second)?;
+        doc.delete_many(&[j]).ok()?;changed=true;
+    }
+    if !changed{return None}
+    doc.sync().ok()?;Some(doc)
+}
 fn choose_simplification(source:&zigzag::document::Document,original:&Design,strength:u8,uids:Option<&[usize]>,remove_detail:bool,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
         let speed=options.speed.filter(|v|v.is_finite()).unwrap_or(800.0).clamp(100.0,1500.0);
         let trim=options.trim_seconds.filter(|v|v.is_finite()).unwrap_or(3.0).clamp(0.0,30.0);
@@ -1186,11 +1228,19 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         if options.quick {
             if let Some(v)=economical_fill_candidate(source,original,uids,strength,0.0){candidates.push(v);}
             if strength==3 && original.stitch_count()>=12_000 {
-                if let Some(v)=economical_fill_candidate(source,original,uids,4,0.0){candidates.push(v);}
+                if let Some(v)=economical_fill_candidate(source,original,uids,5,0.0){candidates.push(v);}
+                if !options.exhausted(){
+                    if let Some(doc)=union_redundant_fills(source,uids,options){
+                        let plan=doc.plan();
+                        if !options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.0){if uids.is_none(){candidates.push(v);}}}
+                        candidates.push((doc,plan));
+                    }
+                }
             }
         }else{
         if !options.exhausted(){
             if let Some(v)=simplify_design_candidate(source,original,strength,uids,remove_detail){candidates.push(v);}
+            if strength==3{if let Some(doc)=union_redundant_fills(source,uids,options){let plan=doc.plan();if uids.is_none()&&!options.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,None,5,0.){candidates.push(v);}}candidates.push((doc,plan));}}
         }
         if options.solid||options.merge||options.auto_types||options.lighter_underlay{
             let radii:&[f64]=if options.solid&&strength>=3{&[4.0,8.0,12.0]}else if options.solid&&strength==2{&[2.0,4.0]}else{&[2.0]};
