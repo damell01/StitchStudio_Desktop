@@ -1118,6 +1118,25 @@ fn local_coverage_preserved(original:&Design,candidate:&Design)->bool{
         entry.0+=1;
         if after.contains(&(color,x,y)){entry.1+=1;}
     }
+    // Protect isolated same-color components even when they share a
+    // neighborhood with a much larger filled region.
+    let mut remaining=before.clone();
+    while let Some(&seed)=remaining.iter().next() {
+        remaining.remove(&seed);
+        let mut stack=vec![seed];
+        let (mut total,mut retained)=(0usize,0usize);
+        while let Some((color,x,y))=stack.pop() {
+            total+=1;
+            if after.contains(&(color,x,y)){retained+=1;}
+            for dx in -1i32..=1 { for dy in -1i32..=1 {
+                if dx==0 && dy==0 {continue;}
+                let (Some(nx),Some(ny))=(x.checked_add(dx),y.checked_add(dy)) else {continue;};
+                let neighbor=(color,nx,ny);
+                if remaining.remove(&neighbor){stack.push(neighbor);}
+            }}
+        }
+        if retained==0 || (total<=16 && retained.saturating_add(1)<total) {return false;}
+    }
     // Tiny neighborhoods can contain punctuation, dots or narrow glyph tips.
     // Permit a one-cell shift across the sampling grid, but not disappearance.
     regions.values().all(|&(total,covered)| {
