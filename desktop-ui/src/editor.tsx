@@ -1122,6 +1122,7 @@ function movedOnScreen(event: ReactPointerEvent<SVGSVGElement>, origin: {clientX
 function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   if(busy||event.button!==0&&event.button!==1)return;
   event.preventDefault();
+  if(event.button===1){event.currentTarget.setPointerCapture(event.pointerId);setDrag({x:event.clientX,y:event.clientY,px:pan[0],py:pan[1]});setHoverUid(null);return;}
   const target=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;
   let object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))&&!item.hidden&&!item.locked&&!lockedObjects.includes(item.uid)):undefined;
   const position=pointerPosition(event);
@@ -1205,11 +1206,13 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   }
   event.currentTarget.setPointerCapture(event.pointerId);
   setDrag({x:event.clientX,y:event.clientY,px:pan[0],py:pan[1]});
+  setHoverUid(null);
 }
 
 function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const position=pointerPosition(event);
   if(!position)return;
+  if(drag){const matrix=event.currentTarget.getScreenCTM();if(!matrix)return;const start=new DOMPoint(drag.x,drag.y).matrixTransform(matrix.inverse());setPan([drag.px-(position.x-start.x),drag.py-(position.y-start.y)]);return;}
   if(drawing.tool&&drawing.move(event,drawingPoint(position)))return;
   if(stitchGuides.move(event,[position.x,position.y]))return;
   const box=marqueeGesture.current;
@@ -1241,6 +1244,7 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 }
 
 function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boolean) {
+  if(drag){setDrag(null);return;}
   if(drawing.tool){
     const point=commit?pointerPosition(event):null;
     if(drawing.end(event,point?drawingPoint(point):null,commit))return;
