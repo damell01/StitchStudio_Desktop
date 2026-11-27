@@ -19,7 +19,18 @@ const twemojiTemplates: Template[] = twemojiCatalogue.map(({id,name,category,tag
 const curatedAssets = import.meta.glob<string>('./assets/curated/*.svg', {query:'?raw',import:'default',eager:true});
 const curatedTemplates: Template[] = Object.entries(curatedAssets).map(([path,art])=>{
   const slug=path.split('/').pop()!.replace(/\.svg$/,'');
-  return {id:'curated-'+slug,name:slug.replace(/-/g,' ').replace(/^./,c=>c.toUpperCase()),category:'Curated drafts',tags:['draft','review required'],art};
+  const categories: [RegExp,string,string[]][] = [
+    [/baseball|football|sports-ball|all-star|game-day/,'Sports',['game day','varsity','sports']],
+    [/mallard|retriever|fawn/,'Animals',['wildlife','vintage','outdoors']],
+    [/tractor|construction/,'Farm & construction',['vehicles','children']],
+    [/coastal|sailboat/,'Coastal',['nautical','beach']],
+    [/easter|bunny|pumpkin|autumn/,'Seasonal',['holiday','boutique']],
+    [/teddy/,'Nursery',['baby','heirloom']],
+    [/crest|monogram|nameplate/,'Frames',['personalization','heirloom']],
+    [/western/,'Western',['cowboy','boutique']],
+  ];
+  const match=categories.find(([pattern])=>pattern.test(slug));
+  return {id:'curated-'+slug,name:slug.replace(/-/g,' ').replace(/^./,c=>c.toUpperCase()),category:match?.[1] ?? 'Curated drafts',tags:['curated','draft','review required',...slug.split('-'),...(match?.[2] ?? [])],art};
 });
 export const templates: Template[] = [
   ...curatedTemplates,
