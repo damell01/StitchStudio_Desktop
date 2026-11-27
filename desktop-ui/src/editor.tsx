@@ -940,7 +940,7 @@ function recognizeSelection(){
   dismissWordReview();
   void recognizeWord(objects.filter(o=>movementIds.includes(o.uid)&&o.fill_rule&&o.kind!=='manual'),selectionRequest.current,true);
 }
-function selectObject(object:EditableObject|null,inspectLettering=true){
+function selectObject(object:EditableObject|null,inspectLettering=true,forceWord=false){
   if(object&&lockedObjects.includes(object.uid))return;
   if(object)setCanvasMode('select');
   setMulti([]);setContext(null);dismissWordReview();
@@ -955,11 +955,11 @@ function selectObject(object:EditableObject|null,inspectLettering=true){
     if(settings){if(inspectorTab!=='quality'&&inspectorTab!=='stitches'&&inspectorTab!=='threads')openText(object.uid);return}
     if(!object.bounds||!object.fill_rule||object.kind==='manual')return;
     const [,y,,h]=object.bounds;
-    if(h<1.8)return;
+    if(h<1.8){if(forceWord)return recognizeWord([object],request,true);return;}
     const row=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||o.color.join(',')!==object.color.join(','))return false;
     const [,oy,ow,oh]=o.bounds;return oh>=h*.55&&oh<=h*1.65&&ow<=h*2.5&&Math.abs(oy+oh/2-y-h/2)<=h*.28}).sort((a,b)=>a.bounds![0]-b.bounds![0]);
     const index=row.findIndex(o=>o.uid===object.uid);
-    if(index<0)return;
+    if(index<0){if(forceWord)return recognizeWord([object],request,true);return;}
     let lo=index,hi=index;
     const gap=(a:EditableObject,b:EditableObject)=>b.bounds![0]-a.bounds![0]-a.bounds![2];
     const typicalGaps=row.slice(1).map((o,i)=>gap(row[i],o)).filter(g=>g>=0&&g<=h*.85).sort((a,b)=>a-b);
@@ -973,7 +973,7 @@ function selectObject(object:EditableObject|null,inspectLettering=true){
     const components=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||letters.some(l=>l.uid===o.uid)||o.color.join(',')!==object.color.join(','))return false;
     const [ox,oy,ow,oh]=o.bounds;return oh>0&&oh<=h*.55&&ow<=h*.55&&ox>=left-h*.12&&ox+ow<=right+h*.12&&oy>=y-h*.45&&oy+oh<=y+h*1.15});
     const wordShapes=[...letters,...components];
-    return recognizeWord(wordShapes,request);
+    return recognizeWord(wordShapes,request,forceWord);
   }).catch(()=>{});
 }
 async function previewWordReview(){
@@ -1649,6 +1649,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <span className="studio-selection-name" title={selected.label||'Object '+selected.uid}>{selected.label||'Object '+selected.uid}</span>
   {selected.bounds&&<span className="studio-selection-size" title="Selected object dimensions">{(selected.bounds[2]/25.4).toFixed(2)} × {(selected.bounds[3]/25.4).toFixed(2)} in</span>}
   {stitchGuides.data?.textForm==='text'&&<button disabled={busy||lockedObjects.includes(selected.uid)} onClick={()=>openText(selected.uid)} title="Edit font, lettering, spacing and effects"><Type size={16}/> Edit text</button>}
+  {canRecognizeSelection&&<button disabled={busy||recognizingWord} onClick={recognizeSelection} title="Recognize imported lettering and preview an editable replacement"><Type size={16}/> {recognizingWord?'Recognizing…':'Edit embedded text'}</button>}
   <button onClick={()=>{showInspector(true);setInspectorTab('threads')}} title="Change thread colors"><Palette size={16}/> Colors</button>
   <button onClick={()=>{showInspector(true);setInspectorTab('transform')}} title="Dimensions and alignment"><Move size={16}/> Position</button>
   {selected.bounds&&<><button disabled={busy||lockedObjects.includes(selected.uid)} title="Reduce selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:.9})}>− Size</button><button disabled={busy||lockedObjects.includes(selected.uid)} title="Increase selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:1.1})}>+ Size</button></>}
@@ -1688,7 +1689,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 {snap&&<g pointerEvents="none" stroke="#a84bc5" strokeDasharray="4 3" strokeWidth="1" vectorEffect="non-scaling-stroke">{guides.x!==null&&<line x1={guides.x} x2={guides.x} y1={-height/2} y2={height/2} vectorEffect="non-scaling-stroke"/>}{guides.y!==null&&<line x1={-width/2} x2={width/2} y1={guides.y} y2={guides.y} vectorEffect="non-scaling-stroke"/>}</g>}
 {canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
  {objects.filter(object=>object.path&&!lockedObjects.includes(object.uid)).map(object=><path key={object.uid} d={object.path}
-   data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();if(busy||lockedObjects.includes(object.uid))return;const surface=canvasSurface.current?.getBoundingClientRect();if(!surface)return;const left=Math.max(8,Math.min(e.clientX-surface.left,surface.width-300)),top=Math.max(8,Math.min(e.clientY-surface.top,surface.height-260));void invoke<Record<string,unknown>|null>('lettering_settings',{uid:object.uid}).then(settings=>{if(!settings)return;setSelectedObject(object.uid);setCanvasEditTarget({uid:object.uid,settings});setCanvasTextValue(String(settings.text??''));setCanvasLetterFont(String(settings.font??''));setCanvasLetterHeight(Number(settings.size??12));setCanvasLetterSpacing(Number(settings.spacing??.4));setCanvasLetterBold(Boolean(settings.bold));setCanvasLetterItalic(Boolean(settings.italic));if(Array.isArray(settings.color))setCanvasLetterColor('#'+settings.color.map(v=>Number(v).toString(16).padStart(2,'0')).join(''));setCanvasTextError('');setCanvasTyping(false);setCanvasText({point:[0,0],left,top});}).catch(error=>setMessage(String(error)))}} fill={object.fill_rule?'transparent':'none'}
+   data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();if(busy||lockedObjects.includes(object.uid))return;const surface=canvasSurface.current?.getBoundingClientRect();if(!surface)return;const left=Math.max(8,Math.min(e.clientX-surface.left,surface.width-300)),top=Math.max(8,Math.min(e.clientY-surface.top,surface.height-260));void invoke<Record<string,unknown>|null>('lettering_settings',{uid:object.uid}).then(settings=>{if(!settings){selectObject(object,true,true);return;}setSelectedObject(object.uid);setCanvasEditTarget({uid:object.uid,settings});setCanvasTextValue(String(settings.text??''));setCanvasLetterFont(String(settings.font??''));setCanvasLetterHeight(Number(settings.size??12));setCanvasLetterSpacing(Number(settings.spacing??.4));setCanvasLetterBold(Boolean(settings.bold));setCanvasLetterItalic(Boolean(settings.italic));if(Array.isArray(settings.color))setCanvasLetterColor('#'+settings.color.map(v=>Number(v).toString(16).padStart(2,'0')).join(''));setCanvasTextError('');setCanvasTyping(false);setCanvasText({point:[0,0],left,top});}).catch(error=>setMessage(String(error)))}} fill={object.fill_rule?'transparent':'none'}
    fillRule={object.fill_rule} stroke={object.fill_rule?'none':'transparent'}
    strokeWidth={object.stroke_width} pointerEvents={object.fill_rule?'fill':'stroke'}/>)}
  {objects.filter(o=>o.path&&o.bounds&&!lockedObjects.includes(o.uid)&&Math.min(o.bounds[2],o.bounds[3])<2).map(o=><path key={'wide-hit-'+o.uid} d={o.path} data-artwork-uid={o.uid} fill="none" stroke="transparent" strokeWidth="12" vectorEffect="non-scaling-stroke" pointerEvents="stroke" style={{cursor:'move'}}/>)}
