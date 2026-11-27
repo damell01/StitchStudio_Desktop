@@ -3604,6 +3604,19 @@ async fn preview_selected_lettering(uids:Vec<usize>,text:String,font:String,repl
    doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
   }
   let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+  if fitted.height()>bounds.height() && fitted.height()>0.0 {
+   spec.v_scale=(spec.v_scale*bounds.height()/fitted.height()).clamp(25.0,250.0);
+   doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+  }
+  let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+  if fitted.is_empty(){return Err("Replacement generated no lettering outline".into())}
+  // Preserve the original visual center even when the new word has different glyph metrics.
+  let dx=bounds.center().x-fitted.center().x;
+  let dy=bounds.center().y-fitted.center().y;
+  if dx.abs()>0.01||dy.abs()>0.01 {
+   doc.transform(&[index],[1.0,0.0,0.0,1.0,dx,dy]).map_err(|e|e.to_string())?;
+  }
+  let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
   if fitted.width()>bounds.width()*1.05 || fitted.height()>bounds.height()*1.15{
    return Err("Replacement does not fit the original lettering area. Try shorter text or a narrower font.".into())
   }
