@@ -937,6 +937,7 @@ async function recognizeWord(shapes:EditableObject[],request:number,manual=false
   }finally{if(selectionRequest.current===request)setRecognizingWord(false)}
 }
 function recognizeSelection(){
+  if(movementIds.length===1){const object=objects.find(o=>o.uid===movementIds[0]);if(object){selectObject(object,true,true);return;}}
   dismissWordReview();
   void recognizeWord(objects.filter(o=>movementIds.includes(o.uid)&&o.fill_rule&&o.kind!=='manual'),selectionRequest.current,true);
 }
@@ -952,7 +953,7 @@ function selectObject(object:EditableObject|null,inspectLettering=true,forceWord
   if(!inspectLettering)return;
   void invoke<unknown>('lettering_settings',{uid:object.uid}).then(settings=>{
     if(selectionRequest.current!==request)return;
-    if(settings){if(inspectorTab!=='quality'&&inspectorTab!=='stitches'&&inspectorTab!=='threads')openText(object.uid);return}
+    if(settings){if(forceWord||(inspectorTab!=='quality'&&inspectorTab!=='stitches'&&inspectorTab!=='threads'))openText(object.uid);return}
     if(!object.bounds||!object.fill_rule||object.kind==='manual'){if(forceWord)setMessage('Select digitized filled lettering shapes to reconstruct embedded text.');return;}
     const [,y,,h]=object.bounds;
     if(h<1.8){if(forceWord)return recognizeWord([object],request,true);return;}
@@ -1042,7 +1043,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
     setCanvasText({
       point:[position.x,position.y],
       left:Math.max(8,Math.min(event.clientX-surface.left,surface.width-300)),
-      top:Math.max(8,Math.min(event.clientY-surface.top,surface.height-115)),
+      top:Math.max(8,Math.min(event.clientY-surface.top,surface.height-260)),
     });
     setCanvasTextValue('');setCanvasTextError('');
     return;
@@ -1767,7 +1768,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>}
   {inspectorTab==='transform'&&recognizingWord&&<small role="status">Recognizing lettering…</small>}
   {inspectorTab==='transform'&&convertText&&<section className="workspace-inspector-group lettering-review" aria-label="Review recognized lettering">
-    <h3><Type size={16}/> Edit embedded lettering</h3><p className="muted">{recognizedOriginal.trim()?"Check the recognized text and suggested font before replacing the original stitches.":"Automatic recognition did not find text. Enter the original word manually to reconstruct the selected shapes."}</p><small>{recognizedIds.length} selected artwork {recognizedIds.length===1?"object":"objects"} · Original artwork stays unchanged until Apply.</small>
+    <h3><Type size={16}/> Edit embedded lettering</h3><div className="inspector-actions"><button disabled={busy||wordPreviewPending} onClick={()=>{dismissWordReview();setMulti([]);setSelectedObject(null);setCanvasMode('select')}}>Reselect word</button></div><p className="muted">{recognizedOriginal.trim()?"Check the recognized text and suggested font before replacing the original stitches.":"Automatic recognition did not find text. Enter the original word manually to reconstruct the selected shapes."}</p><small>{recognizedIds.length} selected artwork {recognizedIds.length===1?"object":"objects"} · Original artwork stays unchanged until Apply.</small>
     <label>Original word<input value={recognizedOriginal} maxLength={120} disabled={busy||wordPreviewPending} onChange={e=>{
       if(convertWord===recognizedOriginal)setConvertWord(e.target.value);
       setRecognizedOriginal(e.target.value);setRecognitionError('');setWordPreview(null);
