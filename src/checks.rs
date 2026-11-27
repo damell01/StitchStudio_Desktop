@@ -265,11 +265,16 @@ pub fn check(
                 }
             }
         }
+        // Inspect only the geometry that actually needs sewing after overlap removal.
+        let effective=crate::design::effective_geometry(shapes,&design.sew_order,_opt);
         let mut budget=120_000usize;
         for (i,s) in shapes.iter().enumerate() {
             if budget==0 {break}
             if design.covered.get(i).copied().unwrap_or(false) || !matches!(s.params.kind.unwrap_or(Kind::Fill),Kind::Fill|Kind::Satin) {continue}
-            let Geometry::Fill{rings,rule}=&s.geometry else{continue};
+            let kind=s.params.kind.unwrap_or(Kind::Fill);
+            if (kind==Kind::Fill&&s.params.fill_spacing(&_opt.fabric)>0.65)
+                || (kind==Kind::Satin&&(s.params.colors.is_some()||s.params.satin_spacing(&_opt.fabric)>0.65)){continue}
+            let Geometry::Fill{rings,rule}=effective.get(i).unwrap_or(&s.geometry) else{continue};
             let b=ring_bounds(rings);
             if b.is_empty() || b.width().min(b.height())<12.0 {continue}
             let mut inside=0usize;let mut missing=0usize;
@@ -290,7 +295,7 @@ pub fn check(
                 y+=step;
             }
             if inside>=12 && missing>=4 && missing*100>inside*12 {
-                add(Some(i),Level::Warning,format!("Possible underfilled artwork: {}% of sampled interior locations have no nearby same-color sewn path. Inspect letter strokes, fill spacing and pull compensation; intentional open patterns or overlaps may also trigger this.",missing*100/inside));
+                add(Some(i),Level::Warning,format!("Possible underfilled artwork: {}% of sampled interior locations have no nearby same-color sewn path. Inspect letter strokes, fill spacing and pull compensation; this is a geometric estimate, not a physical sew-out.",missing*100/inside));
             }
         }
     }
