@@ -949,6 +949,43 @@ async function recognizeWord(shapes:EditableObject[],request:number,manual=false
     if(manual&&selectionRequest.current===request)setMessage(String(error));
   }finally{if(selectionRequest.current===request)setRecognizingWord(false)}
 }
+const [detectedText,setDetectedText]=useState<{uids:number[];text:string}[]>([]);
+const [autoTextStatus,setAutoTextStatus]=useState('');
+useEffect(()=>{
+  let active=true;
+  setDetectedText([]);setAutoTextStatus('');
+  if(!objects.length||busy)return;
+  const candidates=objects.filter(o=>o.bounds&&o.fill_rule&&!o.hidden&&!o.locked&&o.kind!=='manual'&&!o.groups?.some(g=>g.startsWith('tl-lettering-')));
+  const rows:EditableObject[][]=[];
+  for(const object of candidates.slice(0,400).sort((a,b)=>a.bounds![1]-b.bounds![1])){
+    const [,y,w,h]=object.bounds!;
+    if(h<1.8||w>h*2.5)continue;
+    const row=rows.find(row=>{const first=row[0];const [,fy,,fh]=first.bounds!;return first.color.join(',')===object.color.join(',')&&h>=fh*.55&&h<=fh*1.65&&Math.abs(y+h/2-fy-fh/2)<=fh*.28});
+    if(row)row.push(object);else rows.push([object]);
+  }
+  const groups=rows.filter(row=>row.length>=2&&row.length<=128).slice(0,8);
+  if(!groups.length)return;
+  const timer=window.setTimeout(async()=>{
+    if(!active)return;
+    setAutoTextStatus('Looking for embedded lettering…');
+    const found:{uids:number[];text:string}[]=[];
+    try{
+      for(const row of groups){
+        if(!active)return;
+        const key=JSON.stringify(row.map(o=>[o.uid,o.bounds,o.path,o.color]));
+        const uids=row.map(o=>o.uid);
+        const lines=recognitionCache.current.get(key)??await invoke<{text:string;font:string}[]>('recognize_selected_lettering',{uids});
+        if(!active)return;
+        if(recognitionCache.current.size>=64)recognitionCache.current.clear();
+        recognitionCache.current.set(key,lines);
+        const text=lines.map(line=>line.text).join(' ').trim();
+        if(text)found.push({uids,text});
+      }
+      if(active){setDetectedText(found);setAutoTextStatus(found.length?'':'No embedded lettering detected.');}
+    }catch{if(active){setDetectedText(found);setAutoTextStatus('Automatic lettering detection unavailable. Manual recognition is still available.');}}
+  },700);
+  return()=>{active=false;window.clearTimeout(timer)};
+},[objects,busy]);
 function recognizeSelection(){
   if(movementIds.length===1){const object=objects.find(o=>o.uid===movementIds[0]);if(object){selectObject(object,true,true);return;}}
   dismissWordReview();
@@ -1653,6 +1690,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <span>Drag around the artwork to make solid.</span>
 </div>}
 <div className="workspace-canvas" ref={canvasSurface}>
+{(detectedText.length>0||autoTextStatus)&&<div className="studio-detected-text" role="group" aria-label="Detected lettering" style={{display:'flex',gap:6,alignItems:'center',overflowX:'auto',padding:'3px 8px',flexShrink:0}}><small role="status">{autoTextStatus||'Detected text:'}</small>{detectedText.map(item=><button key={item.uids.join(',')} disabled={busy||recognizingWord} onClick={()=>{dismissWordReview();void recognizeWord(objects.filter(o=>item.uids.includes(o.uid)),selectionRequest.current,true)}} title="Review and reconstruct detected lettering">{item.text}</button>)}</div>}
 <div className="studio-view-modes" role="group" aria-label="Workspace view">
   <button aria-pressed={!realistic&&!(right&&['quality','stitches'].includes(inspectorTab))} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setCanvasMode('select');setRealistic(false);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false)}}><MousePointer2 size={15}/> Design</button>
   <button aria-pressed={!realistic&&right&&inspectorTab==='stitches'} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setCanvasMode('select');setRealistic(false);showInspector(true);setInspectorTab('stitches')}}><Scissors size={15}/> Stitches</button>
