@@ -1439,13 +1439,13 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="studio-tool-icon" title={historyLabels[0].length?"Undo: "+historyLabels[0].at(-1):"Undo"} aria-label="Undo" disabled={!historyLabels[0].length||busy} onClick={()=>edit('history_step',{redo:false})}><Undo2 size={17}/></button>
     <button className="studio-tool-icon" title={historyLabels[1].length?"Redo: "+historyLabels[1].at(-1):"Redo"} aria-label="Redo" disabled={!historyLabels[1].length||busy} onClick={()=>edit('history_step',{redo:true})}><Redo2 size={17}/></button>
   </div>
-  <div className="studio-command-group studio-design-tools" role="group" aria-label="Create and edit"><button className="studio-add-text" disabled={busy||!plan} onClick={openSimplify}><Scissors size={17}/> Simplify</button>
-    <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/></button>
-    <button className="studio-tool-icon" title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{showInspector(true);setInspectorTab('transform')}}><Move size={17}/></button>
+  <details className="workspace-options studio-create-menu"><summary title="Create and edit tools" aria-label="Create and edit tools"><Wrench size={17}/> <span>Edit</span></summary><div className="workspace-options-panel studio-create-actions" role="group" aria-label="Create and edit"><button className="studio-add-text" disabled={busy||!plan} onClick={openSimplify}><Scissors size={17}/> Simplify</button>
+    <button title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/> Center design</button>
+    <button title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{showInspector(true);setInspectorTab('transform')}}><Move size={17}/> Transform</button>
     
-    <button className="studio-tool-icon" title="Type on canvas" aria-label="Type on canvas" aria-pressed={canvasTyping} disabled={busy} onClick={toggleCanvasTyping}><Type size={16}/><MousePointer2 size={11}/></button>
+    <button title="Type on canvas" aria-label="Type on canvas" aria-pressed={canvasTyping} disabled={busy} onClick={toggleCanvasTyping}><Type size={16}/> Type on canvas</button>
     <button className="studio-add-text studio-toolbar-text" title="Add text" aria-label="Add text" disabled={busy} onClick={()=>openText()}><Type size={17}/><span>Add text</span></button>
-  </div>
+  </div></details>
   <div className="studio-command-group studio-view-tools" role="group" aria-label="Workspace view">
     <button className="studio-tool-icon" title="Layers" aria-label="Layers" aria-pressed={left} onClick={()=>showLayers(!left)}><PanelLeft size={18}/></button>
     <button className="studio-tool-icon" title="Inspector" aria-label="Inspector" aria-pressed={right} onClick={()=>showInspector(!right)}><PanelRight size={18}/></button>
