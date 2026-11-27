@@ -9,19 +9,21 @@ type DensityPreview = {
   id:number;before:StitchPlan;after:StitchPlan;hits_before:number;hits_after:number;footprint_overlap:number;
 };
 
-function StitchCrop({plan,cell,label}: {plan:StitchPlan;cell:NeedleCell;label:string}) {
-  const x=cell.x-6,y=cell.y-6,size=13;
-  return <svg role="img" aria-label={label} viewBox={[x,y,size,size].join(' ')} className="density-repair-crop">
+export function StitchCrop({plan,view,label,cell}: {
+  plan:StitchPlan;view:[number,number,number,number];label:string;cell?:NeedleCell;
+}) {
+  const [x,y,width,height]=view;
+  return <svg role="img" aria-label={label} viewBox={view.join(' ')} className="density-repair-crop">
     {plan.blocks.map((block,index)=>{
       const segments:string[]=[];
       for(const run of block.runs)for(let i=1;i<run.length;i++){
         const [ax,ay]=run[i-1], [bx,by]=run[i];
-        if(Math.max(ax,bx)>=x&&Math.min(ax,bx)<=x+size&&Math.max(ay,by)>=y&&Math.min(ay,by)<=y+size)
+        if(Math.max(ax,bx)>=x&&Math.min(ax,bx)<=x+width&&Math.max(ay,by)>=y&&Math.min(ay,by)<=y+height)
           segments.push(`M${ax} ${ay}L${bx} ${by}`);
       }
       return <path key={index} d={segments.join(' ')} stroke={'rgb('+block.color.join(',')+')'} strokeWidth=".23" strokeLinecap="round" fill="none"/>;
     })}
-    <rect x={cell.x} y={cell.y} width="1" height="1" fill="none" stroke="#8e57be" strokeWidth=".14"/>
+    {cell&&<rect x={cell.x} y={cell.y} width="1" height="1" fill="none" stroke="#8e57be" strokeWidth=".14"/>}
   </svg>;
 }
 
@@ -77,7 +79,7 @@ function RepairComparison({cell,uids,disabled,onApply}:{
       <div className="density-comparison-grid">{([
         ['Current',preview.before,preview.hits_before],['Proposed',preview.after,preview.hits_after],
       ] as const).map(([label,plan,hits])=><section key={label}>
-        <h3>{label}</h3><StitchCrop plan={plan} cell={cell} label={label+' local stitch paths'}/>
+        <h3>{label}</h3><StitchCrop plan={plan} cell={cell} view={[cell.x-6,cell.y-6,13,13]} label={label+' local stitch paths'}/>
         <dl className="inspector-diagnostics"><div><dt>Needle points in cell</dt><dd>{hits}</dd></div>
           <div><dt>Total stitch points</dt><dd>{plan.stitches.toLocaleString()}</dd></div><div><dt>Trims</dt><dd>{plan.trims}</dd></div></dl>
       </section>)}</div>

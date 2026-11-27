@@ -20,10 +20,10 @@ test.beforeEach(async({page})=>{
       if(command==='design_issues')return [];
       if(command==='recognize_selected_lettering')return sessionStorage.getItem('sew-out-no-ocr')?[]:[{text:'SEEO',font:'Arial'}];
       if(command==='lettering_fonts')return ['Arial'];
-      if(command==='convert_selected_lettering')return {...plan};
+      if(command==='preview_selected_lettering')return {id:7,uid:12,view:[-5,-5,10,10],before:plan,after:plan};
       if(command==='preview_density_repair')return {id:8,before:plan,after:{...plan,stitches:26},hits_before:30,hits_after:26,footprint_overlap:97};
       if(command==='preview_coverage_repair')return {id:9,before:plan,after:{...plan,stitches:28},warnings_before:1,warnings_after:0,lettering_before:1,lettering_after:0};
-      if(command==='apply_density_repair'){plan={...plan,stitches:26};return plan;}
+      if(command==='apply_stitch_review'){plan={...plan,stitches:26};return plan;}
       if(command==='fabric_catalog')return [];
       return null;
     }}});
@@ -48,13 +48,17 @@ test('corrects a misread word only after confirmation and can keep the original 
   await expect(review.getByRole('textbox',{name:'Replacement text'})).toHaveValue('SEED');
   await review.getByRole('button',{name:'Keep traced shapes'}).click();
   await expect(review).toHaveCount(0);
-  expect((await logged(page)).some(call=>call.command==='convert_selected_lettering')).toBe(false);
+  expect((await logged(page)).some(call=>call.command==='preview_selected_lettering')).toBe(false);
   await page.getByRole('button',{name:'Recognize selected word'}).click();
   review=page.getByRole('region',{name:'Review recognized lettering'});
   await review.getByRole('textbox',{name:'Original word'}).fill('SEED');
   await review.getByRole('textbox',{name:'Replacement text'}).fill('GROW');
+  await review.getByRole('button',{name:'Preview lettering'}).click();
+  await expect(review.getByRole('img',{name:'Editable lettering stitch paths'})).toBeVisible();
+  expect((await logged(page)).some(call=>call.command==='apply_stitch_review')).toBe(false);
   await review.getByRole('button',{name:'Apply lettering'}).click();
-  await expect.poll(async()=>(await logged(page)).find(call=>call.command==='convert_selected_lettering')?.args)
+  await expect.poll(async()=>(await logged(page)).find(call=>call.command==='apply_stitch_review')?.args).toEqual({id:7});
+  await expect.poll(async()=>(await logged(page)).find(call=>call.command==='preview_selected_lettering')?.args)
     .toEqual({uids:[12],text:'SEED',font:'Arial',replacement:'GROW'});
 });
 
@@ -66,8 +70,12 @@ test('accepts manual lettering when recognition cannot read the traced shapes',a
   const review=page.getByRole('region',{name:'Review recognized lettering'});
   await expect(review.getByRole('textbox',{name:'Original word'})).toHaveValue('');
   await review.getByRole('textbox',{name:'Original word'}).fill('SEED');
+  await review.getByRole('button',{name:'Preview lettering'}).click();
+  await expect(review.getByRole('img',{name:'Editable lettering stitch paths'})).toBeVisible();
+  expect((await logged(page)).some(call=>call.command==='apply_stitch_review')).toBe(false);
   await review.getByRole('button',{name:'Apply lettering'}).click();
-  await expect.poll(async()=>(await logged(page)).find(call=>call.command==='convert_selected_lettering')?.args)
+  await expect.poll(async()=>(await logged(page)).find(call=>call.command==='apply_stitch_review')?.args).toEqual({id:7});
+  await expect.poll(async()=>(await logged(page)).find(call=>call.command==='preview_selected_lettering')?.args)
     .toEqual({uids:[12],text:'SEED',font:'Arial',replacement:'SEED'});
 });
 
@@ -84,7 +92,7 @@ test('locates a density hotspot and applies the exact reviewed proposal',async({
   await dialog.getByRole('button',{name:'Apply previewed repair'}).click();
   const calls=await logged(page);
   expect(calls.find(call=>call.command==='preview_density_repair')?.args).toEqual({cell:[0,0],uids:[12]});
-  expect(calls.find(call=>call.command==='apply_density_repair')?.args).toEqual({id:8});
+  expect(calls.find(call=>call.command==='apply_stitch_review')?.args).toEqual({id:8});
 });
 
 test('previews lettering balance separately from coverage repairs',async({page})=>{
@@ -93,7 +101,7 @@ test('previews lettering balance separately from coverage repairs',async({page})
   await expect(page.getByText('Lettering consistency warnings: 1 → 0')).toBeVisible();
   await page.getByRole('button',{name:'Apply quality repair'}).click();
   expect((await logged(page)).find(call=>call.command==='preview_coverage_repair')?.args).toEqual({letteringOnly:true});
-  expect((await logged(page)).find(call=>call.command==='apply_density_repair')?.args).toEqual({id:9});
+  expect((await logged(page)).find(call=>call.command==='apply_stitch_review')?.args).toEqual({id:9});
 });
 
 test('shows Poolin mapping, foam and appliqué checks in export review',async({page})=>{

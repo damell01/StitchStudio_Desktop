@@ -1438,7 +1438,10 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
         // Do not convert the reconstructed artwork back into outline-only
         // paths: this alternative is intended to show a solid fill.
         let mut variants=vec![(doc.clone(),plan.clone())];
-        for angle in [0.0,90.0]{
+        // A merged fill can route into a tight corner at a cardinal angle.
+        // Try diagonal rows too, leaving the short-stitch gate in place.
+        let angles: &[f64] = if joined_uid.is_some() { &[0.0, 90.0, 30.0, 60.0, 120.0, 150.0] } else { &[0.0, 90.0] };
+        for &angle in angles {
             if options.exhausted(){break}
             if let Some(v)=economical_fill_candidate(&doc,&plan,fill_scope,3,angle){variants.push(v);}
         }
@@ -1455,7 +1458,10 @@ fn choose_silhouette(source:&zigzag::document::Document,original:&Design,uids:Op
         if uids.is_none() && !candidates.is_empty(){break}
     }
     candidates.sort_by(|a,b| if uids.is_some() {
-        seconds(&a.2).total_cmp(&seconds(&b.2)).then_with(|| b.0.total_cmp(&a.0))
+        let saves_both = |p: &Design| p.stitch_count() < original.stitch_count() && p.trim_count() < original.trim_count();
+        saves_both(&b.2).cmp(&saves_both(&a.2))
+            .then_with(|| seconds(&a.2).total_cmp(&seconds(&b.2)))
+            .then_with(|| b.0.total_cmp(&a.0))
     } else { b.0.total_cmp(&a.0).then_with(||seconds(&a.2).total_cmp(&seconds(&b.2))) });
     candidates.into_iter().next().map(|(_,d,p)|(d,p)).ok_or("No eligible solid silhouette could be reconstructed".into())
 }
@@ -3536,50 +3542,85 @@ async fn recognize_selected_lettering(uids:Vec<usize>,app:tauri::AppHandle)->Res
  }).await.map_err(|e|e.to_string())?
 }
 
+#[derive(serde::Serialize)]
+struct LetteringReview {
+    id: u64,
+    uid: usize,
+    view: [f64; 4],
+    before: Preview,
+    after: Preview,
+}
+
 #[tauri::command]
-async fn convert_selected_lettering(uids:Vec<usize>,text:String,font:String,replacement:Option<String>,app:tauri::AppHandle)->Result<Preview,String>{
+async fn preview_selected_lettering(uids:Vec<usize>,text:String,font:String,replacement:String,app:tauri::AppHandle)->Result<LetteringReview,String>{
  use tauri::Manager;
  tauri::async_runtime::spawn_blocking(move || {
   let state=app.state::<Mutex<Workspace>>();
-  let mut w=state.lock().map_err(|e|e.to_string())?;
-  let mut doc=w.source.clone().ok_or("Editable artwork is required")?;
-  if uids.is_empty(){return Err("Select the traced letters in a word first".into())}
+  let tabs=app.state::<Mutex<workspace_tabs::WorkspaceTabs>>();
+  let (tab,mut doc,original)={
+   let tabs=tabs.lock().map_err(|e|e.to_string())?;
+   let w=state.lock().map_err(|e|e.to_string())?;
+   (tabs.active().to_owned(),w.source.clone().ok_or("Editable artwork is required")?,
+      w.current.clone().ok_or("Open artwork first")?)
+  };
+  let source_svg=doc.to_svg().map_err(|e|e.to_string())?;
+  let ids:std::collections::HashSet<_>=uids.into_iter().collect();
+  if ids.is_empty()||ids.len()>128{return Err("Select the traced shapes in one word or line.".into())}
   let mut bounds=zigzag::geom::Bounds::empty();
-  for shape in doc.shapes.iter().filter(|s|uids.contains(&s.uid)){
+  let mut found=0;
+  for (index,shape) in doc.shapes.iter().enumerate().filter(|(_,s)|ids.contains(&s.uid)){
+   if doc.records_text(index)||shape.params.stop==Some(true)||shape.params.trim==Some(true)
+      ||doc.layer_properties(&shape.id).is_some_and(|layer|layer.hidden||layer.locked)
+      ||!matches!(&shape.geometry,zigzag::svg::Geometry::Fill{..})
+      ||matches!(shape.params.kind,Some(zigzag::params::Kind::Manual|zigzag::params::Kind::Applique)){
+    return Err("Select only visible, unlocked traced lettering without special sewing commands.".into())
+   }
+   found+=1;
    let b=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
    if !b.is_empty(){bounds.add(b.min);bounds.add(b.max);}
   }
+  if found!=ids.len(){return Err("The selection changed. Select the traced word again.".into())}
   if bounds.is_empty(){return Err("No selected artwork".into())}
   let pad=(bounds.height()*0.08).max(0.5);
-  for shape in doc.shapes.iter().filter(|s|!uids.contains(&s.uid)){
+  for shape in doc.shapes.iter().filter(|s|!ids.contains(&s.uid)){
    let b=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
    if !b.is_empty() && b.min.x>=bounds.min.x-pad && b.max.x<=bounds.max.x+pad && b.min.y>=bounds.min.y-pad && b.max.y<=bounds.max.y+pad{return Err("Select all artwork within the word region before converting".into())}
   }
   let line=zigzag::ocr::RecognizedLine{text,font,confidence:-1.0,enabled:true,rect:[bounds.min.x+doc.offset.x,bounds.min.y+doc.offset.y,bounds.max.x+doc.offset.x,bounds.max.y+doc.offset.y]};
   let old_uids:Vec<_>=doc.shapes.iter().map(|s|s.uid).collect();
   zigzag::ocr::replace_lettering(&mut doc,&[line],0.1).map_err(|e|e.to_string())?;
-  if let Some(replacement)=replacement {
-   if replacement.trim().is_empty()||replacement.chars().count()>120{return Err("Enter 1–120 characters".into())}
-   let index=doc.shapes.iter().enumerate().find(|(i,s)|!old_uids.contains(&s.uid)&&doc.lettering(*i).is_some()).map(|(i,_)|i).ok_or("Reconstructed text not found")?;
-   let mut spec=doc.lettering(index).ok_or("Text settings unavailable")?;
-   spec.text=replacement;
+  if replacement.trim().is_empty()||replacement.chars().count()>120{return Err("Enter 1–120 characters".into())}
+  let index=doc.shapes.iter().enumerate().find(|(i,s)|!old_uids.contains(&s.uid)&&doc.lettering(*i).is_some()).map(|(i,_)|i).ok_or("Reconstructed text not found")?;
+  let mut spec=doc.lettering(index).ok_or("Text settings unavailable")?;
+  spec.text=replacement;
+  doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+  let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+  if fitted.is_empty(){return Err("Replacement generated no lettering outline".into())}
+  // Fit longer names without stretching shorter words unnaturally.
+  if fitted.width()>bounds.width(){
+   spec.h_scale=(spec.h_scale*bounds.width()/fitted.width()).clamp(25.0,250.0);
    doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
-   let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
-   if fitted.is_empty(){return Err("Replacement generated no lettering outline".into())}
-   // Fit longer names without stretching shorter words unnaturally.
-   if fitted.width()>bounds.width(){
-    spec.h_scale=(spec.h_scale*bounds.width()/fitted.width()).clamp(25.0,250.0);
-    doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
-   }
-   let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
-   if fitted.width()>bounds.width()*1.05 || fitted.height()>bounds.height()*1.15{
-    return Err("Replacement does not fit the original lettering area. Try shorter text or a narrower font.".into())
-   }
-   if doc.plan().per_shape.get(index).is_none_or(|&n|n==0){return Err("Replacement generated no stitches".into())}
+  }
+  let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+  if fitted.width()>bounds.width()*1.05 || fitted.height()>bounds.height()*1.15{
+   return Err("Replacement does not fit the original lettering area. Try shorter text or a narrower font.".into())
   }
   let design=doc.plan();
-  if design.blocks.is_empty(){return Err("No stitches generated".into())}
-  let p=preview(&design);w.checkpoint_named("Convert traced lettering");w.current=Some(design);w.source=Some(doc);Ok(p)
+  if design.per_shape.get(index).is_none_or(|&n|n==0){return Err("Replacement generated no stitches".into())}
+  validate_resized_design(&design)?;
+  let before=preview(&original);
+  let after=preview(&design);
+  let uid=doc.shapes[index].uid;
+  let margin=(bounds.height()*0.25).max(20.0);
+  let view=[(bounds.min.x-margin)/10.0,(bounds.min.y-margin)/10.0,
+      (bounds.width()+2.0*margin)/10.0,(bounds.height()+2.0*margin)/10.0];
+  let tabs=tabs.lock().map_err(|e|e.to_string())?;
+  let mut w=state.lock().map_err(|e|e.to_string())?;
+  if tabs.active()!=tab.as_str()||!density_repair::matches_source(&w,&original,&source_svg){
+   return Err("The design changed. Generate a new lettering preview.".into())
+  }
+  let id=density_repair::stage(&mut w,original,source_svg,doc,design,"Convert traced lettering");
+  Ok(LetteringReview{id,uid,view,before,after})
  }).await.map_err(|e|e.to_string())?
 }
 
@@ -4530,7 +4571,7 @@ async fn open_prepared_bundled_design(id:String,app:tauri::AppHandle)->Result<Op
         project.restore(&state)
     }).await.map_err(|e|e.to_string())?
 }
-fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![density_repair::preview_density_repair,density_repair::apply_density_repair,lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,workspace_tabs::restore_workspace_session,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::coverage_gap_preview,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_multiple_formats, export_design,transform_design,mirror_design,center_design,audit_stitches,preview_coverage_repair,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,get_routing_settings, set_routing_settings, get_specialty_settings, set_specialty_settings, copy_stitch_properties, set_sewing_commands, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,import_dropped_font,remove_font_asset,choose_artwork,preview_cleanup,recognize_selected_lettering,convert_selected_lettering,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,inspect_digitizer_coverage,export_digitizer_variant,apply_digitizer_draft,insert_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![density_repair::preview_density_repair,density_repair::apply_stitch_review,lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,workspace_tabs::restore_workspace_session,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::coverage_gap_preview,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_multiple_formats, export_design,transform_design,mirror_design,center_design,audit_stitches,preview_coverage_repair,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,get_routing_settings, set_routing_settings, get_specialty_settings, set_specialty_settings, copy_stitch_properties, set_sewing_commands, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,import_dropped_font,remove_font_asset,choose_artwork,preview_cleanup,recognize_selected_lettering,preview_selected_lettering,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,inspect_digitizer_coverage,export_digitizer_variant,apply_digitizer_draft,insert_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
@@ -4649,7 +4690,8 @@ mod fixed_resize_tests {
         let (_, variant) = super::choose_silhouette(
             &source, &original, Some(&selected), &super::SimplifyOptions::default(),
         ).unwrap();
-        assert!(variant.stitch_count() < original.stitch_count());
+        assert!(variant.stitch_count() <= original.stitch_count() * 85 / 100);
+        assert_eq!(super::measure_stitches(&variant).zero, 0);
         assert!(variant.trim_count() < original.trim_count());
     }
 

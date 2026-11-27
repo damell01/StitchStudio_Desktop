@@ -908,7 +908,7 @@ impl Studio {
             ui.label(egui::RichText::new(format!("Estimated machine time: {:.1} min", count as f64 / speed as f64 + overhead)).strong());
             caption(ui, format!("{trims} trims · {changes} color-block transitions · {overhead:.1} min estimated overhead"));
             caption(ui, "Excludes acceleration, hooping, manual stops and thread breaks. Adjust delays to match your machine.");
-            let baseline_id = egui::Id::new(("sewing-comparison", self.active_tab().rec));
+            let baseline_id = egui::Id::new(("sewing-comparison", self.session.rec));
             let baseline: Option<(usize, usize, usize)> = ui.data(|d| d.get_temp(baseline_id));
             ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(!self.planner.pending && count > 0, egui::Button::new("Capture baseline")).clicked() {

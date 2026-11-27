@@ -127,10 +127,10 @@ pub(super) fn stage(workspace: &mut Workspace, original: Design, source_svg: Str
 }
 
 #[tauri::command]
-pub(super) fn apply_density_repair(id: u64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview, String> {
+pub(super) fn apply_stitch_review(id: u64, state: tauri::State<'_, Mutex<Workspace>>) -> Result<Preview, String> {
     let mut workspace = state.lock().map_err(|error| error.to_string())?;
     let draft = workspace.density_draft.as_ref().filter(|draft| draft.id == id)
-        .ok_or("Generate a quality repair preview first.")?;
+        .ok_or("Generate a stitch preview first.")?;
     if !matches_source(&workspace, &draft.original, &draft.source_svg) {
         return Err("The design changed. Generate a new repair preview.".into());
     }

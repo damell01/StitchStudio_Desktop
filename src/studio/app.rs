@@ -1075,6 +1075,9 @@ impl Studio {
                 });
             });
         ctx.data_mut(|d| { d.insert_temp(home_id, home); d.insert_temp(library_id, library); });
+        // Focus is a temporary view preference, not a saved dock layout.
+        let focus_id = egui::Id::new("studio-focus-mode");
+        let focus = ctx.data_mut(|d| d.get_temp::<bool>(focus_id).unwrap_or(false));
         if home {
             egui::CentralPanel::no_frame().show(ui, |ui| {
                 egui::ScrollArea::vertical().id_salt("studio-home-scroll").show(ui, |ui| {
@@ -1106,9 +1109,6 @@ impl Studio {
             .resizable(false)
             .frame(egui::Frame::new().fill(pal.dock))
             .show(ui, |ui| self.tool_strip(ui));
-        // Focus is a temporary view preference, not a saved dock layout.
-        let focus_id = egui::Id::new("studio-focus-mode");
-        let focus = ctx.data_mut(|d| d.get_temp::<bool>(focus_id).unwrap_or(false));
         // The docks: full panels, or collapsed to a strip of icons.
         self.tidy_agent_dock();
         use crate::dock::Place;

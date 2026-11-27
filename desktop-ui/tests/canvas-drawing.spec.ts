@@ -34,7 +34,7 @@ test('measures without altering stitches and commits a dragged shape in physical
   await menu.click();
   await page.getByRole('button',{name:'Measure',exact:true}).click();
   await draw();
-  await expect(canvas.locator('.canvas-drawing-overlay text')).toContainText('mm');
+  await expect(canvas.locator('[aria-label="Diagonal measurement"]')).toContainText('mm');
   expect(await edits()).toHaveLength(0);
 
   await menu.click();

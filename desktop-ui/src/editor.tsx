@@ -1,4 +1,4 @@
-import {DensityReview,type NeedleCell} from './density-review';
+import {DensityReview,StitchCrop,type NeedleCell} from './density-review';
 import {AdvancedStitches} from './advanced-stitches';
 import type {WorkspaceView} from './project-tabs';
 import {StitchGuideOverlay,useStitchGuides} from './stitch-guides';
@@ -884,9 +884,14 @@ useEffect(()=>{
 useEffect(()=>{if(stitchIndex>=points.length)setPlaying(false);},[stitchIndex,points.length]);
 
 const selectionRequest=useRef(0);
+type WordPreview = {id:number;uid:number;before:Plan;after:Plan;view:[number,number,number,number]};
+const [wordPreview,setWordPreview]=useState<{basis:Plan;result:WordPreview}|null>(null);
+const [wordPreviewPending,setWordPreviewPending]=useState(false);
+const reviewedWord=wordPreview?.basis===plan?wordPreview?.result:null;
 function dismissWordReview(){
   ++selectionRequest.current;
   setRecognizingWord(false);setConvertText(false);setRecognizedIds([]);setRecognitionError('');
+  setWordPreview(null);setWordPreviewPending(false);
 }
 async function recognizeWord(shapes:EditableObject[],request:number,manual=false){
   if(!shapes.length)return;
@@ -956,19 +961,31 @@ function selectObject(object:EditableObject|null,inspectLettering=true){
     return recognizeWord(wordShapes,request);
   }).catch(()=>{});
 }
-async function applyWordReview(){
+async function previewWordReview(){
   const text=recognizedOriginal.trim(),replacement=convertWord.trim();
-  if(busy||!text||!replacement||!convertFont||!recognizedIds.length)return;
-  const result=await edit('convert_selected_lettering',{uids:recognizedIds,text,font:convertFont,replacement});
-  if(!result.plan){setRecognitionError(result.error||'Original artwork preserved.');return}
-  dismissWordReview();
+  if(!plan||busy||wordPreviewPending||!text||!replacement||!convertFont||!recognizedIds.length)return;
+  const request=++selectionRequest.current;
+  setWordPreview(null);setWordPreviewPending(true);setRecognitionError('');
   try{
-    const items=await invoke<EditableObject[]>('editable_objects');
-    const item=items.find(o=>!objects.some(old=>old.uid===o.uid));
-    if(item)openText(item.uid);
-  }catch{/* The converted object remains editable in Layers. */}
+    const result=await invoke<WordPreview>('preview_selected_lettering',{uids:recognizedIds,text,font:convertFont,replacement});
+    if(selectionRequest.current===request)setWordPreview({basis:plan,result});
+  }catch(error){
+    if(selectionRequest.current===request)setRecognitionError(String(error));
+  }finally{
+    if(selectionRequest.current===request)setWordPreviewPending(false);
+  }
+}
+async function applyWordReview(){
+  if(busy||!reviewedWord)return;
+  const result=await edit('apply_stitch_review',{id:reviewedWord.id});
+  if(!result.plan){setRecognitionError(result.error||'Could not apply the preview.');return}
+  dismissWordReview();
+  setMulti([]);
+  setSelectedObject(reviewedWord.uid);
+  openText(reviewedWord.uid);
   setMessage('Editable lettering updated.');
 }
+
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
   if(uid!==null&&!busy&&!lockedObjects.includes(uid))void edit('edit_artwork_object',{uid,operation});
 }
@@ -1681,9 +1698,9 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {plan&&<div className="inspector-metrics"><div><small>Stitches</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div><div><small>Est. time</small><strong>{Math.ceil(plan.stitches/sewingSpm+plan.trims*trimSeconds/60+Math.max(0,plan.blocks.length-1)*changeSeconds/60)} min</strong></div></div>}
   {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage gaps</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red marks show sampled suspected gaps; outlines identify affected objects. Not a physical sew-out prediction.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small>{qualityOverlay==='coverage'?<small role="status">{coverageStatus}</small>:
     <DensityReview cells={qualityDensity} focus={densityFocus} objects={focusedDensityObjects} onLocate={locateDensity} disabled={busy}
-      onApply={async id=>{const result=await edit('apply_density_repair',{id});return result.error}}/>}</div>}
+      onApply={async id=>{const result=await edit('apply_stitch_review',{id});return result.error}}/>}</div>}
   {inspectorTab==='quality'&&plan&&<section className="workspace-inspector-group"><h3>Thread simulation</h3><button aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}>{realistic?'Show stitch paths':'Show realistic sew-out'}</button><label>Visual thread width · {threadDiameter.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={threadDiameter} onChange={e=>{setThreadDiameter(Number(e.target.value));setRealistic(true)}}/></label><small>Preview only — does not alter stitch density or export. Zoom in to inspect letter edges and gaps.</small></section>}
-  {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onApply={async id=>(await edit('apply_density_repair',{id})).error} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
+  {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onApply={async id=>(await edit('apply_stitch_review',{id})).error} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
   {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
     <strong title={selected?.label}>{selected?.label||`${movementIds.length} selected`}</strong>
     {movementBounds&&<small>{(movementBounds[2]/25.4).toFixed(2)} × {(movementBounds[3]/25.4).toFixed(2)} in</small>}
@@ -1691,15 +1708,26 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {inspectorTab==='transform'&&recognizingWord&&<small role="status">Recognizing lettering…</small>}
   {inspectorTab==='transform'&&convertText&&<section className="workspace-inspector-group lettering-review" aria-label="Review recognized lettering">
     <h3><Type size={16}/> Recognized lettering</h3>
-    <label>Original word<input value={recognizedOriginal} maxLength={120} disabled={busy} onChange={e=>{
+    <label>Original word<input value={recognizedOriginal} maxLength={120} disabled={busy||wordPreviewPending} onChange={e=>{
       if(convertWord===recognizedOriginal)setConvertWord(e.target.value);
-      setRecognizedOriginal(e.target.value);setRecognitionError('');
+      setRecognizedOriginal(e.target.value);setRecognitionError('');setWordPreview(null);
     }}/></label>
-    <label>Replacement text<input value={convertWord} maxLength={120} disabled={busy} onChange={e=>{setConvertWord(e.target.value);setRecognitionError('')}}/></label>
-    <SearchChoice label="Font" value={convertFont} options={convertFonts.map(f=>({value:f,label:f}))} onChoose={font=>{setConvertFont(font);setRecognitionError('')}}/>
+    <label>Replacement text<input value={convertWord} maxLength={120} disabled={busy||wordPreviewPending} onChange={e=>{
+      setConvertWord(e.target.value);setRecognitionError('');setWordPreview(null);
+    }}/></label>
+    <SearchChoice label="Font" disabled={busy||wordPreviewPending} value={convertFont} options={convertFonts.map(f=>({value:f,label:f}))}
+      onChoose={font=>{setConvertFont(font);setRecognitionError('');setWordPreview(null)}}/>
     {recognitionError&&<p role="alert">{recognitionError}</p>}
-    <div className="inspector-actions"><button disabled={busy} onClick={dismissWordReview}>Keep traced shapes</button><button className="primary"
-      disabled={busy||!recognizedOriginal.trim()||!convertWord.trim()||!convertFont} onClick={()=>void applyWordReview()}>Apply lettering</button></div>
+    {reviewedWord&&<div className="density-comparison-grid">
+      {([['Traced',reviewedWord.before],['Editable',reviewedWord.after]] as const).map(([label,preview])=><div key={label}>
+        <strong>{label}</strong><StitchCrop plan={preview} view={reviewedWord.view} label={label+' lettering stitch paths'}/>
+      </div>)}
+    </div>}
+    <div className="inspector-actions"><button disabled={busy} onClick={dismissWordReview}>Keep traced shapes</button>
+      {reviewedWord?<button className="primary" disabled={busy} onClick={()=>void applyWordReview()}>Apply lettering</button>:
+        <button className="primary" disabled={busy||wordPreviewPending||!recognizedOriginal.trim()||!convertWord.trim()||!convertFont}
+          onClick={()=>void previewWordReview()}>{wordPreviewPending?'Building preview…':'Preview lettering'}</button>}
+    </div>
   </section>}
   {inspectorTab==='transform'&&!convertText&&!recognizingWord&&canRecognizeSelection&&
     <button disabled={busy} onClick={recognizeSelection}><Type size={15}/> Recognize selected word</button>}
@@ -1899,10 +1927,10 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 <p className="muted">Enter the usable sewing field, not the outer dimensions of the hoop.</p>{(invalidField||machineExceeded||incompatibleHoop)&&<p role="alert">Check the machine and hoop dimensions.</p>}<div className="studio-modal-actions"><button onClick={()=>{setHoopOpen(false);setZoom(100);setPan([0,0])}}>Done</button><button className="primary" disabled={!plan||busy||invalidField||machineExceeded||incompatibleHoop} onClick={()=>{setHoopOpen(false);fit(false)}}>Maximize design in hoop</button></div></section></div>}
 {pricingOpen&&plan&&<div className="pricing-modal-backdrop" onClick={()=>setPricingOpen(false)}><section role="dialog" aria-modal="true" aria-label="Job pricing calculator" className="pricing-modal" onClick={e=>e.stopPropagation()} onKeyDown={e=>{if(e.key==='Escape')setPricingOpen(false);e.stopPropagation()}}><div className="pricing-modal-title"><h2>Price current design</h2><button autoFocus aria-label="Close pricing calculator" onClick={()=>setPricingOpen(false)}><X size={18}/></button></div><PricingCalculator design={{name:plan.name,stitches:plan.stitches,minutes:sewingEstimate/60,objects}}/></section></div>}{exportOpen&&plan&&<ExportCenter assignments={threadAssignments} plan={plan} width={width} height={height} format={format} setFormat={setFormat} machine={machines.find(m=>m.id===machine)?.name||""} blocked={outside||machineExceeded||incompatibleHoop||invalidField} busy={busy} onExport={save} onClose={()=>setExportOpen(false)}/>}{message&&<p role="status">{message}</p>}</>}
 
-function SearchChoice({label,value,options,onChoose}:{label:string;value:string;options:{value:string;label:string}[];onChoose:(value:string)=>void}){
+function SearchChoice({label,value,options,onChoose,disabled=false}:{label:string;value:string;options:{value:string;label:string}[];onChoose:(value:string)=>void;disabled?:boolean}){
  const [open,setOpen]=useState(false),[query,setQuery]=useState('');
  const filtered=options.filter(o=>matchesName(o.label,query));
- return <div className="studio-search-choice"><span>{label}</span><button type="button" aria-expanded={open} onClick={()=>{setOpen(v=>!v);setQuery('')}}>{options.find(o=>o.value===value)?.label||'Choose…'}</button>{open&&<div className="studio-search-options" onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();setOpen(false)}}}><input autoFocus type="search" aria-label={'Search '+label} placeholder="Search…" value={query} onChange={e=>setQuery(e.target.value)}/><div role="group" aria-label={label+' options'}>{filtered.map(o=><button type="button" key={o.value} aria-pressed={o.value===value} onClick={()=>{onChoose(o.value);setOpen(false)}}>{o.label}</button>)}{!filtered.length&&<small>No matches</small>}</div></div>}</div>
+ return <div className="studio-search-choice"><span>{label}</span><button type="button" aria-expanded={open&&!disabled} disabled={disabled} onClick={()=>{setOpen(v=>!v);setQuery('')}}>{options.find(o=>o.value===value)?.label||'Choose…'}</button>{open&&!disabled&&<div className="studio-search-options" onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();setOpen(false)}}}><input autoFocus type="search" aria-label={'Search '+label} placeholder="Search…" value={query} onChange={e=>setQuery(e.target.value)}/><div role="group" aria-label={label+' options'}>{filtered.map(o=><button type="button" key={o.value} aria-pressed={o.value===value} onClick={()=>{onChoose(o.value);setOpen(false)}}>{o.label}</button>)}{!filtered.length&&<small>No matches</small>}</div></div>}</div>
 }
 
 function PaletteRow({color,count,disabled,library,onSelectObjects,onReplace}:{color:number[];count:number;disabled:boolean;library:ReturnType<typeof readThreads>;onSelectObjects:()=>void;onReplace:(color:number[])=>void}){
