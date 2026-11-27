@@ -16,6 +16,7 @@ type Plan = {
 };
 type Review = {
   id: number;
+  artwork_svg?: string | null;
   plan: Plan;
   quality: { short: number; long: number; zero: number; sewn_mm: number };
   warnings: string[];
@@ -82,6 +83,7 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<'compare' | 'stitches' | 'original' | 'density' | 'thread'>('compare');
   const [showProcessed, setShowProcessed] = useState(false);
+  const [showReconstructed,setShowReconstructed]=useState(false);
   const [processed, setProcessed] = useState<{ art: Art; settings: typeof defaults; url: string } | null>(null);
   const [previewError, setPreviewError] = useState('');
   const artworkUrl = useArtworkUrl(original);
@@ -301,7 +303,9 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
   const plan = activeComparison?.variants.find(variant => variant.strength === chosen)?.plan ?? review?.plan;
   const previewBox=useMemo(()=>{let l=Infinity,t=Infinity,r=-Infinity,b=-Infinity;for(const block of plan?.blocks??[])for(const run of block.runs)for(const [x,y] of run){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);b=Math.max(b,y)}if(!Number.isFinite(l))return [-1,-1,2,2];const padding=Math.max(2,Math.max(r-l,b-t)*.06);return [l-padding,t-padding,Math.max(1,r-l)+padding*2,Math.max(1,b-t)+padding*2]},[plan]);
   const colors = new Set(plan?.blocks.map(block => block.color.join(',')));
-  const displayUrl = showProcessed ? processedUrl : artworkUrl;
+  const reconstructedUrl=useMemo(()=>review?.artwork_svg?'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(review.artwork_svg):'',[review?.artwork_svg]);
+  const reconstructed=showReconstructed&&!!reconstructedUrl;
+  const displayUrl = reconstructed ? reconstructedUrl : showProcessed ? processedUrl : artworkUrl;
   const stitchPaths=useMemo(()=>plan?.blocks.map(b=>b.runs.map(run=>run.map(p=>p.join(',')).join(' ')))??[],[plan]);
 
   return <div
@@ -493,10 +497,10 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
           </button>)}
         {review && <button aria-pressed={mode === 'thread'} onClick={() => setMode('thread')}><Layers2 size={15} /> Thread view</button>}
         {review && <button aria-pressed={mode === 'density'} onClick={() => setMode('density')} title="Inspect where the needle penetrates most often"><ChartNoAxesColumn size={15} /> Density</button>}
-        {!vector && <button aria-pressed={showProcessed} onClick={() => setShowProcessed(value => !value)} title="Show the artwork after cleanup">Processed</button>}
+        {!vector && <button aria-pressed={showProcessed&&!reconstructed} onClick={() => {setShowReconstructed(false);setShowProcessed(value => !value)}} title="Show the artwork after cleanup">Processed</button>}{reconstructedUrl&&<button aria-pressed={reconstructed} onClick={()=>setShowReconstructed(v=>!v)} title="Compare reconstructed vector artwork with the original">Simplified artwork</button>}
       </div>
-      <h3 className="source-heading">{showProcessed ? 'Processed artwork' : 'Original artwork'}</h3>
-      {displayUrl && (showProcessed || original?.mime !== 'image/tiff') &&
+      <h3 className="source-heading">{reconstructed ? 'Reconstructed artwork' : showProcessed ? 'Processed artwork' : 'Original artwork'}</h3>
+      {displayUrl && (reconstructed || showProcessed || original?.mime !== 'image/tiff') &&
         <img src={displayUrl} alt={showProcessed ? 'Processed artwork' : 'Original artwork'} className="digitizer-source-image" />}
       {showProcessed && !displayUrl && mode !== 'stitches' && <p>{previewError || 'Preparing artwork preview…'}</p>}
       {processing && <>
