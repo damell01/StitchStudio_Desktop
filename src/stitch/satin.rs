@@ -241,7 +241,10 @@ pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
         // Limit expansion and contraction relative to the local rung so
         // tiny letter tips cannot flare or turn their rails inside out.
         let local_width = a.dist(b);
-        let pull = p.pull.clamp(-local_width * 0.24, local_width * 0.25);
+        // Taper compensation smoothly as the rails converge. The width-scaled
+        // compensation below 1 mm avoids a visible bulge at fine lettering tips.
+        let tip_scale = (local_width / 10.0).clamp(0.0, 1.0);
+        let pull = (p.pull * tip_scale).clamp(-local_width * 0.24, local_width * 0.25);
         let (mut a2, mut b2) = (a + dir * pull, b - dir * pull);
         if p.short_stitches && k > 0 && k + 1 < ps.len() && k % 2 == 1 {
             let (pa, pb) = ps[k - 1];
@@ -967,5 +970,19 @@ mod satin_tip_tests {
         assert!(stitches.len()>2);
         assert!(stitches.windows(2).all(|w|w[0].dist(w[1])>1e-9));
         assert!(stitches[0].dist(P::new(0.,0.))<1e-9);
+    }
+}
+
+#[cfg(test)]
+mod satin_compensation_tip_tests {
+    use super::*;
+    #[test]
+    fn fine_column_compensation_tapers_without_losing_edge_coverage() {
+        let r=Rails { a:vec![P::new(0.,0.),P::new(0.,40.)], b:vec![P::new(4.,0.),P::new(4.,40.)], closed:false,sync:vec![] };
+        let p=SatinParams {spacing:4.,pull:2.,underlay:0,run_len:20.,short_stitches:false,split:None,style:SatinStyle::Plain};
+        let stitches=column(&r,&p);
+        assert!(stitches.len()>2);
+        assert!((stitches[0].x+0.8).abs()<1e-9);
+        assert!((stitches[1].x-4.8).abs()<1e-9);
     }
 }
