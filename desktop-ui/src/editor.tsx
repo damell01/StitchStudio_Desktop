@@ -183,6 +183,23 @@ function selectArtworkGroup(uid:number,colors=false){
  showInspector(true);setInspectorTab(colors?'threads':'transform');
  setMessage(ids.length+' editable artwork regions selected.'+(group.key==='original'?' Original artwork has no separate illustration groups.':''));
 }
+function selectVisualElement(){
+ const seed=objects.find(o=>o.uid===selectedObject);
+ if(!seed?.bounds||seed.hidden||seed.locked)return;
+ const [x,y,w,h]=seed.bounds;
+ const gap=Math.max(.25,Math.min(1.5,Math.min(w,h)*.12));
+ const ids=objects.filter(o=>{
+   if(o.uid===seed.uid)return true;
+   if(!o.bounds||o.hidden||o.locked||lockedObjects.includes(o.uid)||o.kind==='manual'||o.groups?.some(g=>g.startsWith('tl-lettering-')))return false;
+   const [a,b,c,d]=o.bounds;
+   if(c<=0||d<=0)return false;
+   const overlap=Math.max(0,Math.min(x+w,a+c)-Math.max(x,a))*Math.max(0,Math.min(y+h,b+d)-Math.max(y,b));
+   const contained=a>=x-gap&&b>=y-gap&&a+c<=x+w+gap&&b+d<=y+h+gap;
+   return contained||((c*d<=w*h*1.5)&&overlap/(c*d)>=.65);
+ }).map(o=>o.uid);
+ setMulti(ids);setSelectedObject(null);setActiveGroup(null);setCanvasMode('select');setLayerTab('objects');showInspector(true);setInspectorTab('threads');
+ setMessage(ids.length+' overlapping artwork regions selected. Review selection before editing.');
+}
 function selectNearbyRegion(){
  const seed=objects.find(o=>o.uid===selectedObject);if(!seed?.bounds)return;
  const group=new Set([seed.uid]);const gap=1.2;
@@ -194,11 +211,11 @@ function selectNearbyRegion(){
 function toggleMulti(uid:number){setCanvasText(null);setCanvasEditTarget(null);dismissWordReview();setCanvasMode('select');setMulti(old=>{const base=old.length?old:selectedObject!==null?[selectedObject]:[];return base.includes(uid)?base.filter(i=>i!==uid):[...base,uid]});setLayerTab('objects')}
 const [guides,setGuides]=useState<{x:number|null;y:number|null}>({x:null,y:null});
 function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
- if(!snap){if(show)setGuides({x:null,y:null});return [dx,dy]}
+ if(!snap){if(show)setGuides(old=>old.x===null&&old.y===null?old:{x:null,y:null});return [dx,dy]}
  const chosen=uids?new Set(uids):null;
  const bounds=chosen?objects.filter(o=>chosen.has(o.uid)&&o.bounds).map(o=>o.bounds!):[];
  const source=chosen&&bounds.length?[Math.min(...bounds.map(b=>b[0])),Math.min(...bounds.map(b=>b[1])),Math.max(...bounds.map(b=>b[0]+b[2])),Math.max(...bounds.map(b=>b[1]+b[3]))]:!chosen&&designBounds?[designBounds.left,designBounds.top,designBounds.left+designBounds.width,designBounds.top+designBounds.height]:null;
- if(!source){if(show)setGuides({x:null,y:null});return [Math.round(dx),Math.round(dy)]}
+ if(!source){if(show)setGuides(old=>old.x===null&&old.y===null?old:{x:null,y:null});return [Math.round(dx),Math.round(dy)]}
  const xs=[-width/2,0,width/2],ys=[-height/2,0,height/2];
  if(chosen)for(const g of designGroups){if(!g.bounds||g.members.some(o=>chosen.has(o.uid)))continue;const [x,y,w,h]=g.bounds;xs.push(x,x+w/2,x+w);ys.push(y,y+h/2,y+h)}
  if(chosen)for(const o of objects){if(chosen.has(o.uid)||o.hidden||!o.bounds)continue;const [x,y,w,h]=o.bounds;xs.push(x,x+w/2,x+w);ys.push(y,y+h/2,y+h)}
@@ -206,7 +223,7 @@ function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
  function axis(delta:number,anchors:number[],targets:number[]):[number,number|null]{let best=threshold,shift=0,guide:number|null=null;for(const a of anchors)for(const t of targets){const d=t-a-delta;if(Math.abs(d)<best){best=Math.abs(d);shift=d;guide=t}}return guide===null?[delta,null]:[delta+shift,guide]}
  const [x,gx]=axis(dx,[source[0],(source[0]+source[2])/2,source[2]],xs);
  const [y,gy]=axis(dy,[source[1],(source[1]+source[3])/2,source[3]],ys);
- if(show)setGuides({x:gx,y:gy});return [x,y]
+ if(show)setGuides(old=>old.x===gx&&old.y===gy?old:{x:gx,y:gy});return [x,y]
 }
 const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,100);
 const [convertText,setConvertText]=useState(false);const recognitionCache=useRef(new Map<string,{text:string;font:string}[]>());const [recognizingWord,setRecognizingWord]=useState(false);const [recognizedOriginal,setRecognizedOriginal]=useState('');const [recognitionError,setRecognitionError]=useState('');const [recognizedIds,setRecognizedIds]=useState<number[]>([]);const [convertWord,setConvertWord]=useState('');const [convertFont,setConvertFont]=useState('');const [convertFonts,setConvertFonts]=useState<string[]>([]);const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'|'quality'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(initialAssistant);useEffect(()=>{if(initialAssistant)onAssistantOpened?.()},[]);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [appearanceFloor,setAppearanceFloor]=useState(85);const [smartMode,setSmartMode]=useState<'light'|'balanced'|'aggressive'|'maximum'>('aggressive');const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{artwork_svg?:string|null;strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [targetReduction,setTargetReduction]=useState(50);const [targetMetric,setTargetMetric]=useState<'both'|'time'|'stitches'>('both');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);const baselineRequest=useRef(0);
@@ -1744,7 +1761,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
           <div className="alignment-pair">{[['first','First'],['earlier','Earlier'],['later','Later'],['last','Last']].map(([direction,label])=>
             <button key={direction} disabled={busy} onClick={()=>{close();void edit('reorder_artwork_object',{uid:selected.uid,direction})}}>{label}</button>)}</div>
           <p className="workspace-helper">Manual order overrides automatic sequencing. Hidden layers are excluded from exports.</p>
-          <button disabled={busy} onClick={()=>{close();selectArtworkGroup(selected.uid)}}>Select entire artwork group</button><button disabled={busy} onClick={()=>{close();selectArtworkGroup(selected.uid,true)}}>Edit artwork group colors</button><button disabled={busy||!selected.bounds} onClick={()=>{close();selectNearbyRegion()}}>Select nearby same-color shapes</button>
+          <button disabled={busy} onClick={()=>{close();selectArtworkGroup(selected.uid)}}>Select entire artwork group</button><button disabled={busy} onClick={()=>{close();selectArtworkGroup(selected.uid,true)}}>Edit artwork group colors</button><button disabled={busy||!selected.bounds} onClick={()=>{close();selectNearbyRegion()}}>Select nearby same-color shapes</button><button disabled={busy||!selected.bounds} onClick={()=>{close();selectVisualElement()}}>Select visual element (all colors)</button>
         </div>}
       </LayerDialog>
       {selected.kind!=='manual'&&<LayerDialog label="Change stitch type" title="Selected object stitch type"
