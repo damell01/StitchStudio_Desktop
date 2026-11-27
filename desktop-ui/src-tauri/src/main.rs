@@ -1908,7 +1908,7 @@ fn balance_lettering_density(source:&zigzag::document::Document,original:&Design
     let mut trial=source.clone();
     for &i in &flagged{
         let s=source.shapes.get(i)?;
-        if s.params.spacing.is_some()||source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden){continue}
+        if source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden){continue}
         let Some(b)=bounds(s) else{continue};
         let mut peers=Vec::new();
         for (j,q) in source.shapes.iter().enumerate(){
@@ -1919,7 +1919,13 @@ fn balance_lettering_density(source:&zigzag::document::Document,original:&Design
         if peers.len()<3{continue}
         peers.sort_by(|a,b|a.total_cmp(b));
         let target=peers[peers.len()/2];
-        if target.is_finite()&&(0.30..=0.65).contains(&target){trial.shapes[i].params.spacing=Some(target);}
+        if target.is_finite()&&(0.30..=0.65).contains(&target){
+            let existing=spacing(s);
+            // Limit each repair to a modest adjustment, including explicit spacing.
+            if existing.is_finite()&&existing>0.0{
+                trial.shapes[i].params.spacing=Some(target.clamp(existing*0.8,existing*1.25).clamp(0.30,0.65));
+            }
+        }
     }
     trial.sync().ok()?;
     let plan=trial.plan();
