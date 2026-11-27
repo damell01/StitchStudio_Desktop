@@ -1115,6 +1115,8 @@ function locateIssue(uid:number) {
   const object=objects.find(object=>object.uid===uid);
   if(!object)return;
   selectObject(object);
+  setInspectorTab('quality');
+  setQualityOverlay('coverage');
   showLayers(true);
   if(object.bounds&&!invalidField){
     const [x,y,w,h]=object.bounds;
