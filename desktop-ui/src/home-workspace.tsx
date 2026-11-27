@@ -1,7 +1,7 @@
 import {invoke} from '@tauri-apps/api/core';
 import {
   ArrowRight, BookOpen, FileText, FolderOpen, History, ImagePlus, Layers3, LayoutTemplate,
-  Library, Plus, Scissors, Settings, Shapes, Shield, Sparkles, Type,
+  Library, Plus, Scissors, Settings, Shapes, Shield, Type,
 } from 'lucide-react';
 import {useEffect,useState} from 'react';
 import {confirmAction} from './dialogs';
@@ -121,11 +121,6 @@ export function HomeWorkspace({navigate,studio,projects,onArtworkDrop}:Props) {
         <button disabled={busy} onClick={()=>resume()}>
           <span className="studio-home-icon"><Layers3 size={19}/></span>
           <span><strong>{overview.current?'Continue current design':'Open Studio'}</strong>{overview.current&&<small title={overview.current}>{overview.current}</small>}</span>
-          <ArrowRight size={16}/>
-        </button>
-        <button disabled={busy} onClick={()=>resume(true)}>
-          <span className="studio-home-icon"><Sparkles size={19}/></span>
-          <span><strong>Design with the assistant</strong><small>Create, arrange, or simplify stitches</small></span>
           <ArrowRight size={16}/>
         </button>
         {overview.recovery&&<button disabled={busy} onClick={()=>void open('recover')}>
