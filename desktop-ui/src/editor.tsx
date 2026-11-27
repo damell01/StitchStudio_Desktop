@@ -1444,6 +1444,10 @@ if(e.key==='Escape'&&window.innerWidth<dockBreakpoint&&(left||right)){setLeft(fa
 if((e.target as HTMLElement)?.closest("input,select,textarea,[contenteditable=true],[role=separator]"))return;
 if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)&&movementIds.length&&!e.ctrlKey&&!e.metaKey){e.preventDefault();const step=e.shiftKey?nudgeStep*10:e.altKey?nudgeStep*.1:nudgeStep;nudge(e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0,e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0);return;}
 if(e.repeat)return;
+if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==='a'&&objects.length){
+  e.preventDefault();dismissWordReview();setCanvasText(null);setCanvasEditTarget(null);setCanvasTyping(false);drawing.pick(null);setCanvasMode('select');setSelectedObject(null);setMulti(objects.filter(o=>!o.hidden&&!o.locked&&!lockedObjects.includes(o.uid)).map(o=>o.uid));return;
+}
+if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==='y'){e.preventDefault();if(plan)void edit('history_step',{redo:true});return;}
 if((e.ctrlKey||e.metaKey)&&e.altKey&&e.code==='KeyC'&&canCopyStitchSettings){e.preventDefault();void copyStitchSettings();return;}
 if((e.ctrlKey||e.metaKey)&&e.altKey&&e.code==='KeyV'&&canPasteStitchSettings){e.preventDefault();pasteStitchSettings();return;}
 const drawShortcut=!e.ctrlKey&&!e.metaKey&&!e.altKey?drawingTools.find(item=>item.shortcut===e.key.toUpperCase()):undefined;
@@ -1493,6 +1497,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {label:'Move whole design',group:'Edit',run:()=>setCanvasMode('design'),disabled:!plan},
     {label:'Fit artwork',group:'View',run:fitArtwork,disabled:!plan},
     {label:'Zoom to selection',group:'View',run:fitSelection,disabled:!movementIds.length},
+    {label:'Select all editable objects',group:'Edit',run:()=>{dismissWordReview();setCanvasText(null);setCanvasEditTarget(null);setCanvasTyping(false);drawing.pick(null);setCanvasMode('select');setSelectedObject(null);setMulti(objects.filter(o=>!o.hidden&&!o.locked&&!lockedObjects.includes(o.uid)).map(o=>o.uid))},disabled:busy||!objects.length},
     {label:'Fit hoop',group:'View',run:()=>{setZoom(100);setPan([0,0])}},
     {label:focusCanvas?'Exit focus view':'Focus canvas',group:'View',run:toggleFocus},
     {label:'Layers',group:'View',run:()=>showLayers(!left)},
