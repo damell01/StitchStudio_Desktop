@@ -82,7 +82,7 @@ function panelResizeHandle(side:'left'|'right'){
  const change=(next:number)=>(side==='left'?setLeftWidth:setRightWidth)(Math.max(min,Math.min(max,next)));
  return <div className={'studio-panel-resizer resize-'+side} role="separator" aria-label={side==='left'?'Resize layers panel':'Resize inspector panel'} aria-orientation="vertical" aria-valuemin={min} aria-valuemax={max} aria-valuenow={value} tabIndex={0} onPointerDown={e=>{if(e.button!==0)return;resizePanel.current={side,start:e.clientX,width:value,pointer:e.pointerId};e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault()}} onPointerMove={e=>{const drag=resizePanel.current;if(drag?.pointer===e.pointerId&&drag.side===side)change(drag.width+(e.clientX-drag.start)*(side==='left'?1:-1))}} onLostPointerCapture={()=>{resizePanel.current=null}} onPointerCancel={()=>{resizePanel.current=null}} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();change(value+(e.key==='ArrowRight'?1:-1)*(side==='left'?1:-1)*10)}else if(e.key==='Home'||e.key==='End'){e.preventDefault();change(e.key==='Home'?min:max)}}}/>;
 }
-const [cameraTop,setCameraTop]=useState(()=>localStorage.getItem('studio-camera-top')!=='0');
+const [cameraTop,setCameraTop]=useState(()=>localStorage.getItem('studio-camera-top')==='1');
 useEffect(()=>localStorage.setItem('studio-camera-top',cameraTop?'1':'0'),[cameraTop]);
 const cameraDrag=useRef<number|null>(null);
 const [canvasMode,setCanvasMode]=useState<'pan'|'select'|'design'|'solid'>('select');
@@ -1308,7 +1308,10 @@ function toggleFocus() {
 
 function openInsertDialog() {
   if(busy)return;
-  insertDialog.current?.showModal();
+  const dialog=insertDialog.current;
+  if(!dialog)return;
+  if(dialog.open){if(!dialog.matches(':modal'))dialog.close();else return;}
+  dialog.showModal();
 }
 
 async function open(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);setMessage('');try{const p=await invoke<Plan|null>('open_svg',{widthMm:artWidth,colors,removeBackground,detail});if(p){setThreadAssignments({});setPlan(p);setHidden([]);setPlayhead(null)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
@@ -1425,7 +1428,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button aria-pressed={canvasMode==='select'&&!realistic&&!(right&&inspectorTab==='quality')} onClick={()=>{drawing.pick(null);setCanvasMode('select');setRealistic(false);if(right&&inspectorTab==='quality')showInspector(false)}} title="Design workspace"><MousePointer2 size={20}/><small>Design</small></button>
   <button disabled={busy} onClick={()=>setArtworkImport({file:null})} title="Upload artwork and digitize"><FolderOpen size={20}/><small>Uploads</small></button>
   <button disabled={busy} aria-pressed={canvasTyping} onClick={toggleCanvasTyping} title="Type directly on the hoop"><Type size={20}/><small>Text</small></button>
-  <button disabled={busy} onClick={openInsertDialog} title="Browse and insert designs"><FilePlus size={20}/><small>Elements</small></button>
+  <button disabled={busy} onClick={()=>{const dialog=insertDialog.current;if(!dialog||busy)return;if(dialog.open){dialog.close();return;}showLayers(false);dialog.show();}} title="Browse and insert designs"><FilePlus size={20}/><small>Elements</small></button>
   <button aria-pressed={left} onClick={()=>showLayers(!left)} title="Manage design layers"><Layers3 size={20}/><small>Layers</small></button>
   <button disabled={busy||!plan?.stitches} aria-pressed={right&&inspectorTab==='quality'} onClick={()=>{setRealistic(false);openQuality()}} title="Inspect coverage and density"><ScanLine size={20}/><small>Quality</small></button>
   <button disabled={!plan?.stitches} aria-pressed={realistic} onClick={()=>{if(right&&inspectorTab==='quality')showInspector(false);setRealistic(v=>!v)}} title="Realistic sew-out preview"><Eye size={20}/><small>Preview</small></button>
