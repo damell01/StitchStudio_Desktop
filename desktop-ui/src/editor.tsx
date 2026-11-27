@@ -1605,6 +1605,12 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <span>Drag around the artwork to make solid.</span>
 </div>}
 <div className="workspace-canvas" ref={canvasSurface}>
+<div className="studio-view-modes" role="group" aria-label="Workspace view">
+  <button aria-pressed={!realistic&&!(right&&inspectorTab==='quality')&&canvasMode!=='select'} onClick={()=>{drawing.pick(null);setCanvasMode('design');setRealistic(false);if(right&&inspectorTab==='quality')showInspector(false)}}><MousePointer2 size={15}/> Design</button>
+  <button aria-pressed={!realistic&&!(right&&inspectorTab==='quality')&&canvasMode==='select'} onClick={()=>{drawing.pick(null);setCanvasMode('select');setRealistic(false);showInspector(true);setInspectorTab('stitches')}}><Scissors size={15}/> Stitches</button>
+  <button disabled={!plan?.stitches||busy} aria-pressed={right&&inspectorTab==='quality'} onClick={()=>{setRealistic(false);openQuality()}}><ScanLine size={15}/> Quality</button>
+  <button disabled={!plan?.stitches} aria-pressed={realistic&&!(right&&inspectorTab==='quality')} onClick={()=>{drawing.pick(null);if(right&&inspectorTab==='quality')showInspector(false);setRealistic(true)}}><Eye size={15}/> Preview</button>
+</div>
 {plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar">{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
   title="Preview the selected artwork as a solid fill">Make selection solid</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" role="group" aria-label="Selected object actions">
   <span className="studio-selection-name" title={selected.label||'Object '+selected.uid}>{selected.label||'Object '+selected.uid}</span>
