@@ -1877,8 +1877,14 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 {!plan?.stitches&&!drawing.tool&&!canvasTyping&&!canvasText&&<section className="workspace-empty studio-canvas-start" aria-labelledby="canvas-start-title">
   <span className="canvas-start-icon"><SquareDashed size={24}/></span>
   <h2 id="canvas-start-title">Your hoop is ready</h2>
-  <p>Bring in artwork or start drawing on the canvas.</p>
-  <button className="primary" onClick={openInsertDialog}><FilePlus size={17}/> Browse designs</button>
+  <p>Drop a DST, photo or logo here, or start with a ready-made design.</p>
+  <div className="canvas-start-secondary">
+    <button className="primary" disabled={busy} onClick={()=>uploadInput.current?.click()}><FolderOpen size={17}/> Upload a file</button>
+    <button disabled={busy} onClick={openInsertDialog}><FilePlus size={17}/> Browse templates & designs</button>
+  </div>
+  <div className="studio-start-templates" aria-label="Quick start templates">
+    {templates.filter(t=>['heart','bow','football','wildflower'].includes(t.id)).map(t=><button key={t.id} disabled={busy} title={'Insert '+t.name} onClick={()=>void edit('insert_template',{id:t.id,art:t.art,widthMm:Math.min(50.8,width*.5,height*.5),xMm:0,yMm:0}).then(result=>{if(result.plan){setCanvasMode('select');setRealistic(false);}})}><svg viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{__html:t.art}}/><span>{t.name}</span></button>)}
+  </div>
   <div className="canvas-start-secondary">
     <button onClick={toggleCanvasTyping}><Type size={16}/> Place lettering</button>
     <button onClick={()=>drawing.pick('pen')} title="Draw a running path (P)"><PenLine size={16}/> Draw a path</button>
