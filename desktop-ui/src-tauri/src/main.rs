@@ -3228,6 +3228,18 @@ async fn convert_selected_lettering(uids:Vec<usize>,text:String,font:String,repl
    let mut spec=doc.lettering(index).ok_or("Text settings unavailable")?;
    spec.text=replacement;
    doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+   let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+   if fitted.is_empty(){return Err("Replacement generated no lettering outline".into())}
+   // Fit longer names without stretching shorter words unnaturally.
+   if fitted.width()>bounds.width(){
+    spec.h_scale=(spec.h_scale*bounds.width()/fitted.width()).clamp(25.0,250.0);
+    doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+   }
+   let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+   if fitted.width()>bounds.width()*1.05 || fitted.height()>bounds.height()*1.15{
+    return Err("Replacement does not fit the original lettering area. Try shorter text or a narrower font.".into())
+   }
+   if doc.plan().per_shape.get(index).is_none_or(|&n|n==0){return Err("Replacement generated no stitches".into())}
   }
   let design=doc.plan();
   if design.blocks.is_empty(){return Err("No stitches generated".into())}
