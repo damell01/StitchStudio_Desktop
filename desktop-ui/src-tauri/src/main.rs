@@ -1132,6 +1132,28 @@ fn combined_economy_candidate(source:&zigzag::document::Document,original:&Desig
     Some((doc,plan))
 }
 // Explicit appearance-changing preview; never used by conservative optimization.
+// Remove repeated narrow interior hatch marks only when a larger same-color
+// outline encloses them. Preserve recorded lettering and explicit commands.
+fn remove_interior_hatching(source:&zigzag::document::Document,uids:Option<&[usize]>,options:&SimplifyOptions)->Option<zigzag::document::Document>{
+ use zigzag::{svg::Geometry,params::Kind};
+ let mut doc=source.clone();
+ let bounds:Vec<_>=source.shapes.iter().map(|s|zigzag::svg::shapes_bounds(std::slice::from_ref(s))).collect();
+ let mut remove=Vec::new();
+ for (i,s) in source.shapes.iter().enumerate(){
+  if options.exhausted(){return None}
+  if !uids.is_none_or(|ids|ids.contains(&s.uid))||source.records_text(i)||source.layer_properties(&s.id).is_some_and(|l|l.hidden||l.locked)||!s.groups.is_empty()||s.params.stop==Some(true)||s.params.trim==Some(true)||s.params.start.is_some()||s.params.end.is_some()||!matches!(s.params.kind,None|Some(Kind::Fill)){continue}
+  let Geometry::Fill{rings,rule}=&s.geometry else{continue};
+  if zigzag::design::thin_centerline(rings,*rule).is_none(){continue}
+  let b=&bounds[i];if b.is_empty()||b.width().max(b.height())<b.width().min(b.height())*3.0{continue}
+  let enclosed=source.shapes.iter().enumerate().any(|(j,q)|{
+   if i==j||q.color!=s.color||source.records_text(j){return false}
+   let a=&bounds[j];!a.is_empty()&&a.width()>b.width()*1.5&&a.height()>b.height()*1.5&&b.min.x>a.min.x+5.0&&b.max.x<a.max.x-5.0&&b.min.y>a.min.y+5.0&&b.max.y<a.max.y-5.0
+  });
+  if enclosed{remove.push(i);}
+ }
+ if remove.len()<4{return None}
+ doc.delete_many(&remove).ok()?;doc.sync().ok()?;Some(doc)
+}
 fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
     let mut mode=options.clone();
     mode.solid=true;mode.merge=true;mode.auto_types=true;mode.lighter_underlay=true;
@@ -1151,9 +1173,11 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
           ==d.blocks.iter().map(|b|b.color).collect::<std::collections::BTreeSet<_>>()
     };
     let mut best=None;
-    for radius in [24.,18.,32.,12.,40.,8.] {
+    let hatch=remove_interior_hatching(source,uids,&mode);
+    for (attempt,radius) in [24.,18.,32.,12.,40.,8.].into_iter().enumerate() {
         if mode.exhausted(){break}
-        let mut doc=rebuild_solid_artwork(source,uids,radius,&mode).unwrap_or_else(||source.clone());
+        let seed=if attempt%2==0{hatch.as_ref().unwrap_or(source)}else{source};
+        let mut doc=rebuild_solid_artwork(seed,uids,radius,&mode).unwrap_or_else(||seed.clone());
         if optimize_geometry(&mut doc,&mode,uids,radius).is_err()||mode.exhausted(){continue}
         let plan=doc.plan();
         let mut candidates=vec![(doc.clone(),plan.clone())];
