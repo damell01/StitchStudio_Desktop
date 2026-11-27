@@ -155,7 +155,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   }
 
   return <>
-    {!insert&&!onPreview&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All','Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>setCategory(item)}>{item}</button>)}</div>}
+    {!insert&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All','Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>{setCategory(item);setLimit(36)}}>{item}</button>)}</div>}
     <div className="library-filters">
       <label className="library-search"><Search size={16} /><input aria-label="Search templates" placeholder="Search templates" value={query} onChange={event => {setQuery(event.target.value);setLimit(36);}} /></label>
       <label>Category <select value={category} onChange={event => {setCategory(event.target.value);setLimit(36);}}>
@@ -165,13 +165,13 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
     </div>
     {results.length === 0 && <p role="status">No designs match your search.</p>}
     <section className="template-grid" aria-label="Template results">
-      {shown.map(template => <article key={template.id} draggable={!!onPreview} onDragStart={event=>{if(!onPreview)return;event.dataTransfer.setData("application/x-stitchstudio-template",template.id);event.dataTransfer.effectAllowed="copy";onPreview(template)}}>
+      {shown.map(template => <article key={template.id} className={onPreview&&selectedId===template.id?'template-selected':undefined} draggable={!!onPreview} onDragStart={event=>{if(!onPreview)return;event.dataTransfer.setData("application/x-stitchstudio-template",template.id);event.dataTransfer.effectAllowed="copy";onPreview(template)}}>
         <button className="design-favorite" title="Toggle favorite"
           aria-label={(favorites.includes(template.id) ? 'Remove favorite ' : 'Favorite ') + template.name}
           aria-pressed={favorites.includes(template.id)} onClick={() => favorite(template.id)}>
           <Star size={15} fill={favorites.includes(template.id) ? 'currentColor' : 'none'} />
         </button>
-        <svg className="template-art" viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{ __html: template.art }} />
+        <button type="button" className="template-art-select" aria-label={'Select '+template.name} aria-pressed={onPreview?selectedId===template.id:undefined} onClick={()=>onPreview?onPreview(template):setSelected(template)}><svg className="template-art" viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{ __html: template.art }} /></button>
         <small>{template.category}</small>
         <h3>{template.name}</h3>
         <button onClick={() => onPreview ? onPreview(template) : setSelected(template)} aria-label={`Preview ${template.name}`}
