@@ -161,12 +161,24 @@ fn recommend_font(line: &RecognizedLine, fonts: &[String], w:u32,h:u32,rgb:&[u8]
     let aspect = (line.rect[2]-line.rect[0])/(line.rect[3]-line.rect[1]);
     let mut best = (f64::INFINITY, line.font.clone());
     let source = source_mask(line.rect,w,h,rgb);
-    // A small, common installed-font shortlist avoids measuring hundreds
-    // of fonts on the OCR worker. Match silhouettes and proportions.
-    for font in std::iter::once(&line.font).chain(fonts.iter().filter(|f|
-        ["Arial", "Arial Narrow", "Helvetica", "Times New Roman", "Georgia",
-         "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Liberation Serif",
-         "Poppins", "Inter", "Verdana", "Courier New", "Bodoni MT", "Didot", "Garamond", "Baskerville", "Palatino Linotype", "Book Antiqua"].contains(&f.as_str()))) {
+    // Prefer decorative and embroidery-specific installed families as well as common fonts.
+    // Keep the worker bounded and avoid evaluating the same family twice.
+    let common = ["Arial", "Arial Narrow", "Helvetica", "Times New Roman", "Georgia",
+        "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Liberation Serif",
+        "Poppins", "Inter", "Verdana", "Courier New", "Bodoni MT", "Didot", "Garamond",
+        "Baskerville", "Palatino Linotype", "Book Antiqua"];
+    let decorative = ["script", "handwriting", "brush", "cursive", "monogram", "embroidery",
+        "satin", "applique", "varsity", "college", "blackletter", "calligraphy", "vintage",
+        "pacifico", "lobster", "chancery", "dancing", "great vibes"];
+    let mut shortlist = vec![&line.font];
+    for font in fonts.iter().filter(|f| {
+        let name = f.to_lowercase();
+        decorative.iter().any(|tag| name.contains(*tag))
+    }).take(18).chain(fonts.iter().filter(|f| common.contains(&f.as_str()))).chain(fonts.iter()) {
+        if !shortlist.contains(&font) { shortlist.push(font); }
+        if shortlist.len() >= 40 { break; }
+    }
+    for font in shortlist {
         let mut doc = Document::empty();
         let spec = TextSpec { text: line.text.clone(), font: font.clone(),
             spacing_mm: 0.0, bold: false, ..TextSpec::default() };
