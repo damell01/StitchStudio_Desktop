@@ -1334,6 +1334,15 @@ function stepStitch(delta:number) {
   setPlayhead(Math.max(0,Math.min(points.length,stitchIndex+delta)));
 }
 
+function scaleSelectedObjects(factor:number) {
+  if(busy||!movementIds.length)return;
+  const shapes=objects.filter(o=>movementIds.includes(o.uid)&&!o.hidden&&!o.locked&&!lockedObjects.includes(o.uid)&&o.bounds);
+  if(shapes.length!==movementIds.length)return;
+  const bounds=shapes.map(o=>o.bounds!);
+  const x=Math.min(...bounds.map(b=>b[0])),y=Math.min(...bounds.map(b=>b[1]));
+  const right=Math.max(...bounds.map(b=>b[0]+b[2])),bottom=Math.max(...bounds.map(b=>b[1]+b[3]));
+  void edit('resize_artwork_selection',{uids:shapes.map(o=>o.uid),sx:factor,sy:factor,x:(x+right)/2,y:(y+bottom)/2});
+}
 function fitSelection() {
   const bounds=objects.filter(object=>movementIds.includes(object.uid)&&!object.hidden&&object.bounds).map(object=>object.bounds!);
   if(!bounds.length)return;
@@ -1750,7 +1759,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button disabled={!plan?.stitches||busy} aria-pressed={right&&inspectorTab==='quality'} onClick={()=>{setRealistic(false);openQuality()}}><ScanLine size={15}/> Quality</button>
   <button disabled={!plan?.stitches} aria-pressed={realistic&&!(right&&inspectorTab==='quality')} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false);setRealistic(true)}}><Eye size={15}/> Preview</button>
 </div>
-{plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar">{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
+{plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar">{movementIds.length>1&&<div className="studio-selection-docked" role="group" aria-label="Multiple object actions"><span className="studio-selection-name">{movementIds.length} objects selected</span><button onClick={fitSelection}><Maximize size={16}/> Focus</button><button disabled={busy} onClick={()=>scaleSelectedObjects(.9)}>− Size</button><button disabled={busy} onClick={()=>scaleSelectedObjects(1.1)}>+ Size</button><button onClick={()=>{showInspector(true);setInspectorTab('transform')}}><Move size={16}/> Position</button></div>}{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
   title="Preview the selected artwork as a solid fill">Make selection solid</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" role="group" aria-label="Selected object actions">
   <button title="Zoom to selected artwork" aria-label="Zoom to selected artwork" onClick={fitSelection}><Maximize size={16}/> Focus</button><span className="studio-selection-name" title={selected.label||'Object '+selected.uid}>{selected.label||'Object '+selected.uid}</span>
   {selected.bounds&&<span className="studio-selection-size" title="Selected object dimensions">{(selected.bounds[2]/25.4).toFixed(2)} × {(selected.bounds[3]/25.4).toFixed(2)} in</span>}
