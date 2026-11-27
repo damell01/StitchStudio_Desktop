@@ -1087,6 +1087,21 @@ fn optimization_seconds(d:&Design,speed:f64,trim:f64)->f64{
     // Needle penetrations, trim overhead, color changes and estimated jump travel.
     d.stitch_count() as f64/speed*60.+d.trim_count() as f64*trim+d.blocks.len().saturating_sub(1) as f64*8.+travel/10./100.
 }
+// Count concentrated needle penetrations, not just total stitch count.
+fn production_hotspots(design:&Design)->(usize,usize){
+    let mut cells=std::collections::HashMap::<(i32,i32),usize>::new();
+    for p in design.blocks.iter().flat_map(|b|&b.runs).flat_map(|r|&r.pts){
+        *cells.entry(((p.x/10.).floor() as i32,(p.y/10.).floor() as i32)).or_default()+=1;
+    }
+    (cells.values().copied().max().unwrap_or(0),cells.values().filter(|&&n|n>=24).count())
+}
+fn production_not_worse(original:&Design,candidate:&Design)->bool{
+    let (peak,hot)=production_hotspots(original);
+    let (next_peak,next_hot)=production_hotspots(candidate);
+    let a=measure_stitches(original);let b=measure_stitches(candidate);
+    next_peak<=peak.max(24)&&next_hot<=hot
+        &&b.long<=a.long&&b.zero<=a.zero&&b.short<=a.short.saturating_add(5)
+}
 fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->OptimizationQuality{
     use std::collections::{HashSet,HashMap};
     let sample=|d:&Design|{
@@ -1228,6 +1243,7 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
         &&d.trim_count()<=original.trim_count()
         &&optimization_seconds(d,speed,trim)<optimization_seconds(original,speed,trim)
         &&q.long<=audit.long&&q.zero<=audit.zero&&q.short<=audit.short.saturating_add(5)
+        &&production_not_worse(original,d)
         &&bounds.min.dist(b.min)<=10.&&bounds.max.dist(b.max)<=10.
         &&optimization_quality(original,d,speed,trim).coverage>=mode.appearance_floor.filter(|v|v.is_finite()).unwrap_or(65.).clamp(65.,100.)
         &&original.blocks.iter().map(|b|b.color).collect::<std::collections::BTreeSet<_>>()
@@ -3571,6 +3587,7 @@ async fn digitize_artwork(
                 p.stitch_count()>0&&p.stitch_count()<=before&&score(p)<baseline_seconds
                     &&p.trim_count()<=original.trim_count()
                     &&audit.long<=baseline.long&&audit.zero<=baseline.zero
+                    &&production_not_worse(&original,p)
                     &&a.min.dist(b.min)<=5.&&a.max.dist(b.max)<=5.
                     &&original.blocks.iter().map(|b|b.color).eq(p.blocks.iter().map(|b|b.color))
                     &&optimization_quality(&original,p,speed,trim).coverage>=90.
@@ -3640,6 +3657,10 @@ async fn digitize_artwork(
         lettering_warnings.append(&mut warnings);
         let mut warnings = lettering_warnings;
         if count>15_000 {warnings.insert(0,format!("Efficiency goal not reached: {count} stitch points at the requested size. Consider a smaller design or simpler artwork; coverage was preserved rather than forcing a stitch cap."));}
+        let audit=measure_stitches(&design);
+        let (peak,hot)=production_hotspots(&design);
+        if hot>0{warnings.insert(0,format!("Density review: {hot} square-mm cells have 24 or more needle points (peak {peak}). Inspect overlaps and test on the intended fabric."));}
+        if audit.long>0||audit.zero>0{warnings.insert(0,format!("Stitch review: {} sewn segments over 12 mm and {} near-zero segments. Inspect stitch playback before exporting.",audit.long,audit.zero));}
         warnings.truncate(12);
         let review = DigitizerReview {
             id,
