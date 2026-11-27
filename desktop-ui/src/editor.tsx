@@ -1334,6 +1334,14 @@ function stepStitch(delta:number) {
   setPlayhead(Math.max(0,Math.min(points.length,stitchIndex+delta)));
 }
 
+function fitSelection() {
+  const bounds=objects.filter(object=>movementIds.includes(object.uid)&&!object.hidden&&object.bounds).map(object=>object.bounds!);
+  if(!bounds.length)return;
+  const x=Math.min(...bounds.map(b=>b[0])),y=Math.min(...bounds.map(b=>b[1]));
+  const right=Math.max(...bounds.map(b=>b[0]+b[2])),bottom=Math.max(...bounds.map(b=>b[1]+b[3]));
+  setZoom(artworkZoom(Math.max(12,right-x),Math.max(12,bottom-y)));
+  setPan([(x+right)/2,(y+bottom)/2]);
+}
 function fitArtwork() {
   if(!designBounds||invalidField)return;
   const {left,top,width:w,height:h}=designBounds;
@@ -1484,6 +1492,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     ...drawingTools.map(item=>({label:item.label,group:'Drawing',run:()=>drawing.pick(item.tool),disabled:busy})),
     {label:'Move whole design',group:'Edit',run:()=>setCanvasMode('design'),disabled:!plan},
     {label:'Fit artwork',group:'View',run:fitArtwork,disabled:!plan},
+    {label:'Zoom to selection',group:'View',run:fitSelection,disabled:!movementIds.length},
     {label:'Fit hoop',group:'View',run:()=>{setZoom(100);setPan([0,0])}},
     {label:focusCanvas?'Exit focus view':'Focus canvas',group:'View',run:toggleFocus},
     {label:'Layers',group:'View',run:()=>showLayers(!left)},
@@ -1714,7 +1723,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </button>
   <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>{drawing.pick(null);setCanvasMode('pan')}}><Hand size={17}/></button>
   <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>
-  <details className="studio-zoom-menu"><summary className="camera-zoom-value" aria-label="Zoom options" title="Zoom options">{Math.round(zoom)}% <span aria-hidden="true">▾</span></summary><div className="studio-zoom-options"><label>Zoom <input aria-label="Canvas zoom" type="range" min="25" max="400" step="5" value={zoom} onChange={e=>setZoom(Number(e.target.value))}/></label>{[25,50,75,100,150,200,300,400].map(value=><button key={value} aria-pressed={Math.round(zoom)===value} onClick={()=>setZoom(value)}>{value}%</button>)}<button onClick={()=>{setZoom(100);setPan([0,0])}}>Fit hoop</button><button disabled={!points.length} onClick={fitArtwork}>Fit artwork</button></div></details>
+  <details className="studio-zoom-menu"><summary className="camera-zoom-value" aria-label="Zoom options" title="Zoom options">{Math.round(zoom)}% <span aria-hidden="true">▾</span></summary><div className="studio-zoom-options"><label>Zoom <input aria-label="Canvas zoom" type="range" min="25" max="400" step="5" value={zoom} onChange={e=>setZoom(Number(e.target.value))}/></label>{[25,50,75,100,150,200,300,400].map(value=><button key={value} aria-pressed={Math.round(zoom)===value} onClick={()=>setZoom(value)}>{value}%</button>)}<button onClick={()=>{setZoom(100);setPan([0,0])}}>Fit hoop</button><button disabled={!points.length} onClick={fitArtwork}>Fit artwork</button><button disabled={!movementIds.length} onClick={fitSelection}>Fit selection</button></div></details>
   <button className="studio-tool-icon" title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(value=>Math.min(400,value+25))}><ZoomIn size={17}/></button>
   <button title="Fit artwork" aria-label="Fit artwork" disabled={!points.length} onClick={fitArtwork}><Maximize size={16}/><span className="camera-label">Fit</span></button>
   <button title="Fit hoop view" aria-label="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}><SquareDashed size={16}/><span className="camera-label">Hoop</span></button>
@@ -1738,7 +1747,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </div>
 {plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar">{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
   title="Preview the selected artwork as a solid fill">Make selection solid</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" role="group" aria-label="Selected object actions">
-  <span className="studio-selection-name" title={selected.label||'Object '+selected.uid}>{selected.label||'Object '+selected.uid}</span>
+  <button title="Zoom to selected artwork" aria-label="Zoom to selected artwork" onClick={fitSelection}><Maximize size={16}/> Focus</button><span className="studio-selection-name" title={selected.label||'Object '+selected.uid}>{selected.label||'Object '+selected.uid}</span>
   {selected.bounds&&<span className="studio-selection-size" title="Selected object dimensions">{(selected.bounds[2]/25.4).toFixed(2)} × {(selected.bounds[3]/25.4).toFixed(2)} in</span>}
   {stitchGuides.data?.textForm==='text'&&<button disabled={busy||lockedObjects.includes(selected.uid)} onClick={()=>openText(selected.uid)} title="Edit font, lettering, spacing and effects"><Type size={16}/> Edit text</button>}
   {canRecognizeSelection&&<button disabled={busy||recognizingWord} onClick={recognizeSelection} title="Recognize imported lettering and preview an editable replacement"><Type size={16}/> {recognizingWord?'Recognizing…':'Edit embedded text'}</button>}
