@@ -1620,6 +1620,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let stitch_goal=options.target_stitches.or_else(||(original.stitch_count()>15_000).then_some(10_000));
         let before=measure_stitches(original);let a=original.bounds();let baseline_seconds=seconds(original);
         let baseline_peak=optimization_quality(original,original,speed,trim).density_peak;
+        let (_, original_hotspots)=production_hotspots(original);
         let nearest_rejection = std::cell::Cell::new((usize::MAX, "No cheaper stitch plan was found for the eligible artwork."));
         let reject = |d: &Design, reason: &'static str| {
             if d.stitch_count() < nearest_rejection.get().0 {
@@ -1652,6 +1653,14 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             }
             if quality.coverage < threshold {
                 return reject(d, "A cheaper plan changed too much of the visible stitch footprint.");
+            }
+            // Global coverage can conceal missing strokes in a small glyph.
+            if !local_coverage_preserved(original,d) {
+                return reject(d, "A cheaper plan lost local coverage in lettering or small artwork.");
+            }
+            let (_, candidate_hotspots)=production_hotspots(d);
+            if candidate_hotspots>original_hotspots {
+                return reject(d, "A cheaper plan created additional concentrated needle-density hotspots.");
             }
             true
         };
