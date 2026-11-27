@@ -40,6 +40,11 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,disabl
   const [working,setWorking]=useState(false);
   const [message,setMessage]=useState('');
   const current=review?.revision===revision?review.result:null;
+  const speed=Math.max(100,Math.min(1500,Number(localStorage.getItem('studio-sewing-spm'))||800));
+  const trimRaw=Number(localStorage.getItem('studio-trim-seconds')??3);
+  const changeRaw=Number(localStorage.getItem('studio-change-seconds')??8);
+  const estimate=(p:RepairPlan)=>p.stitches/speed+p.trims*(Number.isFinite(trimRaw)?Math.max(0,trimRaw):3)/60+Math.max(0,p.blocks.length-1)*(Number.isFinite(changeRaw)?Math.max(0,changeRaw):8)/60;
+
   async function inspectRepair(){
     setWorking(true);setMessage('');setReview(null);
     try{const result=await invoke<RepairReview>('preview_coverage_repair');setReview({revision,result});}
@@ -54,6 +59,8 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,disabl
       <strong>Proposed coverage repair</strong>
       <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:6}}>{[current.before,current.after].map((p,i)=><div key={i}><small>{i?'Repaired':'Original'}</small><svg viewBox={[-width/2,-height/2,width,height].join(' ')} style={{width:'100%',background:'#faf7f0'}}>{p.blocks.map((b,j)=><g key={j} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".3">{b.runs.map((r,k)=><polyline key={k} points={r.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg><small>{p.stitches.toLocaleString()} points · {p.trims} trims</small></div>)}</div>
       <small>Flagged coverage objects: {current.warnings_before} → {current.warnings_after}</small>
+      <small>Estimated sewing time: {estimate(current.before).toFixed(1)} → {estimate(current.after).toFixed(1)} min</small>
+      <small>Stitch change: {((current.after.stitches-current.before.stitches)/Math.max(1,current.before.stitches)*100).toFixed(1)}% · {speed} points/min</small>
       <button disabled={disabled||working} onClick={()=>{setReview(null);onRepair()}}>Apply coverage repair</button><button onClick={()=>setReview(null)}>Keep original</button>
       <small>Apply recalculates the repair for the current design. Undo is available.</small>
     </div>}
