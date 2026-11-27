@@ -148,6 +148,11 @@ pub fn pairs(r: &Rails, step: f64) -> Vec<(P, P)> {
         .map(|w| ((w[1].0 - w[0].0) + (w[1].1 - w[0].1)) * 0.5)
         .collect();
     let total: f64 = centers.iter().sum();
+    // Degenerate rails cannot form a stitchable column. Reject non-finite
+    // geometry and pathological sampling requests before allocating.
+    if !total.is_finite() || total <= 1e-9 || total / step > 1_000_000.0 {
+        return Vec::new();
+    }
     let n = (total / step).ceil().max(1.0) as usize;
     let step = total / n as f64;
     let mut out = Vec::with_capacity(n + 1);
@@ -167,6 +172,9 @@ pub fn pairs(r: &Rails, step: f64) -> Vec<(P, P)> {
 
 /// Sew a column: underlay passes, then the top satin, as one continuous path.
 pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
+    if !p.spacing.is_finite() || p.spacing <= 0.0 || !p.pull.is_finite() {
+        return Vec::new();
+    }
     let mut out: Polyline = Vec::new();
     // Where the needle is: start (false) or end (true) of the column.
     let mut at_end = false;
@@ -225,6 +233,7 @@ pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
         _ => p.spacing,
     };
     let ps = pairs(r, spacing);
+    if ps.is_empty() { return Vec::new(); }
     let mut top: Polyline = Vec::with_capacity(ps.len() * 2);
     for (k, &(a, b)) in ps.iter().enumerate() {
         let dir = (a - b).norm();
@@ -927,5 +936,19 @@ mod tests {
             auto_rails(&[plus]).is_err(),
             "a 10 mm wide cross can't be one satin"
         );
+    }
+}
+
+#[cfg(test)]
+mod degenerate_column_tests {
+    use super::*;
+    #[test]
+    fn rejects_collapsed_and_pathological_rail_sampling() {
+        let mut rails=Rails { a:vec![P::new(0.,0.);2], b:vec![P::new(2.,0.);2], closed:false,sync:vec![] };
+        assert!(pairs(&rails,4.).is_empty());
+        rails.a[1]=P::new(0.,100.);
+        rails.b[1]=P::new(2.,100.);
+        assert!(pairs(&rails,0.000001).is_empty());
+        assert!(!pairs(&rails,4.).is_empty());
     }
 }
