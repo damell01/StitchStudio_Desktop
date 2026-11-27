@@ -1565,15 +1565,15 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
       event.preventDefault();setArtworkDrag(false);
       const template=templates.find(t=>t.id===templateId);
       const matrix=canvasSurface.current?.querySelector<SVGSVGElement>('svg.design-canvas')?.getScreenCTM();
-      if(!template||!matrix||busy)return;
+      if(!template||!matrix||busy||editLock.current)return;
       const point=new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());
       const widthMm=Math.min(50.8,width*.5,height*.5);
       if(Math.abs(point.x)>width/2||Math.abs(point.y)>height/2){setMessage('Drop the element inside the hoop.');return;}
-      setBusy(true);
-      void invoke<Plan>('insert_template',{id:template.id,art:template.art,widthMm,xMm:point.x,yMm:point.y}).then(result=>{
-        setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);setMessage('');
+      void edit('insert_template',{id:template.id,art:template.art,widthMm,xMm:point.x,yMm:point.y}).then(result=>{
+        if(!result.plan)return;
+        setHidden([]);setCanvasMode('select');
         insertDialog.current?.close();
-      }).catch(error=>setMessage(String(error))).finally(()=>setBusy(false));
+      });
       return;
     }
     if(!event.dataTransfer.types.includes('Files'))return;
