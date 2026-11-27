@@ -284,6 +284,9 @@ pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
         top.reverse();
     }
     out.extend(top);
+    // Collapsed tips and closed-rail seams can produce identical consecutive
+    // penetrations. Keep the path and edge coverage, but omit exact repeats.
+    out.dedup_by(|a,b| a.dist(*b)<=1e-9);
     out
 }
 
@@ -950,5 +953,19 @@ mod degenerate_column_tests {
         rails.b[1]=P::new(2.,100.);
         assert!(pairs(&rails,0.000001).is_empty());
         assert!(!pairs(&rails,4.).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod satin_tip_tests {
+    use super::*;
+    #[test]
+    fn tapered_tip_does_not_repeat_identical_penetrations() {
+        let r=Rails { a:vec![P::new(0.,0.),P::new(-5.,40.)], b:vec![P::new(0.,0.),P::new(5.,40.)], closed:false,sync:vec![] };
+        let p=SatinParams {spacing:4.,pull:1.,underlay:0,run_len:20.,short_stitches:true,split:None,style:SatinStyle::Plain};
+        let stitches=column(&r,&p);
+        assert!(stitches.len()>2);
+        assert!(stitches.windows(2).all(|w|w[0].dist(w[1])>1e-9));
+        assert!(stitches[0].dist(P::new(0.,0.))<1e-9);
     }
 }
