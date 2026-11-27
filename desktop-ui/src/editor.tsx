@@ -1118,6 +1118,27 @@ useEffect(()=>{
     }
     return words;
   }).filter(row=>row.length>=2&&row.length<=128).sort((a,b)=>b.length-a.length).slice(0,12);
+  // A second, bounded pass follows adjacent glyphs along gently curved baselines.
+  const seen=new Set(groups.map(row=>row.map(o=>o.uid).sort((a,b)=>a-b).join(',')));
+  const glyphs=candidates.filter(o=>{const [,,w,h]=o.bounds!;return h>=1&&w>0&&w<=h*2.5}).slice(0,400).sort((a,b)=>a.bounds![0]-b.bounds![0]);
+  const curved:EditableObject[][]=[];
+  for(const glyph of glyphs){
+    const [x,y,,h]=glyph.bounds!;
+    let best:EditableObject[]|undefined,bestScore=Infinity;
+    for(const row of curved){
+      const last=row[row.length-1], [lx,ly,lw,lh]=last.bounds!;
+      const gap=x-lx-lw,dy=Math.abs(y+h/2-ly-lh/2);
+      if(last.color.join(',')!==glyph.color.join(',')||h<lh*.55||h>lh*1.65||x<=lx||gap<-.3*lh||gap>lh*.9||dy>Math.max(.65,lh*.65))continue;
+      const score=Math.abs(gap)+dy;
+      if(score<bestScore){best=row;bestScore=score;}
+    }
+    if(best)best.push(glyph);else curved.push([glyph]);
+  }
+  for(const row of curved.filter(row=>row.length>=3&&row.length<=128).sort((a,b)=>b.length-a.length)){
+    const key=row.map(o=>o.uid).sort((a,b)=>a-b).join(',');
+    if(!seen.has(key)){groups.push(row);seen.add(key);}
+    if(groups.length>=18)break;
+  }
   if(!groups.length)return;
   const timer=window.setTimeout(async()=>{
     if(!active)return;
