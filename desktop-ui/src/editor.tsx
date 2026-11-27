@@ -1623,8 +1623,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </div>}
 <div className="workspace-canvas" ref={canvasSurface}>
 <div className="studio-view-modes" role="group" aria-label="Workspace view">
-  <button aria-pressed={!realistic&&!(right&&inspectorTab==='quality')&&canvasMode!=='select'} onClick={()=>{drawing.pick(null);setCanvasMode('design');setRealistic(false);if(right&&inspectorTab==='quality')showInspector(false)}}><MousePointer2 size={15}/> Design</button>
-  <button aria-pressed={!realistic&&!(right&&inspectorTab==='quality')&&canvasMode==='select'} onClick={()=>{drawing.pick(null);setCanvasMode('select');setRealistic(false);showInspector(true);setInspectorTab('stitches')}}><Scissors size={15}/> Stitches</button>
+  <button aria-pressed={!realistic&&!(right&&['quality','stitches'].includes(inspectorTab))} onClick={()=>{drawing.pick(null);setCanvasMode('select');setRealistic(false);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false)}}><MousePointer2 size={15}/> Design</button>
+  <button aria-pressed={!realistic&&right&&inspectorTab==='stitches'} onClick={()=>{drawing.pick(null);setCanvasMode('select');setRealistic(false);showInspector(true);setInspectorTab('stitches')}}><Scissors size={15}/> Stitches</button>
   <button disabled={!plan?.stitches||busy} aria-pressed={right&&inspectorTab==='quality'} onClick={()=>{setRealistic(false);openQuality()}}><ScanLine size={15}/> Quality</button>
   <button disabled={!plan?.stitches} aria-pressed={realistic&&!(right&&inspectorTab==='quality')} onClick={()=>{drawing.pick(null);if(right&&inspectorTab==='quality')showInspector(false);setRealistic(true)}}><Eye size={15}/> Preview</button>
 </div>
@@ -1635,6 +1635,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {stitchGuides.data?.textForm==='text'&&<button disabled={busy||lockedObjects.includes(selected.uid)} onClick={()=>openText(selected.uid)} title="Edit font, lettering, spacing and effects"><Type size={16}/> Edit text</button>}
   <button onClick={()=>{showInspector(true);setInspectorTab('threads')}} title="Change thread colors"><Palette size={16}/> Colors</button>
   <button onClick={()=>{showInspector(true);setInspectorTab('transform')}} title="Dimensions and alignment"><Move size={16}/> Position</button>
+  {selected.bounds&&<><button disabled={busy||lockedObjects.includes(selected.uid)} title="Reduce selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:.9})}>− Size</button><button disabled={busy||lockedObjects.includes(selected.uid)} title="Increase selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:1.1})}>+ Size</button></>}
+  <button disabled={busy} title="Inspect selected design quality" onClick={()=>openQuality()}><ScanLine size={16}/> Check quality</button>
   <button className="studio-tool-icon" title="Edit the selected object" aria-label="Open object editing tools"
     onClick={()=>{showInspector(true);setInspectorTab('transform')}}><MousePointer2 size={16}/></button>
   <button className="studio-tool-icon" title="Adjust stitches on the selected object" aria-label="Open object stitch settings"
