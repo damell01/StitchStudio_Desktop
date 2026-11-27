@@ -3175,6 +3175,8 @@ async fn move_artwork_objects(uids:Vec<usize>,dx:f64,dy:f64,app:tauri::AppHandle
  let mut doc=w.source.clone().ok_or("No editable artwork")?;
  let indices:Vec<_>=doc.shapes.iter().enumerate().filter(|(_,s)|uids.contains(&s.uid)).map(|(i,_)|i).collect();
  if indices.is_empty(){return Err("No objects selected".into())}
+ if indices.len()!=uids.len(){return Err("Selection changed. Select the objects again.".into())}
+ if dx.abs()<1e-9&&dy.abs()<1e-9{return w.current.as_ref().map(preview).ok_or("No stitch preview".into())}
  if indices.len()==doc.shapes.len(){return place_design(&mut w,[1.0,0.0,0.0,1.0,dx*10.0,dy*10.0])}
  doc.transform(&indices,[1.0,0.0,0.0,1.0,dx*10.0,dy*10.0]).map_err(|e|e.to_string())?;
  let design=doc.plan_cached(&mut w.plan_cache);if design.stitch_count()==0{return Err("Movement produced no stitches".into())}
