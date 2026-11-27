@@ -307,9 +307,9 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
     const cells=new Map<string,[number,number,number]>();
     for(const block of plan.blocks)for(const run of block.runs){
       for(let i=0;i<run.length;i++){
-        const [x,y]=run[i];const cx=Math.floor(x/10),cy=Math.floor(y/10),key=cx+','+cy;
+        const [x,y]=run[i];const cx=Math.floor(x),cy=Math.floor(y),key=cx+','+cy;
         const cell=cells.get(key);if(cell)cell[2]++;else cells.set(key,[cx,cy,1]);
-        if(i){const mm=Math.hypot(x-run[i-1][0],y-run[i-1][1])/10;sewn_mm+=mm;if(mm<.05)zero++;else if(mm<.3)short++;if(mm>12)long++;}
+        if(i){const mm=Math.hypot(x-run[i-1][0],y-run[i-1][1]);sewn_mm+=mm;if(mm<.05)zero++;else if(mm<.3)short++;if(mm>12)long++;}
       }
     }
     const density=Array.from(cells.values()).sort((a,b)=>b[2]-a[2]);
