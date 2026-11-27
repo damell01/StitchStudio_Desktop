@@ -439,14 +439,14 @@ pub fn rails_from_centerline(line: &[P], closed: bool, width: f64) -> Rails {
 /// the two longest subpaths are rails, the rest are rungs. Returns `None` if
 /// the subpaths don't look like a pair of rails.
 pub fn rails_from_subpaths(lines: &[(Polyline, bool)]) -> Option<Rails> {
-    if lines.len() < 2 {
+    if lines.len() < 2 || lines.iter().any(|(line,_)| line.iter().any(|p| !p.x.is_finite() || !p.y.is_finite())) {
         return None;
     }
     let mut idx: Vec<usize> = (0..lines.len()).collect();
     idx.sort_by(|&i, &j| polyline_length(&lines[j].0).total_cmp(&polyline_length(&lines[i].0)));
     let (ia, ib) = (idx[0], idx[1]);
     let (la, lb) = (polyline_length(&lines[ia].0), polyline_length(&lines[ib].0));
-    if lb < la * 0.4 {
+    if lines[ia].0.len()<2 || lines[ib].0.len()<2 || !la.is_finite() || !lb.is_finite() || lb<=1e-9 || lb < la * 0.4 {
         return None;
     }
     let closed = lines[ia].1 && lines[ib].1;
@@ -584,6 +584,8 @@ const AUTO_MAX_WIDTH: f64 = 80.0;
 
 /// Group rings into components: each outer ring with the rings directly inside it.
 pub fn components(rings: &[Polyline], rule: FillRule) -> Vec<Vec<Polyline>> {
+    let valid: Vec<Polyline> = rings.iter().filter(|r| r.len()>=3 && r.iter().all(|p|p.x.is_finite() && p.y.is_finite())).cloned().collect();
+    let rings = valid.as_slice();
     let n = rings.len();
     // A point outside a ring's box is outside the ring: most pairs are
     // settled without walking the ring (lettering has hundreds).
@@ -1004,5 +1006,19 @@ mod auto_satin_geometry_guard_tests {
     fn malformed_hole_is_rejected_without_indexing_empty_ring() {
         let outer=vec![P::new(0.,0.),P::new(40.,0.),P::new(40.,40.),P::new(0.,40.)];
         assert!(matches!(auto_rails(&[outer,vec![]]),Err(AutoSatinError::TooComplex)));
+    }
+}
+
+#[cfg(test)]
+mod malformed_satin_input_tests {
+    use super::*;
+    #[test]
+    fn empty_subpaths_do_not_form_rails() {
+        assert!(rails_from_subpaths(&[(vec![],false),(vec![],false)]).is_none());
+    }
+    #[test]
+    fn empty_rings_do_not_break_component_detection() {
+        let outer=vec![P::new(0.,0.),P::new(40.,0.),P::new(40.,40.),P::new(0.,40.)];
+        assert_eq!(components(&[vec![],outer],FillRule::EvenOdd).len(),1);
     }
 }
