@@ -951,11 +951,12 @@ async function recognizeWord(shapes:EditableObject[],request:number,manual=false
 }
 const [detectedText,setDetectedText]=useState<{uids:number[];text:string}[]>([]);
 const [autoTextStatus,setAutoTextStatus]=useState('');
+const [autoDetectText,setAutoDetectText]=useState(()=>localStorage.getItem('studio-auto-detect-text')!=='0');
 useEffect(()=>{
   let active=true;
   if(busy)return;
   setDetectedText([]);setAutoTextStatus('');
-  if(!objects.length)return;
+  if(!autoDetectText||!objects.length)return;
   const candidates=objects.filter(o=>o.bounds&&o.fill_rule&&!o.hidden&&!o.locked&&o.kind!=='manual'&&!o.groups?.some(g=>g.startsWith('tl-lettering-')));
   const rows:EditableObject[][]=[];
   for(const object of candidates.slice(0,400).sort((a,b)=>a.bounds![1]-b.bounds![1])){
@@ -995,7 +996,7 @@ useEffect(()=>{
     }catch{if(active){setDetectedText(found);setAutoTextStatus('Automatic lettering detection unavailable. Manual recognition is still available.');}}
   },700);
   return()=>{active=false;window.clearTimeout(timer)};
-},[objects,busy]);
+},[objects,busy,autoDetectText]);
 function recognizeSelection(){
   if(movementIds.length===1){const object=objects.find(o=>o.uid===movementIds[0]);if(object){selectObject(object,true,true);return;}}
   dismissWordReview();
@@ -1700,7 +1701,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <span>Drag around the artwork to make solid.</span>
 </div>}
 <div className="workspace-canvas" ref={canvasSurface}>
-{(detectedText.length>0||autoTextStatus)&&<div className="studio-detected-text" role="group" aria-label="Detected lettering" style={{display:'flex',gap:6,alignItems:'center',overflowX:'auto',padding:'3px 8px',flexShrink:0}}><small role="status">{autoTextStatus||'Detected text:'}</small>{detectedText.map(item=><button key={item.uids.join(',')} disabled={busy||recognizingWord} onClick={()=>{dismissWordReview();void recognizeWord(objects.filter(o=>item.uids.includes(o.uid)),selectionRequest.current,true)}} title="Review and reconstruct detected lettering">{item.text}</button>)}</div>}
+{objects.length>0&&<div className="studio-detected-text" role="group" aria-label="Detected lettering" style={{display:'flex',gap:6,alignItems:'center',overflowX:'auto',padding:'3px 8px',flexShrink:0}}><label style={{display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap',fontSize:11}}><input type="checkbox" checked={autoDetectText} onChange={e=>{setAutoDetectText(e.target.checked);localStorage.setItem('studio-auto-detect-text',e.target.checked?'1':'0')}}/> Detect text</label>{autoDetectText&&<small role="status">{autoTextStatus||(detectedText.length?'Detected text:':'')}</small>}{autoDetectText&&detectedText.map(item=><button key={item.uids.join(',')} disabled={busy||recognizingWord} onClick={()=>{const shapes=objects.filter(o=>item.uids.includes(o.uid)&&!o.hidden&&!o.locked&&o.bounds);if(shapes.length!==item.uids.length)return;dismissWordReview();setCanvasMode('select');setRealistic(false);setSelectedObject(null);setMulti(shapes.map(o=>o.uid));const bounds=shapes.map(o=>o.bounds!);const x=Math.min(...bounds.map(b=>b[0])),y=Math.min(...bounds.map(b=>b[1])),right=Math.max(...bounds.map(b=>b[0]+b[2])),bottom=Math.max(...bounds.map(b=>b[1]+b[3]));setPan([(x+right)/2,(y+bottom)/2]);setZoom(artworkZoom(Math.max(12,right-x),Math.max(12,bottom-y)));void recognizeWord(shapes,selectionRequest.current,true)}} title="Review and reconstruct detected lettering">{item.text}</button>)}</div>}
 <div className="studio-view-modes" role="group" aria-label="Workspace view">
   <button aria-pressed={!realistic&&!(right&&['quality','stitches'].includes(inspectorTab))} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setCanvasMode('select');setRealistic(false);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false)}}><MousePointer2 size={15}/> Design</button>
   <button aria-pressed={!realistic&&right&&inspectorTab==='stitches'} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setCanvasMode('select');setRealistic(false);showInspector(true);setInspectorTab('stitches')}}><Scissors size={15}/> Stitches</button>
