@@ -3642,6 +3642,45 @@ async fn digitize_artwork(
                 document=next;design=plan;
             }
         }
+        // Repair only objects flagged by the intended-artwork coverage audit.
+        if design.stitch_count()<=100_000 && document.shapes.len()<=350 {
+            let gaps=|doc:&zigzag::document::Document,p:&Design|{
+                zigzag::checks::check(&doc.shapes,p,&doc.plan_options(),None).into_iter()
+                    .filter(|i|i.message.starts_with("Possible underfilled artwork:")).filter_map(|i|i.shape).collect::<Vec<_>>()
+            };
+            let flagged=gaps(&document,&design);
+            if !flagged.is_empty(){
+                let baseline=measure_stitches(&design);
+                let mut best=None;
+                for factor in [0.90,0.80] {
+                    let mut trial=document.clone();
+                    let fabric=trial.plan_options().fabric;
+                    for &i in &flagged {
+                        if let Some(s)=trial.shapes.get_mut(i){
+                            use zigzag::params::Kind;
+                            let spacing=match s.params.kind.unwrap_or(Kind::Fill){
+                                Kind::Fill=>s.params.fill_spacing(&fabric),
+                                Kind::Satin=>s.params.satin_spacing(&fabric),
+                                _=>continue,
+                            };
+                            s.params.spacing=Some((spacing*factor).max(0.30).min(spacing));
+                        }
+                    }
+                    if trial.sync().is_err(){continue}
+                    let p=trial.plan();
+                    let audit=measure_stitches(&p);
+                    let remaining=gaps(&trial,&p);
+                    if remaining.len()<flagged.len()&&remaining.iter().all(|i|flagged.contains(i))
+                        &&p.stitch_count()<=design.stitch_count().saturating_mul(125)/100
+                        &&audit.long<=baseline.long&&audit.zero<=baseline.zero
+                        &&production_hotspots(&p).1<=production_hotspots(&design).1
+                        &&best.as_ref().is_none_or(|(_,_,n)|remaining.len()<*n){
+                        best=Some((trial,p,remaining.len()));
+                    }
+                }
+                if let Some((next,p,_))=best{document=next;design=p;}
+            }
+        }
         let count = design.stitch_count();
         if count == 0 { return Err("No stitchable artwork found".into()); }
         if count > 2_000_000 { return Err("Design exceeds the two million stitch limit".into()); }
