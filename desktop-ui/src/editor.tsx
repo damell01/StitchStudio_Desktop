@@ -953,7 +953,7 @@ function selectObject(object:EditableObject|null,inspectLettering=true,forceWord
   void invoke<unknown>('lettering_settings',{uid:object.uid}).then(settings=>{
     if(selectionRequest.current!==request)return;
     if(settings){if(inspectorTab!=='quality'&&inspectorTab!=='stitches'&&inspectorTab!=='threads')openText(object.uid);return}
-    if(!object.bounds||!object.fill_rule||object.kind==='manual')return;
+    if(!object.bounds||!object.fill_rule||object.kind==='manual'){if(forceWord)setMessage('Select digitized filled lettering shapes to reconstruct embedded text.');return;}
     const [,y,,h]=object.bounds;
     if(h<1.8){if(forceWord)return recognizeWord([object],request,true);return;}
     const row=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||o.color.join(',')!==object.color.join(','))return false;
@@ -998,7 +998,7 @@ async function applyWordReview(){
   setMulti([]);
   setSelectedObject(reviewedWord.uid);
   openText(reviewedWord.uid);
-  setMessage('Editable lettering updated.');
+  setMessage('Editable lettering updated. Review coverage before exporting.');
 }
 
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
@@ -1767,7 +1767,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>}
   {inspectorTab==='transform'&&recognizingWord&&<small role="status">Recognizing lettering…</small>}
   {inspectorTab==='transform'&&convertText&&<section className="workspace-inspector-group lettering-review" aria-label="Review recognized lettering">
-    <h3><Type size={16}/> Recognized lettering</h3>
+    <h3><Type size={16}/> Edit embedded lettering</h3><p className="muted">{recognizedOriginal.trim()?"Check the recognized text and suggested font before replacing the original stitches.":"Automatic recognition did not find text. Enter the original word manually to reconstruct the selected shapes."}</p><small>{recognizedIds.length} selected artwork {recognizedIds.length===1?"object":"objects"} · Original artwork stays unchanged until Apply.</small>
     <label>Original word<input value={recognizedOriginal} maxLength={120} disabled={busy||wordPreviewPending} onChange={e=>{
       if(convertWord===recognizedOriginal)setConvertWord(e.target.value);
       setRecognizedOriginal(e.target.value);setRecognitionError('');setWordPreview(null);
@@ -1784,7 +1784,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
       </div>)}
     </div>}
     <div className="inspector-actions"><button disabled={busy} onClick={dismissWordReview}>Keep traced shapes</button>
-      {reviewedWord?<button className="primary" disabled={busy} onClick={()=>void applyWordReview()}>Apply lettering</button>:
+      {reviewedWord?<button className="primary" disabled={busy} onClick={()=>void applyWordReview()}>Replace with editable text</button>:
         <button className="primary" disabled={busy||wordPreviewPending||!recognizedOriginal.trim()||!convertWord.trim()||!convertFont}
           onClick={()=>void previewWordReview()}>{wordPreviewPending?'Building preview…':'Preview lettering'}</button>}
     </div>
