@@ -165,7 +165,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
     </div>
     {results.length === 0 && <p role="status">No designs match your search.</p>}
     <section className="template-grid" aria-label="Template results">
-      {shown.map(template => <article key={template.id}>
+      {shown.map(template => <article key={template.id} draggable={!!onPreview} onDragStart={event=>{if(!onPreview)return;event.dataTransfer.setData("application/x-stitchstudio-template",template.id);event.dataTransfer.effectAllowed="copy";onPreview(template)}}>
         <button className="design-favorite" title="Toggle favorite"
           aria-label={(favorites.includes(template.id) ? 'Remove favorite ' : 'Favorite ') + template.name}
           aria-pressed={favorites.includes(template.id)} onClick={() => favorite(template.id)}>
