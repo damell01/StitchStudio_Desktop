@@ -952,6 +952,32 @@ async function recognizeWord(shapes:EditableObject[],request:number,manual=false
 const [detectedText,setDetectedText]=useState<{uids:number[];text:string}[]>([]);
 const [autoTextStatus,setAutoTextStatus]=useState('');
 const [detectedTextOpen,setDetectedTextOpen]=useState(false);
+useEffect(()=>{
+  const selector='details.workspace-options,details.studio-selection-more,details.studio-detected-text';
+  const close=(except?:Element|null)=>document.querySelectorAll<HTMLDetailsElement>(selector+'').forEach(menu=>{if(menu.open&&menu!==except)menu.open=false});
+  const pointer=(event:PointerEvent)=>{
+    const target=event.target instanceof Element?event.target:null;
+    if(!target)return;
+    const menu=target.closest(selector);
+    close(menu);
+  };
+  const click=(event:MouseEvent)=>{
+    const target=event.target instanceof Element?event.target:null;
+    const button=target?.closest('button');
+    const menu=button?.closest<HTMLDetailsElement>(selector);
+    if(menu&&button&&!button.hasAttribute('disabled'))menu.open=false;
+  };
+  const keyboard=(event:KeyboardEvent)=>{
+    if(event.key==='Escape'){
+      const menu=Array.from(document.querySelectorAll<HTMLDetailsElement>(selector)).find(menu=>menu.open);
+      if(menu){menu.open=false;menu.querySelector('summary')?.focus();}
+    }
+  };
+  document.addEventListener('pointerdown',pointer);
+  document.addEventListener('click',click);
+  document.addEventListener('keydown',keyboard);
+  return()=>{document.removeEventListener('pointerdown',pointer);document.removeEventListener('click',click);document.removeEventListener('keydown',keyboard)};
+},[]);
 const [autoDetectText,setAutoDetectText]=useState(()=>localStorage.getItem('studio-auto-detect-text')!=='0');
 useEffect(()=>{
   let active=true;
