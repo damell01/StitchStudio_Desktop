@@ -1370,7 +1370,7 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
    }
    if rings.len()!=1{continue}
    // Estimate oriented dimensions using principal axes, including diagonal lettering.
-   let ring=&rings[0];if ring.len()<3{continue}
+   let ring=&rings[0];if ring.len()<3 || ring.iter().any(|p| !p.x.is_finite() || !p.y.is_finite()){continue}
    let n=ring.len() as f64;
    let mx=ring.iter().map(|p|p.x).sum::<f64>()/n;let my=ring.iter().map(|p|p.y).sum::<f64>()/n;
    let (mut xx,mut yy,mut xy)=(0.0,0.0,0.0);
@@ -1385,7 +1385,9 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
    let effective_width = if perimeter>1e-9 {2.0*area/perimeter} else {0.0};
    let elongated = short>=6.0 && short<=45.0 && long>=short*2.0;
    let curved_candidate = short>=6.0 && long<=180.0 && (4.0..=30.0).contains(&effective_width) && area < short*long*0.65;
-   if elongated || curved_candidate {
+   // Keep broad fill regions out of the satin solver even when a noisy
+   // perimeter artificially lowers their estimated effective width.
+   if elongated || (curved_candidate && area.is_finite() && perimeter.is_finite()) {
     // Validate the actual column rather than trusting a bounding box alone.
     let components=satin::components(rings,*rule);
     if components.len()==1 {
@@ -1404,7 +1406,7 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
      }
     }
    }
-   else if short>=45.0 && long>=short*1.6 && s.params.angle.is_none() {
+   if s.params.kind.is_none() && short>=45.0 && long>=short*1.6 && s.params.angle.is_none() {
     // Follow the shorter axis to limit long fill traversals. Preserve explicit angles.
     let axis=if b.width()>b.height(){theta.to_degrees()+90.0}else{theta.to_degrees()};
     s.params.angle=Some(axis.rem_euclid(180.0));
