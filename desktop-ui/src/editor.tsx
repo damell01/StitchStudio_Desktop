@@ -1096,11 +1096,12 @@ function fitArtwork() {
 
 const [qualityOverlay,setQualityOverlay]=useState<'coverage'|'density'>('coverage');
 const [qualityObjects,setQualityObjects]=useState<number[]>([]);
+const [coverageStatus,setCoverageStatus]=useState('');
 const [coverageGaps,setCoverageGaps]=useState<{uid:number;points:number[][];percent:number}[]>([]);
 useEffect(()=>{
   if(inspectorTab!=='quality'||!plan){setQualityObjects([]);setCoverageGaps([]);return}
-  let active=true;setQualityObjects([]);setCoverageGaps([]);
-  invoke<{uid:number;points:number[][];percent:number}[]>('coverage_gap_preview').then(g=>{if(active)setCoverageGaps(g)}).catch(()=>{});
+  let active=true;setQualityObjects([]);setCoverageGaps([]);setCoverageStatus('Inspecting artwork coverage…');
+  invoke<{uid:number;points:number[][];percent:number}[]>('coverage_gap_preview').then(g=>{if(active){setCoverageGaps(g);setCoverageStatus(g.length?`${g.length} objects with suspected coverage gaps`:'No gaps flagged in eligible sampled artwork.')}}).catch(e=>{if(active)setCoverageStatus(String(e))});
   invoke<{uid:number|null;message:string}[]>('design_issues',{width,height}).then(issues=>{if(active)setQualityObjects(issues.filter(i=>i.uid!==null&&i.message.includes('Possible underfilled artwork:')).map(i=>i.uid!))}).catch(()=>{});
   return()=>{active=false};
 },[inspectorTab,plan,width,height]);
@@ -1518,7 +1519,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
 </div>
   {plan&&<div className="inspector-metrics"><div><small>Stitches</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div><div><small>Est. time</small><strong>{Math.ceil(plan.stitches/sewingSpm+plan.trims*trimSeconds/60+Math.max(0,plan.blocks.length-1)*changeSeconds/60)} min</strong></div></div>}
-  {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage gaps</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red marks show sampled suspected gaps; outlines identify affected objects. Not a physical sew-out prediction.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small></div>}
+  {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage gaps</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red marks show sampled suspected gaps; outlines identify affected objects. Not a physical sew-out prediction.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small>{qualityOverlay==='coverage'&&<small role="status">{coverageStatus}</small>}</div>}
   {inspectorTab==='quality'&&plan&&<section className="workspace-inspector-group"><h3>Thread simulation</h3><button aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}>{realistic?'Show stitch paths':'Show realistic sew-out'}</button><label>Visual thread width · {threadDiameter.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={threadDiameter} onChange={e=>{setThreadDiameter(Number(e.target.value));setRealistic(true)}}/></label><small>Preview only — does not alter stitch density or export. Zoom in to inspect letter edges and gaps.</small></section>}
   {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
   {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
