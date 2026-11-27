@@ -309,6 +309,24 @@ pub fn check(
             let kind=s.params.kind.unwrap_or(Kind::Fill);
             if !matches!(kind,Kind::Fill|Kind::Satin){continue}
             let spacing=if kind==Kind::Satin{s.params.satin_spacing(&_opt.fabric)}else{s.params.fill_spacing(&_opt.fabric)};
+            // Estimate average stroke thickness from filled area and boundary length.
+            // This is a screening metric, not a local satin rail measurement.
+            let mut area=0.0_f64;
+            let mut perimeter=0.0_f64;
+            for ring in rings {
+                if ring.len()<3{continue}
+                let mut signed=0.0;
+                for k in 0..ring.len(){
+                    let a=ring[k];let b=ring[(k+1)%ring.len()];
+                    signed+=a.x*b.y-b.x*a.y;
+                    perimeter+=a.dist(b);
+                }
+                area+=signed*0.5;
+            }
+            let stroke=if perimeter>0.0{2.0*area.abs()/perimeter/10.0}else{0.0};
+            if stroke>0.0&&stroke<0.8&&kind==Kind::Fill{
+                add(Some(i),Level::Info,format!("Thin lettering-like fill: estimated stroke thickness {stroke:.2} mm. Inspect satin or running-stitch suitability and avoid excessive density."));
+            }
             let mut peers=Vec::new();
             let mut other_kind=0usize;
             let mut same_kind=0usize;
