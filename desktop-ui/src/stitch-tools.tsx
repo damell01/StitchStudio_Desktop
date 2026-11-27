@@ -33,7 +33,7 @@ function IssueList({width,height,onLocate,revision,scan}:{width:number;height:nu
 }
 
 type RepairPlan={stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
-type RepairReview={before:RepairPlan;after:RepairPlan;warnings_before:number;warnings_after:number};
+type RepairReview={before:RepairPlan;after:RepairPlan;warnings_before:number;warnings_after:number;lettering_before:number;lettering_after:number};
 export function QualityInspector({width,height,revision,onLocate,onRepair,disabled}:{width:number;height:number;revision:unknown;onLocate:(uid:number)=>void;onRepair:()=>void;disabled:boolean}){
   const [scan,setScan]=useState(0);
   const [review,setReview]=useState<{revision:unknown;result:RepairReview}|null>(null);
@@ -53,15 +53,16 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,disabl
   return <section className="workspace-inspector-group quality-inspector">
     <h3>Quality Inspector</h3>
     <small>Coverage, density, stitch lengths and hoop safety. Test sew before production.</small>
-    <div className="inspector-actions"><button disabled={disabled||working} onClick={()=>setScan(n=>n+1)}>Refresh inspection</button><button disabled={disabled||working} onClick={()=>void inspectRepair()}>{working?'Checking repairs…':'Preview coverage fix'}</button></div>
+    <div className="inspector-actions"><button disabled={disabled||working} onClick={()=>setScan(n=>n+1)}>Refresh inspection</button><button disabled={disabled||working} onClick={()=>void inspectRepair()}>{working?'Checking repairs…':'Preview quality fix'}</button></div>
     {message&&<p role="status">{message}</p>}
     {current&&<div className="workspace-stack">
-      <strong>Proposed coverage repair</strong>
+      <strong>Proposed quality repair</strong>
       <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:6}}>{[current.before,current.after].map((p,i)=><div key={i}><small>{i?'Repaired':'Original'}</small><svg viewBox={[-width/2,-height/2,width,height].join(' ')} style={{width:'100%',background:'#faf7f0'}}>{p.blocks.map((b,j)=><g key={j} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".3">{b.runs.map((r,k)=><polyline key={k} points={r.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg><small>{p.stitches.toLocaleString()} points · {p.trims} trims</small></div>)}</div>
       <small>Flagged coverage objects: {current.warnings_before} → {current.warnings_after}</small>
+      <small>Lettering consistency warnings: {current.lettering_before} → {current.lettering_after}</small>
       <small>Estimated sewing time: {estimate(current.before).toFixed(1)} → {estimate(current.after).toFixed(1)} min</small>
       <small>Stitch change: {((current.after.stitches-current.before.stitches)/Math.max(1,current.before.stitches)*100).toFixed(1)}% · {speed} points/min</small>
-      <button disabled={disabled||working} onClick={()=>{setReview(null);onRepair()}}>Apply coverage repair</button><button onClick={()=>setReview(null)}>Keep original</button>
+      <button disabled={disabled||working} onClick={()=>{setReview(null);onRepair()}}>Apply quality repair</button><button onClick={()=>setReview(null)}>Keep original</button>
       <small>Apply recalculates the repair for the current design. Undo is available.</small>
     </div>}
     <button disabled={disabled||working} onClick={onRepair}>Try general repair</button>
