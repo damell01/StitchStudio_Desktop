@@ -40,6 +40,13 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,disabl
   const [working,setWorking]=useState(false);
   const [message,setMessage]=useState('');
   const current=review?.revision===revision?review.result:null;
+  const [sewout,setSewout]=useState(true);
+  const [previewWidth,setPreviewWidth]=useState(.40);
+  const [detailZoom,setDetailZoom]=useState(1);
+  const [detailX,setDetailX]=useState(0);
+  const [detailY,setDetailY]=useState(0);
+  const view=[detailX-width/(2*detailZoom),detailY-height/(2*detailZoom),width/detailZoom,height/detailZoom].join(' ');
+
   const speed=Math.max(100,Math.min(1500,Number(localStorage.getItem('studio-sewing-spm'))||800));
   const trimRaw=Number(localStorage.getItem('studio-trim-seconds')??3);
   const changeRaw=Number(localStorage.getItem('studio-change-seconds')??8);
@@ -57,7 +64,12 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,disabl
     {message&&<p role="status">{message}</p>}
     {current&&<div className="workspace-stack">
       <strong>Proposed quality repair</strong>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:6}}>{[current.before,current.after].map((p,i)=><div key={i}><small>{i?'Repaired':'Original'}</small><svg viewBox={[-width/2,-height/2,width,height].join(' ')} style={{width:'100%',background:'#faf7f0'}}>{p.blocks.map((b,j)=><g key={j} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".3">{b.runs.map((r,k)=><polyline key={k} points={r.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg><small>{p.stitches.toLocaleString()} points · {p.trims} trims</small></div>)}</div>
+      <div className="inspector-actions"><button aria-pressed={sewout} onClick={()=>setSewout(true)}>Sew-out</button><button aria-pressed={!sewout} onClick={()=>setSewout(false)}>Stitch paths</button></div>
+      <label>Comparison zoom · {detailZoom}×<input type="range" min="1" max="8" step="1" value={detailZoom} onChange={e=>{setDetailZoom(Number(e.target.value));setDetailX(0);setDetailY(0)}}/></label>
+      {detailZoom>1&&<><label>Horizontal position<input type="range" min={-width/2+width/(2*detailZoom)} max={width/2-width/(2*detailZoom)} step=".5" value={detailX} onChange={e=>setDetailX(Number(e.target.value))}/></label><label>Vertical position<input type="range" min={-height/2+height/(2*detailZoom)} max={height/2-height/(2*detailZoom)} step=".5" value={detailY} onChange={e=>setDetailY(Number(e.target.value))}/></label></>}
+      {sewout&&<label>Visual thread width · {previewWidth.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={previewWidth} onChange={e=>setPreviewWidth(Number(e.target.value))}/></label>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:6}}>{[current.before,current.after].map((p,i)=><div key={i}><small>{i?'Repaired':'Original'}</small><svg viewBox={view} style={{width:'100%',background:'#faf7f0'}} aria-label={i?'Repaired stitch preview':'Original stitch preview'}>{p.blocks.map((b,j)=><g key={j} fill="none" strokeLinecap="round" strokeLinejoin="round">{b.runs.map((r,k)=>{const points=r.map(p=>p.join(',')).join(' ');const color='rgb('+b.color.join(',')+')';return sewout?<g key={k}><polyline points={points} stroke="#211b17" opacity=".28" strokeWidth={previewWidth*1.18} transform="translate(.045 .065)"/><polyline points={points} stroke={color} strokeWidth={previewWidth}/><polyline points={points} stroke="white" opacity=".24" strokeWidth={previewWidth*.27} transform={`translate(${-previewWidth*.18} ${-previewWidth*.18})`}/></g>:<polyline key={k} points={points} stroke={color} strokeWidth=".12"/>})}</g>)}</svg><small>{p.stitches.toLocaleString()} points · {p.trims} trims</small></div>)}</div>
+      <small>Both previews share the same zoom, position and visual thread width. This is a rendering estimate, not a physical sew-out.</small>
       <small>Flagged coverage objects: {current.warnings_before} → {current.warnings_after}</small>
       <small>Lettering consistency warnings: {current.lettering_before} → {current.lettering_after}</small>
       <small>Estimated sewing time: {estimate(current.before).toFixed(1)} → {estimate(current.after).toFixed(1)} min</small>
