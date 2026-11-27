@@ -3283,23 +3283,39 @@ async fn transform_artwork_group(uids:Vec<usize>,scale:f64,rotation:f64,app:taur
  let result=preview(&design);w.checkpoint_named("Transform selection");w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
+fn apply_group_palette(doc:&mut zigzag::document::Document,uids:&[usize],original:&[[u8;3]],colors:&[[u8;3]])->Result<(),String>{
+ if uids.is_empty()||original.is_empty()||original.len()!=colors.len()||original.len()>64{return Err("Select artwork and valid palette colors".into())}
+ let map:std::collections::HashMap<_,_>=original.iter().copied().zip(colors.iter().copied()).collect();
+ if map.len()!=original.len(){return Err("Duplicate source colors".into())}
+ let mut targets=Vec::new();
+ for (i,shape) in doc.shapes.iter().enumerate(){
+ if !uids.contains(&shape.uid){continue}
+ let Some(&color)=map.get(&shape.color) else{continue};
+ if color==shape.color{continue}
+ if doc.layer_properties(&shape.id).is_some_and(|l|l.locked||l.hidden){return Err("Unlock or show selected artwork before recoloring".into())}
+ if shape.params.kind==Some(zigzag::params::Kind::Tartan)||shape.params.colors.is_some(){return Err("Edit special pattern colors individually".into())}
+ if doc.records_text(i)||shape.groups.iter().any(|g|g.starts_with("tl-lettering-")){return Err("Edit lettering colors using the text inspector".into())}
+ targets.push((i,color));
+ }
+ if targets.is_empty(){return Err("No matching editable colors changed".into())}
+ for (i,color) in targets{doc.shapes[i].color=color;}
+ doc.sync().map_err(|e|e.to_string())?;
+ Ok(())
+}
 #[tauri::command]
-async fn recolor_artwork_group(uids:Vec<usize>,previous:[u8;3],color:[u8;3],app:tauri::AppHandle)->Result<Preview,String>{
+async fn recolor_artwork_palette(uids:Vec<usize>,original:Vec<[u8;3]>,colors:Vec<[u8;3]>,app:tauri::AppHandle)->Result<Preview,String>{
  use tauri::Manager;
  tauri::async_runtime::spawn_blocking(move||{
  let state=app.state::<Mutex<Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;
  let mut doc=w.source.clone().ok_or("No editable artwork")?;
- let mut found=false;
- for shape in &mut doc.shapes{
- if !uids.contains(&shape.uid)||shape.color!=previous{continue}
- if shape.params.kind==Some(zigzag::params::Kind::Tartan)||shape.params.colors.is_some(){return Err("Edit special pattern colors individually".into())}
- if shape.groups.iter().any(|g|g.starts_with("tl-lettering-")){return Err("Edit lettering colors using the text inspector".into())}
- shape.color=color;found=true;
- }
- if !found{return Err("No matching objects in this group".into())}
- let design=doc.plan_cached(&mut w.plan_cache);if design.stitch_count()==0{return Err("No stitches generated".into())}
- let result=preview(&design);w.checkpoint_named("Change group colors");w.source=Some(doc);w.current=Some(design);Ok(result)
+ apply_group_palette(&mut doc,&uids,&original,&colors)?;
+ let design=doc.plan();validate_resized_design(&design)?;
+ let result=preview(&design);w.checkpoint_named("Change artwork palette");w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+async fn recolor_artwork_group(uids:Vec<usize>,previous:[u8;3],color:[u8;3],app:tauri::AppHandle)->Result<Preview,String>{
+ recolor_artwork_palette(uids,vec![previous],vec![color],app).await
 }
 #[tauri::command]
 fn set_artwork_group(uids:Vec<usize>,group:bool,state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
@@ -4545,6 +4561,16 @@ mod tests {
         validate_export(design,"dst",100.,100.).unwrap();
     }
     #[test]
+    fn group_palette_swaps_colors_without_cascading_or_affecting_unselected_artwork(){
+        let svg=r##"<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="20mm" viewBox="0 0 60 20"><rect x="0" y="0" width="10" height="10" fill="#ff0000"/><rect x="20" y="0" width="10" height="10" fill="#0000ff"/><rect x="40" y="0" width="10" height="10" fill="#ff0000"/></svg>"##;
+        let mut doc=zigzag::document::Document::from_svg(svg,"Palette",None).unwrap();
+        let ids=vec![doc.shapes[0].uid,doc.shapes[1].uid];
+        apply_group_palette(&mut doc,&ids,&[[255,0,0],[0,0,255]],&[[0,0,255],[255,0,0]]).unwrap();
+        assert_eq!(doc.shapes[0].color,[0,0,255]);
+        assert_eq!(doc.shapes[1].color,[255,0,0]);
+        assert_eq!(doc.shapes[2].color,[255,0,0]);
+    }
+    #[test]
     fn optimizer_preserves_small_contrasting_color() {
         use zigzag::{design::{Block,Run},geom::P};
         let run=Run{pts:vec![P::new(0.,0.),P::new(20.,0.)],trim_before:false};
@@ -4686,7 +4712,7 @@ async fn open_prepared_bundled_design(id:String,app:tauri::AppHandle)->Result<Op
         project.restore(&state)
     }).await.map_err(|e|e.to_string())?
 }
-fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![density_repair::preview_density_repair,density_repair::apply_stitch_review,lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,workspace_tabs::restore_workspace_session,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::coverage_gap_preview,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_multiple_formats, export_design,transform_design,mirror_design,center_design,audit_stitches,preview_coverage_repair,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,get_routing_settings, set_routing_settings, get_specialty_settings, set_specialty_settings, copy_stitch_properties, set_sewing_commands, preview_artwork_styles,apply_artwork_density_preset, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,import_dropped_font,remove_font_asset,choose_artwork,preview_cleanup,recognize_selected_lettering,preview_selected_lettering,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,inspect_digitizer_coverage,export_digitizer_variant,apply_digitizer_draft,insert_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![density_repair::preview_density_repair,density_repair::apply_stitch_review,lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,workspace_tabs::restore_workspace_session,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::coverage_gap_preview,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_palette,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_multiple_formats, export_design,transform_design,mirror_design,center_design,audit_stitches,preview_coverage_repair,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,get_routing_settings, set_routing_settings, get_specialty_settings, set_specialty_settings, copy_stitch_properties, set_sewing_commands, preview_artwork_styles,apply_artwork_density_preset, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,import_dropped_font,remove_font_asset,choose_artwork,preview_cleanup,recognize_selected_lettering,preview_selected_lettering,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,inspect_digitizer_coverage,export_digitizer_variant,apply_digitizer_draft,insert_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
