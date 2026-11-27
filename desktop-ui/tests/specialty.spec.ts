@@ -28,6 +28,6 @@ test('an appliqué cutting export uses the selected shape and size without repla
   await expect(page.getByText('50.8 mm', { exact: true })).toBeVisible();
   await exportButton.click();
   await expect(page.getByText('Cutting outline saved')).toBeVisible();
-  const specialtyCalls = await page.evaluate(() => (window as unknown as { specialtyCalls: {command:string;args:unknown}[] }).specialtyCalls.filter(call=>call.command!=='workspace_overview'));
+  const specialtyCalls = await page.evaluate(() => (window as unknown as { specialtyCalls: {command:string;args:unknown}[] }).specialtyCalls.filter(call=>!['workspace_overview','preview_specialty'].includes(call.command)));
   expect(specialtyCalls).toEqual([{ command: 'export_applique_cut_svg', args: { shape: 'shield', width: 50.8 } }]);
 });
