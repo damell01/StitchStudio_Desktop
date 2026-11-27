@@ -51,6 +51,8 @@ function TemplatePreview({ template, widthMm }: { template: Template; widthMm: n
   const [error, setError] = useState('');
 
   useEffect(() => {
+    setPreview(null);
+    setError('');
     if (widthMm === null) return;
     let active = true;
     const timer = setTimeout(() => {
@@ -120,7 +122,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
     selection?.source === 'artwork' ? selection.art.name : selection?.source === 'layouts' ? selection.file.replace(/\.stitchstudio$/,'') : '';
 
   async function run(action: () => Promise<void>) {
-    if (lock.current) return;
+    if (lock.current || editorBusy) return;
     lock.current = true;
     setBusy(true);
     setError('');
@@ -184,7 +186,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
   }
 
   function insert(candidate = selection) {
-    if (!candidate || !offsetValid || ((candidate.source === 'templates' || candidate.source === 'artwork') && !widthValid)) return;
+    if (editorBusy || !candidate || !offsetValid || ((candidate.source === 'templates' || candidate.source === 'artwork') && !widthValid)) return;
     void run(async () => {
       const position = { xMm, yMm };
       const result = candidate.source === 'approved' ? await invoke<Plan>('insert_approved_design',{...position,file:candidate.project.file}) : candidate.source === 'templates'
@@ -204,7 +206,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
     <div className="studio-insert-header">
       <div>
         <h2 id="studio-insert-title">Insert a design</h2>
-        <p>Choose a design to add to the current project.</p>
+        <p>Choose a design or drag a template directly onto the hoop.</p>
       </div>
       <button aria-label="Close design browser" disabled={busy} onClick={() => dialogRef.current?.close()}><X size={18}/></button>
     </div>
