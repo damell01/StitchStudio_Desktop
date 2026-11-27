@@ -1984,6 +1984,9 @@ fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)-
                                 Kind::Satin=>s.params.satin_spacing(&fabric),
                                 _=>continue,
                             };
+                            // Open decorative fills and manually programmed stops
+                            // are intentional, not missing coverage.
+                            if spacing>0.65||s.params.stop==Some(true)||s.params.trim==Some(true)||s.params.colors.is_some(){continue}
                             if pull_extra>0.0&&s.params.pull.is_none(){
                                 let base=if s.params.kind==Some(Kind::Satin){s.params.satin_pull(&fabric)}else{s.params.fill_pull(&fabric)};
                                 s.params.pull=Some((base+pull_extra).min(base.max(0.45)));
@@ -2000,7 +2003,13 @@ fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)-
                     if remaining.len()<flagged.len()&&remaining.iter().all(|i|flagged.contains(i))
                         &&p.stitch_count()<=design.stitch_count().saturating_mul(125)/100
                         &&audit.long<=baseline.long&&audit.zero<=baseline.zero
-                        &&production_hotspots(&p).1<=production_hotspots(&design).1
+                        &&production_not_worse(design,&p)
+                        &&local_coverage_preserved(design,&p)
+                        &&p.trim_count()<=design.trim_count()
+                        &&design.blocks.iter().map(|b|b.color).eq(p.blocks.iter().map(|b|b.color))
+                        &&design.per_shape.len()==p.per_shape.len()
+                        &&design.per_shape.iter().zip(&p.per_shape).all(|(&a,&b)|a==0||b>0)
+                        &&validate_resized_design(&p).is_ok()
                         &&best.as_ref().is_none_or(|(_,old,n):&(zigzag::document::Document,Design,usize)|remaining.len()<*n||(remaining.len()==*n&&p.stitch_count()<old.stitch_count())){
                         best=Some((trial,p,remaining.len()));
                     }
