@@ -509,3 +509,8 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .editor-workspace .studio-inspector-dock .workspace-segments button[aria-pressed=true] {background:var(--brand-soft,#eee6fb);color:var(--brand,#6945a2);}
 .editor-workspace .studio-inspector-dock details>summary {cursor:pointer;font-size:12px;padding-block:5px;}
 .editor-workspace .studio-inspector-dock details>summary:focus-visible {outline:2px solid var(--brand,#6945a2);outline-offset:2px;}
+
+.studio-status-view {display:flex;align-items:center;gap:3px;flex:none;}
+.studio-status-view button {display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:3px 5px;gap:4px;font-size:11px;}
+.studio-status-view button[aria-pressed=true] {background:var(--brand-soft,#eee6fb);color:var(--brand,#6945a2);}
+@media(max-width:1250px){.studio-status-view .camera-label{display:none;}}
