@@ -3,7 +3,7 @@ name: Package Intel Mac installer
 on:
   push:
     branches: [Dev]
-    paths: [.github/workflows/package-intel-mac.yml, .github/scripts/check-macos-install.sh]
+    paths: [.github/workflows/package-intel-mac.yml, .github/scripts/check-macos-install.sh, 'desktop-ui/**', 'src/**', Cargo.toml, Cargo.lock]
     tags: ['stitch-intel-test-*']
   workflow_dispatch:
 
