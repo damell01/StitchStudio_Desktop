@@ -390,3 +390,12 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .studio-property-context { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 2px; }
 .studio-property-context strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
 .studio-property-context small { flex-shrink:0; font-size:11px; }
+
+/* Keep the canvas command strip compact even when many object actions are available. */
+.workspace-canvas .canvas-selection-bar { display:flex; align-items:center; gap:4px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; max-width:100%; }
+.workspace-canvas .canvas-selection-bar > * { flex-shrink:0; }
+.workspace-canvas .studio-selection-docked { flex-wrap:nowrap; overflow:visible; }
+.workspace-canvas .studio-selection-docked button { white-space:nowrap; min-height:28px; padding:4px 7px; font-size:12px; }
+.workspace-canvas .studio-selection-more[open] { flex-wrap:nowrap; }
+.canvas-type-form .canvas-quality-option { display:flex; align-items:flex-start; gap:6px; font-size:11px; font-weight:400; }
+.canvas-type-form .canvas-quality-option input { flex:0 0 auto; width:auto; margin-top:2px; }
