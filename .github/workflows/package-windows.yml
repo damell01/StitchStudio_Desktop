@@ -3,7 +3,12 @@ name: Package Windows installer
 on:
   push:
     branches: [Dev]
-    paths: [.github/workflows/package-windows.yml]
+    paths:
+      - '.github/workflows/package-windows.yml'
+      - 'desktop-ui/**'
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   workflow_dispatch:
 
 permissions:
