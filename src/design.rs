@@ -1542,7 +1542,8 @@ fn occlusion_coverage(shape: &Shape, opt: &PlanOptions) -> Option<(Vec<Polyline>
         Kind::Satin => {
             // Multicolor satin strips and unusually open satin are not
             // reliable masks for removing the supporting fill underneath.
-            if shape.params.colors.is_some() || shape.params.satin_spacing(&opt.fabric) > 0.65 { return None; }
+            if shape.params.colors.is_some() || shape.params.satin_spacing(&opt.fabric) > 0.65
+                || shape.params.satin_style() == satin::SatinStyle::Zigzag { return None; }
         }
         Kind::Applique => {} // The placed fabric itself provides coverage.
         _ => return None,
@@ -2932,6 +2933,13 @@ mod tests {
             assert!(same_stitches(&updated, &fresh));
             assert!(hidden(&updated) > 30, "supporting fill must survive {:?}", kind);
         }
+    }
+
+    #[test]
+    fn open_zigzag_satin_preserves_supporting_fill() {
+        let mut top = shape(fill(sq(0.0, 0.0, 100.0)), Kind::Satin, [255, 200, 0]);
+        top.params.style = Some(satin::SatinStyle::Zigzag);
+        assert!(occlusion_coverage(&top, &PlanOptions::default()).is_none());
     }
 
     #[test]
