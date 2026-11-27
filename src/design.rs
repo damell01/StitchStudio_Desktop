@@ -371,6 +371,25 @@ fn covered_detour(rings:&[Polyline],rule:FillRule,inset:&[Polyline],from:P,to:P,
     Some(out)
 }
 
+/// Route a pinned exit through the sewn fill. A pin may sit on the original
+/// outline even when an overlap or counter leaves no covered route to it.
+fn fill_exit(rings: &[Polyline], rule: FillRule, from: P, to: P, limit: f64) -> Option<Polyline> {
+    if segment_inside(rings, rule, from, to, 2.0) {
+        let count = (from.dist(to) / 30.0).ceil() as usize;
+        return Some((1..=count).map(|i| from.lerp(to, i as f64 / count as f64)).collect());
+    }
+    if from.dist(to) > limit || limit <= 0.0 {
+        return None;
+    }
+    let inset = travel_ring(rings, rule);
+    let route = route_along(&inset, from, to, limit).filter(|points| {
+        std::iter::once(from).chain(points.iter().copied())
+            .zip(points.iter().copied())
+            .all(|(a, b)| segment_inside(rings, rule, a, b, 0.5))
+    });
+    route.or_else(|| covered_detour(rings, rule, &inset, from, to, limit))
+}
+
 /// The outline a shape's start and end points are measured along: a
 /// fill's biggest ring (closed), or a stroke's first line.
 fn outline_of(g: &Geometry) -> Option<std::borrow::Cow<'_, Polyline>> {
@@ -2047,16 +2066,25 @@ pub fn plan_cached(
                         .collect();
                     pts.splice(0..0, lead);
                 }
-                // Finish at the end point: a few stitches on to it.
+                // Keep a pinned fill exit inside the sewn region. For open
+                // strokes the pin is on the original path.
                 if last_piece
                     && gi == last_group
                     && let Some(e) = end_at
                     && let Some(&q) = pts.last()
                     && q.dist(e) > opt.min_stitch
                 {
-                    let n = (q.dist(e) / 30.0).ceil() as usize;
-                    for k in 1..=n {
-                        pts.push(q.lerp(e, k as f64 / n as f64));
+                    if let Some((rings, rule)) = sr.area.as_ref() {
+                        if let Some(route) = fill_exit(rings, *rule, q, e, opt.travel_route) {
+                            pts.extend(route);
+                        } else {
+                            design.notes.push((si, "Pinned exit has no covered path from the last fill stitch. Move the exit pin to the sewn area.".into()));
+                        }
+                    } else {
+                        let n = (q.dist(e) / 30.0).ceil() as usize;
+                        for k in 1..=n {
+                            pts.push(q.lerp(e, k as f64 / n as f64));
+                        }
                     }
                 }
                 design.per_shape[si] += pts.len();
@@ -2653,6 +2681,24 @@ mod tests {
             pts[below..].iter().all(|q| q.y > 195.0),
             "once below the hole, it stays there to the end"
         );
+    }
+
+    #[test]
+    fn pinned_fill_exit_does_not_sew_across_a_counter() {
+        let outer = sq(0.0, 0.0, 400.0);
+        let hole = sq(120.0, 80.0, 160.0);
+        let rings = [outer, hole];
+        let from = P::new(80.0, 160.0);
+        let exit = P::new(400.0, 160.0);
+        let rule = FillRule::EvenOdd;
+        assert!(!segment_inside(&rings, rule, from, exit, 2.0));
+        assert!(fill_exit(&rings, rule, from, exit, 350.0).is_none());
+        let reachable = P::new(0.0, 160.0);
+        let route = fill_exit(&rings, rule, from, reachable, 350.0).unwrap();
+        assert_eq!(route.last().copied(), Some(reachable));
+        assert!(std::iter::once(from).chain(route.iter().copied())
+            .zip(route.iter().copied())
+            .all(|(a, b)| segment_inside(&rings, rule, a, b, 0.5)));
     }
 
     #[test]
