@@ -368,3 +368,14 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
   outline:2px solid var(--brand-accent,var(--brand));
   outline-offset:2px;
 }
+
+/* Contextual tools stay in the workspace; precision actions expand only on demand. */
+.workspace-canvas .canvas-selection-bar { min-width:0; flex:0 0 auto; }
+.workspace-canvas .studio-selection-docked { display:flex; align-items:center; flex-wrap:wrap; gap:4px; min-width:0; }
+.studio-selection-more { flex:0 0 auto; }
+.studio-selection-more summary { display:flex; align-items:center; gap:4px; cursor:pointer; list-style:none; padding:5px 8px; border-radius:6px; font-size:12px; }
+.studio-selection-more summary::-webkit-details-marker { display:none; }
+.studio-selection-more[open] summary { background:var(--brand-soft,var(--studio-paper)); }
+.studio-selection-more-actions { display:inline-flex; gap:3px; align-items:center; }
+.studio-selection-more[open] { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+.studio-selection-more summary:focus-visible { outline:2px solid var(--brand-accent,var(--brand)); }
