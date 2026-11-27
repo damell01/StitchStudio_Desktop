@@ -1135,7 +1135,8 @@ fn local_coverage_preserved(original:&Design,candidate:&Design)->bool{
                 if remaining.remove(&neighbor){stack.push(neighbor);}
             }}
         }
-        if retained==0 || (total<=16 && retained.saturating_add(1)<total) {return false;}
+        if retained==0 || (total<=16 && retained.saturating_add(1)<total)
+            || (total>16 && retained*100<total*85) {return false;}
     }
     // Tiny neighborhoods can contain punctuation, dots or narrow glyph tips.
     // Permit a one-cell shift across the sampling grid, but not disappearance.
