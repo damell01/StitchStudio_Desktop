@@ -296,3 +296,43 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .editor-workspace .studio-edit-bar { gap: 4px; }
 .editor-workspace .studio-edit-bar .studio-command-group { gap: 3px; }
 .editor-workspace .studio-camera.studio-camera-docked { gap: 4px; }
+
+/* Selection context stays in a compact, horizontally scrollable command strip. */
+.editor-workspace .canvas-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
+}
+.editor-workspace .studio-selection-docked {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex-wrap: nowrap;
+}
+.editor-workspace .studio-selection-docked > * { flex-shrink: 0; }
+.editor-workspace .studio-selection-docked > button {
+  min-height: 28px;
+  padding: 4px 7px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.editor-workspace .studio-selection-name {
+  font-size: 12px;
+  font-weight: 650;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor-workspace .studio-selection-size {
+  font-size: 11px;
+  color: var(--workspace-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
