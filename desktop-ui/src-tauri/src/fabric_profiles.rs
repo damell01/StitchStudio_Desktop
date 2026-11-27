@@ -21,9 +21,13 @@ pub(crate) fn fabric_catalog() -> Vec<FabricInfo> {
 }
 
 #[tauri::command]
-pub(crate) fn current_fabric(state: tauri::State<'_, Mutex<Workspace>>) -> Result<Option<String>, String> {
-    let workspace = state.lock().map_err(|error| error.to_string())?;
-    Ok(workspace.source.as_ref().map(|document| document.settings.fabric.clone()))
+pub(crate) async fn current_fabric(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Mutex<Workspace>>();
+        let workspace = state.lock().map_err(|error| error.to_string())?;
+        Ok(workspace.source.as_ref().map(|document| document.settings.fabric.clone()))
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

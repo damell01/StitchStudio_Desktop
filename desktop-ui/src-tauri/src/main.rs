@@ -1920,8 +1920,13 @@ async fn export_design(format: String, width: f64, height: f64, companions: Opti
 }
 
 #[tauri::command]
-fn current_preview(state:tauri::State<'_,Mutex<Workspace>>) -> Result<Option<Preview>,String> {
- Ok(state.lock().map_err(|e|e.to_string())?.current.as_ref().map(preview))
+async fn current_preview(app: tauri::AppHandle) -> Result<Option<Preview>,String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Mutex<Workspace>>();
+        let workspace = state.lock().map_err(|err| err.to_string())?;
+        Ok(workspace.current.as_ref().map(preview))
+    }).await.map_err(|err| err.to_string())?
 }
 #[tauri::command]
 fn history_step(redo:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Preview,String> {
@@ -1934,10 +1939,15 @@ fn history_step(redo:bool,state:tauri::State<'_,Mutex<Workspace>>) -> Result<Pre
  Ok(preview(w.current.as_ref().ok_or("No design")?))
 }
 #[tauri::command]
-fn history_labels(state:tauri::State<'_,Mutex<Workspace>>)->Result<(Vec<String>,Vec<String>),String>{
- let w=state.lock().map_err(|e|e.to_string())?;
- Ok((w.undo_labels.clone(),w.redo_labels.clone()))
+async fn history_labels(app: tauri::AppHandle) -> Result<(Vec<String>, Vec<String>), String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Mutex<Workspace>>();
+        let w=state.lock().map_err(|e|e.to_string())?;
+        Ok((w.undo_labels.clone(),w.redo_labels.clone()))
+    }).await.map_err(|err| err.to_string())?
 }
+
 const MAX_PROJECT_BYTES: u64 = 100_000_000;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -2523,20 +2533,24 @@ async fn reorder_artwork_object(uid:usize,direction:String,target_uid:Option<usi
 }
 
 #[tauri::command]
-fn editable_objects(state: tauri::State<'_, Mutex<Workspace>>) -> Result<Vec<EditableObject>, String> {
-    let workspace = state.lock().map_err(|error| error.to_string())?;
-    let Some(document) = &workspace.source else { return Ok(Vec::new()); };
-    Ok(document.shapes.iter().filter_map(|shape| {
-        let mut object = editable_object(shape)?;
-        if let Some(layer) = document.layer_properties(&shape.id) {
-            object.locked = layer.locked;
-            object.hidden = layer.hidden;
-            if let Some(name) = &layer.name {
-                object.label = name.clone();
+async fn editable_objects(app: tauri::AppHandle) -> Result<Vec<EditableObject>, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Mutex<Workspace>>();
+        let workspace = state.lock().map_err(|error| error.to_string())?;
+        let Some(document) = &workspace.source else { return Ok(Vec::new()); };
+        Ok(document.shapes.iter().filter_map(|shape| {
+            let mut object = editable_object(shape)?;
+            if let Some(layer) = document.layer_properties(&shape.id) {
+                object.locked = layer.locked;
+                object.hidden = layer.hidden;
+                if let Some(name) = &layer.name {
+                    object.label = name.clone();
+                }
             }
-        }
-        Some(object)
-    }).collect())
+            Some(object)
+        }).collect())
+    }).await.map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
@@ -2795,25 +2809,29 @@ fn create_specialty(shape:String,style:String,width:f64,state:tauri::State<'_,Mu
  let p=preview(&d);let mut w=state.lock().map_err(|e|e.to_string())?;w.checkpoint_named("Create specialty design");w.current=Some(d);w.source=Some(doc);Ok(p)
 }
 #[tauri::command]
-fn recovery_save(app: tauri::AppHandle, width: f64, height: f64, format: String, thread_assignments: Option<std::collections::HashMap<String,String>>, expected_tab: Option<String>, tabs: tauri::State<'_, Mutex<workspace_tabs::WorkspaceTabs>>, state: tauri::State<'_, Mutex<Workspace>>) -> Result<(), String> {
+async fn recovery_save(app: tauri::AppHandle, width: f64, height: f64, format: String, thread_assignments: Option<std::collections::HashMap<String,String>>, expected_tab: Option<String>) -> Result<(), String> {
     use tauri::Manager;
-    // Keep recovery writes in order if more than one caller requests a snapshot.
-    static RECOVERY_WRITE: Mutex<()> = Mutex::new(());
-    let _write = RECOVERY_WRITE.lock().map_err(|err| err.to_string())?;
-    let (id, project) = {
-        let tabs=tabs.lock().map_err(|err|err.to_string())?;
-        if expected_tab.as_deref().is_some_and(|id|id!=tabs.active()){return Ok(());}
-        let workspace = state.lock().map_err(|err| err.to_string())?;
-        (tabs.active().to_owned(),Project::capture(&workspace, width, height, format)?)
-    };
-    let Some(mut project) = project else { return Ok(()); };
-    project.thread_assignments = thread_assignments.unwrap_or_default();
-    let dir = app.path().app_local_data_dir().map_err(|err| err.to_string())?;
-    let directory=workspace_tabs::recovery_directory(&dir,&id)?;
-    project_recovery::save(&directory, &project)?;
-    let name: String=project.name.chars().take(100).collect();
-    let _=std::fs::write(directory.join("name.txt"),name);
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || {
+        // Keep recovery writes in order if more than one caller requests a snapshot.
+        static RECOVERY_WRITE: Mutex<()> = Mutex::new(());
+        let _write = RECOVERY_WRITE.lock().map_err(|err| err.to_string())?;
+        let tabs = app.state::<Mutex<workspace_tabs::WorkspaceTabs>>();
+        let state = app.state::<Mutex<Workspace>>();
+        let (id, project) = {
+            let tabs=tabs.lock().map_err(|err|err.to_string())?;
+            if expected_tab.as_deref().is_some_and(|id|id!=tabs.active()){return Ok(());}
+            let workspace = state.lock().map_err(|err| err.to_string())?;
+            (tabs.active().to_owned(),Project::capture(&workspace, width, height, format)?)
+        };
+        let Some(mut project) = project else { return Ok(()); };
+        project.thread_assignments = thread_assignments.unwrap_or_default();
+        let dir = app.path().app_local_data_dir().map_err(|err| err.to_string())?;
+        let directory=workspace_tabs::recovery_directory(&dir,&id)?;
+        project_recovery::save(&directory, &project)?;
+        let name: String=project.name.chars().take(100).collect();
+        let _=std::fs::write(directory.join("name.txt"),name);
+        Ok(())
+    }).await.map_err(|err| err.to_string())?
 }
 
 #[tauri::command]

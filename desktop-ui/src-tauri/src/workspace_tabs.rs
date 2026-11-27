@@ -150,13 +150,15 @@ pub(super) fn recovery_directory(root: &Path, id: &str) -> Result<PathBuf, Strin
 }
 
 #[tauri::command]
-pub(super) fn workspace_tabs(
-    tabs: tauri::State<'_, Mutex<WorkspaceTabs>>,
-    state: tauri::State<'_, Mutex<Workspace>>,
-) -> Result<TabList, String> {
-    let tabs = tabs.lock().map_err(|error| error.to_string())?;
-    let workspace = state.lock().map_err(|error| error.to_string())?;
-    Ok(tabs.list(&workspace))
+pub(super) async fn workspace_tabs(app: tauri::AppHandle) -> Result<TabList, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let tabs = app.state::<Mutex<WorkspaceTabs>>();
+        let state = app.state::<Mutex<Workspace>>();
+        let tabs = tabs.lock().map_err(|error| error.to_string())?;
+        let workspace = state.lock().map_err(|error| error.to_string())?;
+        Ok(tabs.list(&workspace))
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[derive(serde::Deserialize)]
