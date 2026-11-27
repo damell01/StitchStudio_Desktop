@@ -260,7 +260,7 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
         if(!active)return;
         const result={art,settings,lines:lines.map(l=>({...l,enabled:true}))};
         setOcr(result);setApproved(result);setOcrFonts(fonts);
-        setOcrMessage(lines.length? `${lines.length} text regions detected automatically. Expand Review lettering to make corrections.`:'No text regions detected; using normal artwork tracing.');
+        setOcrMessage(lines.length? `${lines.length} text regions detected automatically. Review the detected words below before inserting the design.`:'No text regions detected; using normal artwork tracing.');
       } catch(err){if(active){setOcr(null);setApproved(null);setOcrMessage('Lettering recognition unavailable; normal tracing will continue. '+String(err));}}
       finally{if(active){setOcrAttempt(request);setOcrBusy(false);}}
     },250);
@@ -390,7 +390,7 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
           <label><input type="checkbox" checked={autoOcr} onChange={e=>{setAutoOcr(e.target.checked);setOcrAttempt(null);setApproved(null);setOcrMessage('');}}/> Automatically recognize and reconstruct lettering</label>
           {ocrBusy&&<small role="status">Detecting text and matching fonts…</small>}
           {ocrMessage&&<p role="status">{ocrMessage}</p>}
-          {autoOcr&&activeOcr&&<details style={{border:'1px solid var(--border,#ddd)',borderRadius:8,padding:8}}>
+          {autoOcr&&activeOcr&&<details open style={{border:'1px solid var(--border,#ddd)',borderRadius:8,padding:8}}>
             <summary style={{cursor:'pointer',fontWeight:600}}>Review lettering · {activeOcr.lines.filter(l=>l.enabled).length}/{activeOcr.lines.length} selected</summary>
             <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
               <button type="button" onClick={()=>setOcr({...activeOcr,lines:activeOcr.lines.map(l=>({...l,enabled:true}))})}>Select all</button>
