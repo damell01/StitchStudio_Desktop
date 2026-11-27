@@ -3083,8 +3083,12 @@ async fn editable_objects(app: tauri::AppHandle) -> Result<Vec<EditableObject>, 
         let state = app.state::<Mutex<Workspace>>();
         let workspace = state.lock().map_err(|error| error.to_string())?;
         let Some(document) = &workspace.source else { return Ok(Vec::new()); };
+        let wrappers = document.artwork_wrapper_groups();
         Ok(document.shapes.iter().filter_map(|shape| {
             let mut object = editable_object(shape)?;
+            if let Some(group) = wrappers.get(&shape.id) {
+                if !object.groups.contains(group) { object.groups.push(group.clone()); }
+            }
             if let Some(layer) = document.layer_properties(&shape.id) {
                 object.locked = layer.locked;
                 object.hidden = layer.hidden;
