@@ -3199,6 +3199,7 @@ struct DigitizerDraft {
 #[derive(serde::Serialize)]
 struct DigitizerReview {
     id: u64,
+    artwork_svg: Option<String>,
     plan: Preview,
     quality: StitchAudit,
     warnings: Vec<String>,
@@ -3605,6 +3606,7 @@ async fn digitize_artwork(
         warnings.truncate(12);
         let review = DigitizerReview {
             id,
+            artwork_svg: document.to_svg().ok(),
             plan: preview(&design),
             quality: measure_stitches(&design),
             warnings,
