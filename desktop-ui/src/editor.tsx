@@ -1212,12 +1212,12 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
 function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const position=pointerPosition(event);
   if(!position)return;
-  if(drag){const matrix=event.currentTarget.getScreenCTM();if(!matrix)return;const start=new DOMPoint(drag.x,drag.y).matrixTransform(matrix.inverse());setPan([drag.px-(position.x-start.x),drag.py-(position.y-start.y)]);return;}
+  if(drag){const matrix=event.currentTarget.getScreenCTM();if(!matrix)return;const inverse=matrix.inverse();const delta=new DOMPoint(event.clientX-drag.x,event.clientY-drag.y,0,0).matrixTransform(inverse);setPan([drag.px-delta.x,drag.py-delta.y]);return;}
   if(drawing.tool&&drawing.move(event,drawingPoint(position)))return;
   if(stitchGuides.move(event,[position.x,position.y]))return;
   const box=marqueeGesture.current;
   if(box?.pointer===event.pointerId){setMarquee({x:Math.min(box.x,position.x),y:Math.min(box.y,position.y),w:Math.abs(position.x-box.x),h:Math.abs(position.y-box.y)});return;}
-  if(!event.buttons&&canvasMode==='select'&&!drawing.tool&&!canvasTyping){const element=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;const uid=element?Number(element.getAttribute('data-artwork-uid')):null;setHoverUid(uid!==null&&objects.some(o=>o.uid===uid&&!o.hidden&&!o.locked&&!lockedObjects.includes(uid))?uid:null);}
+  if(!event.buttons&&canvasMode==='select'&&!drawing.tool&&!canvasTyping&&!baselinePicking){const element=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;const uid=element?Number(element.getAttribute('data-artwork-uid')):null;setHoverUid(uid!==null&&objects.some(o=>o.uid===uid&&!o.hidden&&!o.locked&&!lockedObjects.includes(uid))?uid:null);}
   if(rotationGesture.current?.pointer===event.pointerId){setRotationPreview(rotationAt(position,event.shiftKey));return}
   if(groupResizeGesture.current?.pointer===event.pointerId){setGroupScalePreview(groupScaleAt(position,event.shiftKey));return}
   if(designGesture.current?.pointer===event.pointerId){
@@ -1235,11 +1235,6 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
     setObjectOffset(movedOnScreen(event,gesture)
       ? snapped(position.x-gesture.x,position.y-gesture.y,selectionIds.includes(gesture.uid)?selectionIds:[gesture.uid],true)
       : [0,0]);
-  }else if(drag){
-    const matrix=event.currentTarget.getScreenCTM();
-    if(!matrix)return;
-    const start=new DOMPoint(drag.x,drag.y).matrixTransform(matrix.inverse());
-    setPan([drag.px-(position.x-start.x),drag.py-(position.y-start.y)]);
   }
 }
 
