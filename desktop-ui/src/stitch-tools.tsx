@@ -40,6 +40,7 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,onAppl
   const [working,setWorking]=useState(false);
   const [message,setMessage]=useState('');
   const current=review && review.revision===revision ? review.result : null;
+  const improvesQuality=!!current&&current.warnings_after<=current.warnings_before&&current.lettering_after<=current.lettering_before&&(current.warnings_after<current.warnings_before||current.lettering_after<current.lettering_before);
   const comparisonPaths=useMemo(()=>current?[current.before,current.after].map(p=>p.blocks.map(b=>({color:'rgb('+b.color.join(',')+')',runs:b.runs.map(r=>r.map(point=>point.join(',')).join(' '))}))):[],[current]);
   const [sewout,setSewout]=useState(true);
   const [previewWidth,setPreviewWidth]=useState(.40);
@@ -59,7 +60,7 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,onAppl
     catch(e){setMessage(String(e));}finally{setWorking(false);}
   }
   async function applyPreview(){
-    if(!current)return;
+    if(!current||!improvesQuality||working||disabled)return;
     setWorking(true);
     try{
       const error=await onApply(current.id);
@@ -84,7 +85,8 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,onAppl
       <small>Lettering consistency warnings: {current.lettering_before} → {current.lettering_after}</small>
       <small>Estimated sewing time: {estimate(current.before).toFixed(1)} → {estimate(current.after).toFixed(1)} min</small>
       <small>Stitch change: {((current.after.stitches-current.before.stitches)/Math.max(1,current.before.stitches)*100).toFixed(1)}% · {speed} points/min</small>
-      <button disabled={disabled||working} onClick={()=>void applyPreview()}>Apply quality repair</button><button onClick={()=>setReview(null)}>Keep original</button>
+      <p role="status">{improvesQuality?"Fewer measured quality warnings without increasing either warning category. Inspect both previews before applying.":"No measured improvement, or a warning category worsened. Keep the original design."}</p>
+      <button disabled={disabled||working||!improvesQuality} onClick={()=>void applyPreview()}>Apply quality repair</button><button onClick={()=>setReview(null)}>Keep original</button>
       <small>Applies the shown stitch plan. Undo is available.</small>
     </div>}
     <button disabled={disabled||working} onClick={onRepair}>Try general repair</button>
