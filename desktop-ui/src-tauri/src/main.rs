@@ -1931,15 +1931,16 @@ fn balance_lettering_density(source:&zigzag::document::Document,original:&Design
     let fabric=source.plan_options().fabric;
     let bounds=|s:&zigzag::svg::Shape|{let Geometry::Fill{rings,..}=&s.geometry else{return None};let mut b=zigzag::geom::Bounds::empty();for &p in rings.iter().flatten(){b.add(p);}if b.is_empty(){None}else{Some(b)}};
     let spacing=|s:&zigzag::svg::Shape|if s.params.kind==Some(Kind::Satin){s.params.satin_spacing(&fabric)}else{s.params.fill_spacing(&fabric)};
-    let mut trial=source.clone();
+    let mut targets=Vec::new();
     for &i in &flagged{
         let s=source.shapes.get(i)?;
         if source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)
-            ||s.params.stop==Some(true)||s.params.trim==Some(true){continue}
+            ||s.params.stop==Some(true)||s.params.trim==Some(true)||s.params.colors.is_some()||!(0.30..=0.65).contains(&spacing(s)){continue}
         let Some(b)=bounds(s) else{continue};
         let mut peers=Vec::new();
         for (j,q) in source.shapes.iter().enumerate(){
             if i==j||flagged.contains(&j)||q.color!=s.color||q.params.kind.unwrap_or(Kind::Fill)!=s.params.kind.unwrap_or(Kind::Fill){continue}
+            if source.layer_properties(&q.id).is_some_and(|l|l.hidden)||q.params.colors.is_some()||!(0.30..=0.65).contains(&spacing(q)){continue}
             let Some(c)=bounds(q) else{continue};
             if c.height()>=b.height()*0.8&&c.height()<=b.height()*1.25&&c.width()<=c.height()*1.8&&(c.center().y-b.center().y).abs()<=b.height()*0.2&&(c.center().x-b.center().x).abs()<=b.height()*4.0{peers.push(spacing(q));}
         }
@@ -1950,17 +1951,37 @@ fn balance_lettering_density(source:&zigzag::document::Document,original:&Design
             let existing=spacing(s);
             // Limit each repair to a modest adjustment, including explicit spacing.
             if existing.is_finite()&&existing>0.0{
-                trial.shapes[i].params.spacing=Some(target.clamp(existing*0.8,existing*1.25).clamp(0.30,0.65));
+                targets.push((i,existing,target.clamp(existing*0.8,existing*1.25).clamp(0.30,0.65)));
             }
         }
     }
-    trial.sync().ok()?;
-    let plan=trial.plan();
-    let after=issues(&trial,&plan);
+    if targets.is_empty(){return None}
     let count=|v:&[zigzag::checks::Issue]|v.iter().filter(|i|i.message.starts_with("Possible inconsistent lettering density:")).count();
-    if count(&after)>=count(&before)||after.iter().any(|i|i.level!=zigzag::checks::Level::Info&&!before.iter().any(|j|j.shape==i.shape&&j.message==i.message))||!production_not_worse(original,&plan)||!local_coverage_preserved(original,&plan)||plan.stitch_count()>original.stitch_count().saturating_mul(125)/100{return None}
-    validate_resized_design(&plan).ok()?;
-    Some((trial,plan))
+    let mut best=None;
+    // Compare partial and full corrections; a smaller adjustment can preserve
+    // narrow glyphs better than forcing every letter to the peer median.
+    for strength in [0.5,0.75,1.0] {
+        let mut trial=source.clone();
+        for &(i,existing,target) in &targets{
+            trial.shapes[i].params.spacing=Some(existing+(target-existing)*strength);
+        }
+        if trial.sync().is_err(){continue}
+        let plan=trial.plan();
+        let after=issues(&trial,&plan);
+        let n=count(&after);
+        if n>=count(&before)||after.iter().any(|i|i.level!=zigzag::checks::Level::Info&&!before.iter().any(|j|j.shape==i.shape&&j.message==i.message))
+            ||!production_not_worse(original,&plan)||!local_coverage_preserved(original,&plan)
+            ||plan.stitch_count()>original.stitch_count().saturating_mul(125)/100
+            ||plan.trim_count()>original.trim_count()
+            ||!original.blocks.iter().map(|b|b.color).eq(plan.blocks.iter().map(|b|b.color))
+            ||original.per_shape.len()!=plan.per_shape.len()
+            ||!original.per_shape.iter().zip(&plan.per_shape).all(|(&a,&b)|a==0||b>0)
+            ||validate_resized_design(&plan).is_err(){continue}
+        if best.as_ref().is_none_or(|(_,old,k):&(zigzag::document::Document,Design,usize)|n<*k||(n==*k&&plan.stitch_count()<old.stitch_count())){
+            best=Some((trial,plan,n));
+        }
+    }
+    best.map(|(doc,plan,_)|(doc,plan))
 }
 fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)->Option<(zigzag::document::Document,Design)>{
         if design.stitch_count()<=100_000 && document.shapes.len()<=350 {
