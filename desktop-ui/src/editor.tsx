@@ -1089,6 +1089,23 @@ function fitArtwork() {
   setPan([left+w/2,top+h/2]);
 }
 
+const [qualityOverlay,setQualityOverlay]=useState<'coverage'|'density'>('coverage');
+const [qualityObjects,setQualityObjects]=useState<number[]>([]);
+useEffect(()=>{
+  if(inspectorTab!=='quality'||!plan){setQualityObjects([]);return}
+  let active=true;setQualityObjects([]);
+  invoke<{uid:number|null;message:string}[]>('design_issues',{width,height}).then(issues=>{if(active)setQualityObjects(issues.filter(i=>i.uid!==null&&i.message.includes('Possible underfilled artwork:')).map(i=>i.uid!))}).catch(()=>{});
+  return()=>{active=false};
+},[inspectorTab,plan,width,height]);
+const qualityDensity=useMemo(()=>{
+  if(inspectorTab!=='quality'||qualityOverlay!=='density'||!plan)return [];
+  const cells=new Map<string,{x:number;y:number;n:number}>();
+  for(const b of plan.blocks)for(const r of b.runs)for(const p of r){
+    const x=Math.floor(p[0]),y=Math.floor(p[1]),key=x+','+y;
+    const c=cells.get(key);if(c)c.n++;else cells.set(key,{x,y,n:1});
+  }
+  return Array.from(cells.values()).filter(c=>c.n>=24).sort((a,b)=>b.n-a.n).slice(0,1500);
+},[plan,inspectorTab,qualityOverlay]);
 function locateIssue(uid:number) {
   const object=objects.find(object=>object.uid===uid);
   if(!object)return;
@@ -1468,6 +1485,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
  </circle>)}
 <line x1={selected.bounds[0]+selected.bounds[2]/2} x2={selected.bounds[0]+selected.bounds[2]/2} y1={selected.bounds[1]} y2={selected.bounds[1]-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke"/><circle cx={selected.bounds[0]+selected.bounds[2]/2} cy={selected.bounds[1]-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" pointerEvents={busy?'none':'all'} style={{cursor:'grab'}}><title>Rotate object · Shift snaps to 15°</title></circle>
 </g>}
+{inspectorTab==='quality'&&<g pointerEvents="none" aria-label="Quality overlay">{qualityOverlay==='coverage'?objects.filter(o=>qualityObjects.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="#ef4444" fillOpacity=".16" stroke="#dc2626" strokeDasharray="4 2" vectorEffect="non-scaling-stroke"/>):qualityDensity.map(c=><rect key={c.x+','+c.y} x={c.x} y={c.y} width={1} height={1} fill={c.n>=40?'#dc2626':'#f59e0b'} opacity=".65"/>)}</g>}
 {!drawing.tool&&<StitchGuideOverlay guides={stitchGuides} zoom={zoom}/>}
 </svg>{!plan?.stitches&&!drawing.tool&&<section className="workspace-empty studio-canvas-start" aria-labelledby="canvas-start-title">
   <span className="canvas-start-icon"><SquareDashed size={24}/></span>
@@ -1491,6 +1509,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
 </div>
   {plan&&<div className="inspector-metrics"><div><small>Stitches</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div><div><small>Est. time</small><strong>{Math.ceil(plan.stitches/sewingSpm+plan.trims*trimSeconds/60+Math.max(0,plan.blocks.length-1)*changeSeconds/60)} min</strong></div></div>}
+  {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage objects</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red outlines mark objects with possible missing coverage, not exact gaps.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small></div>}
   {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
   {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
     <strong title={selected?.label}>{selected?.label||`${movementIds.length} selected`}</strong>
