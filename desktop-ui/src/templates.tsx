@@ -7,6 +7,8 @@ import twemojiCatalogue from './twemoji-templates.json';
 type Attribution = { credit: string; license: string; licenseUrl: string; sourceUrl: string };
 export type Template = { id: string; name: string; category: string; art: string; tags?: string[]; attribution?: Attribution };
 
+const isPremium = (template: Template) => template.id.startsWith('curated-');
+
 const twemojiAssets = import.meta.glob<string>('./assets/twemoji/*.svg', {
   query: '?raw', import: 'default', eager: true,
 });
@@ -148,7 +150,9 @@ function TemplatePreview({ template, widthMm, insert, onCancel, onChoose }: {
   const [plan, setPlan] = useState<TemplatePlan | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
-    dialog.current?.showModal();
+    if (!dialog.current?.open) dialog.current?.showModal();
+    setPlan(null);
+    setError('');
     let active = true;
     void invoke<TemplatePlan>('preview_template', { id: template.id, art: template.art, widthMm })
       .then(result => { if (active) setPlan(result); })
@@ -170,7 +174,7 @@ function TemplatePreview({ template, widthMm, insert, onCancel, onChoose }: {
         </svg> : <p role={error ? 'alert' : 'status'}>{error || 'Generating stitches…'}</p>}
       </section>
     </div>
-    {plan && <p>{plan.stitches.toLocaleString()} stitch points · {plan.blocks.length} color blocks · {plan.trims} planned trims</p>}
+    {plan && <p>{plan.stitches.toLocaleString()} stitch points · {plan.blocks.length} color blocks · {plan.trims} planned trims · Approx. {Math.ceil(plan.stitches / 600 + plan.trims * 3 / 60)} min at 600 stitches/min</p>}
     <TemplateAttribution template={template} />
     <footer className="studio-modal-actions">
       <button onClick={onCancel}>Back to library</button>
@@ -193,7 +197,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   const [recent, setRecent] = useState(() => readIds('studio-design-recent'));
   useEffect(()=>{const refresh=()=>setRecent(readIds('studio-design-recent'));window.addEventListener('studio-template-used',refresh);return()=>window.removeEventListener('studio-template-used',refresh)},[]);
   const [selected, setSelected] = useState<Template | null>(null);
-  const isPremium = (template: Template) => template.id.startsWith('curated-');
+
   const premiumCount = templates.filter(isPremium).length;
   const results = templates.filter(template => (
     category === 'All' || category === template.category
