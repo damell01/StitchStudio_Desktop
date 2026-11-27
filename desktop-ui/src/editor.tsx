@@ -109,7 +109,7 @@ const independentGroups=designGroups.length>1;
 const resizeGesture=useRef<{uid:number;pointer:number;handle:ResizeHandle;anchorX:number;anchorY:number}|null>(null);
 const objectGesture=useRef<{uid:number;x:number;y:number;clientX:number;clientY:number;pointerId:number}|null>(null);
 const selected=objects.find(object=>object.uid===selectedObject);
-const [multi,setMulti]=useState<number[]>([]);const [snap,setSnap]=useState(false);const [context,setContext]=useState<{uid:number;x:number;y:number}|null>(null);
+const [multi,setMulti]=useState<number[]>([]);const [snap,setSnap]=useState(()=>localStorage.getItem("studio-smart-guides")!=="0");useEffect(()=>{localStorage.setItem("studio-smart-guides",snap?"1":"0")},[snap]);const [context,setContext]=useState<{uid:number;x:number;y:number}|null>(null);
 const selectionIds=multi.filter(id=>objects.some(o=>o.uid===id&&!o.locked&&!o.hidden));
 const [nudgeStep,setNudgeStep]=useState(1);
 const lockedObjects=useMemo(()=>objects.filter(object=>object.locked||object.hidden).map(object=>object.uid),[objects]);
@@ -148,8 +148,9 @@ function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
  if(!source){if(show)setGuides({x:null,y:null});return [Math.round(dx),Math.round(dy)]}
  const xs=[-width/2,0,width/2],ys=[-height/2,0,height/2];
  if(chosen)for(const g of designGroups){if(!g.bounds||g.members.some(o=>chosen.has(o.uid)))continue;const [x,y,w,h]=g.bounds;xs.push(x,x+w/2,x+w);ys.push(y,y+h/2,y+h)}
+ if(chosen)for(const o of objects){if(chosen.has(o.uid)||o.hidden||!o.bounds)continue;const [x,y,w,h]=o.bounds;xs.push(x,x+w/2,x+w);ys.push(y,y+h/2,y+h)}
  const threshold=Math.max(.4,Math.min(3,150/zoom));
- function axis(delta:number,anchors:number[],targets:number[]):[number,number|null]{let best=threshold,shift=0,guide:number|null=null;for(const a of anchors)for(const t of targets){const d=t-a-delta;if(Math.abs(d)<best){best=Math.abs(d);shift=d;guide=t}}return guide===null?[Math.round(delta),null]:[delta+shift,guide]}
+ function axis(delta:number,anchors:number[],targets:number[]):[number,number|null]{let best=threshold,shift=0,guide:number|null=null;for(const a of anchors)for(const t of targets){const d=t-a-delta;if(Math.abs(d)<best){best=Math.abs(d);shift=d;guide=t}}return guide===null?[delta,null]:[delta+shift,guide]}
  const [x,gx]=axis(dx,[source[0],(source[0]+source[2])/2,source[2]],xs);
  const [y,gy]=axis(dy,[source[1],(source[1]+source[3])/2,source[3]],ys);
  if(show)setGuides({x:gx,y:gy});return [x,y]
@@ -1612,6 +1613,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button className="studio-tool-icon" title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(value=>Math.min(400,value+25))}><ZoomIn size={17}/></button>
   <button title="Fit artwork" aria-label="Fit artwork" disabled={!points.length} onClick={fitArtwork}><Maximize size={16}/><span className="camera-label">Fit</span></button>
   <button title="Fit hoop view" aria-label="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}><SquareDashed size={16}/><span className="camera-label">Hoop</span></button>
+  <button title="Smart alignment guides" aria-label="Smart alignment guides" aria-pressed={snap} onClick={()=>{setSnap(v=>!v);setGuides({x:null,y:null})}}><ScanLine size={16}/><span className="camera-label">Snap</span></button>
   <button className="studio-tool-icon" title="Hoop grid" aria-label="Hoop grid" aria-pressed={grid} onClick={()=>setGrid(value=>!value)}><Grid size={16}/></button>
   <button title="Realistic sew-out preview" aria-label="Realistic sew-out preview" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}><Eye size={16}/><span className="camera-label">Sew-out</span></button>
 <button title="Show sampled stitch directions" aria-label="Show stitch directions" aria-pressed={showDirections} onClick={()=>setShowDirections(v=>!v)}><Waypoints size={16}/><span className="camera-label">Direction</span></button>
