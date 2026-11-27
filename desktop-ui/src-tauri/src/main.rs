@@ -745,6 +745,7 @@ struct SimplifyOptions {
     solid_only: bool,
     goal_search: bool,
     texture_reduction: bool,
+    appearance_floor: Option<f64>,
     solid_color: Option<[u8; 3]>,
     #[serde(skip)]
     budget: Option<SimplifyBudget>,
@@ -1185,7 +1186,7 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
         &&optimization_seconds(d,speed,trim)<optimization_seconds(original,speed,trim)
         &&q.long<=audit.long&&q.zero<=audit.zero&&q.short<=audit.short.saturating_add(5)
         &&bounds.min.dist(b.min)<=10.&&bounds.max.dist(b.max)<=10.
-        &&optimization_quality(original,d,speed,trim).coverage>=65.
+        &&optimization_quality(original,d,speed,trim).coverage>=mode.appearance_floor.filter(|v|v.is_finite()).unwrap_or(65.).clamp(65.,100.)
         &&original.blocks.iter().map(|b|b.color).collect::<std::collections::BTreeSet<_>>()
           ==d.blocks.iter().map(|b|b.color).collect::<std::collections::BTreeSet<_>>()
     };
