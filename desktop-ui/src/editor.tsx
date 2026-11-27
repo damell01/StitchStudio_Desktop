@@ -1035,7 +1035,7 @@ const [detectedText,setDetectedText]=useState<{uids:number[];text:string}[]>([])
 const [autoTextStatus,setAutoTextStatus]=useState('');
 const [detectedTextOpen,setDetectedTextOpen]=useState(false);
 useEffect(()=>{
-  const selector='details.workspace-options,details.studio-selection-more,details.studio-detected-text,details.studio-zoom-menu';
+  const selector='details.workspace-options,details.studio-selection-more,details.studio-detected-text,details.studio-zoom-menu,details.canvas-drawing-menu,details.studio-create-menu';
   const close=(except?:Element|null)=>document.querySelectorAll<HTMLDetailsElement>(selector+'').forEach(menu=>{if(menu.open&&menu!==except)menu.open=false});
   const pointer=(event:PointerEvent)=>{
     const target=event.target instanceof Element?event.target:null;
@@ -1055,10 +1055,12 @@ useEffect(()=>{
       if(menu){menu.open=false;menu.querySelector('summary')?.focus();}
     }
   };
+  const toggle=(event:Event)=>{const menu=event.target;if(menu instanceof HTMLDetailsElement&&menu.open&&menu.matches(selector))close(menu);};
+  document.addEventListener('toggle',toggle,true);
   document.addEventListener('pointerdown',pointer);
   document.addEventListener('click',click);
   document.addEventListener('keydown',keyboard);
-  return()=>{document.removeEventListener('pointerdown',pointer);document.removeEventListener('click',click);document.removeEventListener('keydown',keyboard)};
+  return()=>{document.removeEventListener('toggle',toggle,true);document.removeEventListener('pointerdown',pointer);document.removeEventListener('click',click);document.removeEventListener('keydown',keyboard)};
 },[]);
 const [autoDetectText,setAutoDetectText]=useState(()=>localStorage.getItem('studio-auto-detect-text')!=='0');
 useEffect(()=>{
