@@ -116,6 +116,19 @@ const [nudgeStep,setNudgeStep]=useState(1);
 const lockedObjects=useMemo(()=>objects.filter(object=>object.locked||object.hidden).map(object=>object.uid),[objects]);
 const [dragLayer,setDragLayer]=useState<number|null>(null);
 const [artworkImport,setArtworkImport]=useState<{file:File|null}|null>(null);
+const uploadInput=useRef<HTMLInputElement>(null);
+async function importCanvasFile(file:File,xMm=0,yMm=0){
+  if(busy||editLock.current)return;
+  if(/\.(dst|pes|jef|exp|vp3|hus|xxx|pec|sew|tap|u01)$/i.test(file.name)){
+    if(file.size>20_000_000){setMessage('Embroidery file exceeds 20 MB.');return;}
+    try{
+      const buffer=await file.arrayBuffer();
+      const result=await edit('insert_embroidery',{bytes:Array.from(new Uint8Array(buffer)),name:file.name,xMm,yMm});
+      if(result.plan){setHidden([]);setCanvasMode('select');setRealistic(false);}
+    }catch{setMessage('Could not read the embroidery file.');}
+  }else if(/\.(png|jpe?g|webp|bmp|svg)$/i.test(file.name)){setArtworkImport({file});}
+  else setMessage('Choose a supported embroidery design or image.');
+}
 const [artworkDrag,setArtworkDrag]=useState(false);
 const [dropLayer,setDropLayer]=useState<{uid:number;direction:'before'|'after'}|null>(null);
 const [renameDraft,setRenameDraft]=useState('');
@@ -1479,6 +1492,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <h1 title={plan?.name || 'Untitled design'}>{plan?.name || 'Untitled design'}</h1>
   </div>
   <EditorHelp/>
+  <input ref={uploadInput} type="file" hidden accept=".dst,.pes,.jef,.exp,.vp3,.hus,.xxx,.pec,.sew,.tap,.u01,.png,.jpg,.jpeg,.webp,.bmp,.svg" onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void importCanvasFile(file)}}/>
   <EditorDigitizer active={artworkImport} onOpen={()=>setArtworkImport({file:null})} onClose={()=>setArtworkImport(null)} disabled={busy} onInsert={async(id,strength)=>{
     const result=await invoke<Plan>('insert_digitizer_draft',{id,strength});
     setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);
@@ -1560,7 +1574,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 {context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-270))}} role="group" aria-label="Object actions"><button onClick={()=>{const uid=context.uid;setContext(null);void invoke<unknown>('lettering_settings',{uid}).then(s=>{if(s)openText(uid);else{showInspector(true);setInspectorTab('transform')}}).catch(e=>setMessage(String(e)))}}>Object properties</button><button disabled={!canCopyStitchSettings} onClick={()=>{setContext(null);void copyStitchSettings()}}>Copy stitch settings</button><button onClick={()=>{setContext(null);drawing.pick(null);stitchGuides.setVisible(true)}}>Show stitch guides</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${focusCanvas?'canvas-focus':''} ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{'--studio-layers-width':`${leftWidth}px`,'--studio-inspector-width':`${rightWidth}px`} as CSSProperties}>
 <div className="editor-toolrail" role="group" aria-label="Editor tools">
   <button aria-pressed={canvasMode==='select'&&!realistic&&!(right&&['quality','stitches'].includes(inspectorTab))} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setCanvasMode('select');setRealistic(false);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false)}} title="Design workspace"><MousePointer2 size={20}/><small>Design</small></button>
-  <button disabled={busy} onClick={()=>{insertDialog.current?.close();setArtworkImport({file:null})}} title="Upload artwork and digitize"><FolderOpen size={20}/><small>Uploads</small></button>
+  <button disabled={busy} onClick={()=>{insertDialog.current?.close();uploadInput.current?.click()}} title="Upload an embroidery file, photo or logo"><FolderOpen size={20}/><small>Uploads</small></button>
   <button disabled={busy} aria-pressed={canvasTyping} onClick={()=>{insertDialog.current?.close();toggleCanvasTyping()}} title="Type directly on the hoop"><Type size={20}/><small>Text</small></button>
   <button disabled={busy} onClick={()=>{const dialog=insertDialog.current;if(!dialog||busy)return;if(dialog.open){dialog.close();return;}showLayers(false);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);drawing.pick(null);dialog.show();}} title="Browse and insert designs"><FilePlus size={20}/><small>Elements</small></button>
   <button aria-pressed={left} onClick={()=>{insertDialog.current?.close();showLayers(!left)}} title="Manage design layers"><Layers3 size={20}/><small>Layers</small></button>
@@ -1715,14 +1729,10 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     event.preventDefault();
     const file=event.dataTransfer.files[0];
     if(busy||editLock.current||!file)return;
-    if(/\.(dst|pes|jef|exp|vp3|hus|xxx|pec|sew|tap|u01)$/i.test(file.name)){
-      if(file.size>20_000_000){setMessage('Embroidery file exceeds 20 MB.');return;}
-      const matrix=canvasSurface.current?.querySelector<SVGSVGElement>('svg.design-canvas')?.getScreenCTM();
-      const point=matrix?new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()):null;
-      const inside=point&&Math.abs(point.x)<=width/2&&Math.abs(point.y)<=height/2;
-      void file.arrayBuffer().then(buffer=>edit('insert_embroidery',{bytes:Array.from(new Uint8Array(buffer)),name:file.name,xMm:inside?point!.x:0,yMm:inside?point!.y:0})).then(result=>{if(result.plan){setHidden([]);setCanvasMode('select');setRealistic(false);}}).catch(()=>setMessage('Could not read the embroidery file.'));
-    }else if(/\.(png|jpe?g|webp|bmp|svg)$/i.test(file.name)){setArtworkImport({file});}
-    else setMessage('Choose an embroidery design or a PNG, JPG, WebP, BMP or SVG image.');
+    const matrix=canvasSurface.current?.querySelector<SVGSVGElement>('svg.design-canvas')?.getScreenCTM();
+    const point=matrix?new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()):null;
+    const inside=point&&Math.abs(point.x)<=width/2&&Math.abs(point.y)<=height/2;
+    void importCanvasFile(file,inside?point!.x:0,inside?point!.y:0);
   }}>
 {artworkDrag&&<div className="canvas-artwork-drop" role="status">Drop an embroidery file, image or element onto the hoop</div>}
 <div className={`studio-camera studio-camera-docked ${cameraTop?'studio-camera-top':'studio-camera-bottom'}`} role="group" aria-label="Canvas view">
