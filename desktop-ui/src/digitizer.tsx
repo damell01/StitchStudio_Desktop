@@ -542,7 +542,11 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
               opacity={count>=24?.95:.65}>
               <title>{count} needle penetrations in this square millimeter</title>
             </rect>) : plan.blocks.map((block, index) => <g key={index} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth={mode==="thread"?".43":".3"} strokeLinecap="round" strokeLinejoin="round">
-            {block.runs.map((_, i) => <polyline key={i} points={stitchPaths[index]?.[i]} />)}
+            {block.runs.map((_, i) => mode==='thread'?<g key={i}>
+              <polyline points={stitchPaths[index]?.[i]} stroke="#000" strokeOpacity=".22" strokeWidth=".50" transform="translate(.045 .065)"/>
+              <polyline points={stitchPaths[index]?.[i]} strokeWidth=".40"/>
+              <polyline points={stitchPaths[index]?.[i]} stroke="#fff" strokeOpacity=".22" strokeWidth=".11" transform="translate(-.06 -.06)"/>
+            </g>:<polyline key={i} points={stitchPaths[index]?.[i]} />)}
           </g>)}
         </svg>
       </>}
