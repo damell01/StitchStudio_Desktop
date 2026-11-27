@@ -1029,6 +1029,9 @@ const selectionRequest=useRef(0);
 type WordPreview = {id:number;uid:number;before:Plan;after:Plan;view:[number,number,number,number]};
 const [wordPreview,setWordPreview]=useState<{basis:Plan;result:WordPreview}|null>(null);
 const [wordPreviewPending,setWordPreviewPending]=useState(false);
+const [fontGallery,setFontGallery]=useState<{key:string;items:{font:string;preview:WordPreview}[]} | null>(null);
+const fontGalleryKey=JSON.stringify([recognizedIds,recognizedOriginal,convertWord]);
+
 const reviewedWord=wordPreview?.basis===plan?wordPreview?.result:null;
 function dismissWordReview(){
   ++selectionRequest.current;
@@ -1204,6 +1207,25 @@ function selectObject(object:EditableObject|null,inspectLettering=true,forceWord
     const wordShapes=[...letters,...components];
     return recognizeWord(wordShapes,request,forceWord);
   }).catch(()=>{});
+}
+async function compareWordFonts(){
+ const text=recognizedOriginal.trim(),replacement=convertWord.trim();
+ if(!plan||busy||wordPreviewPending||!text||!replacement||!recognizedIds.length)return;
+ const request=++selectionRequest.current,key=fontGalleryKey;
+ const fonts=Array.from(new Set([convertFont,...convertFonts.filter(f=>/script|monogram|embroidery|serif|arial|georgia/i.test(f)),...convertFonts])).filter(Boolean).slice(0,4);
+ setWordPreview(null);setWordPreviewPending(true);setRecognitionError('');setFontGallery({key,items:[]});
+ const items:{font:string;preview:WordPreview}[]=[];
+ try{
+   for(const font of fonts){
+     if(selectionRequest.current!==request)return;
+     try{
+       const preview=await invoke<WordPreview>('preview_selected_lettering',{uids:recognizedIds,text,font,replacement});
+       if(selectionRequest.current!==request)return;
+       items.push({font,preview});setFontGallery({key,items:[...items]});
+     }catch{if(selectionRequest.current!==request)return;}
+   }
+   if(!items.length&&selectionRequest.current===request)setRecognitionError('No font comparison previews could be generated.');
+ }finally{if(selectionRequest.current===request)setWordPreviewPending(false);}
 }
 async function previewWordReview(){
   const text=recognizedOriginal.trim(),replacement=convertWord.trim();
@@ -2077,6 +2099,12 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     }}/></label>
     <SearchChoice label="Font" disabled={busy||wordPreviewPending} value={convertFont} options={convertFonts.map(f=>({value:f,label:f}))}
       onChoose={font=>{setConvertFont(font);setRecognitionError('');setWordPreview(null)}}/>
+    <button disabled={busy||wordPreviewPending||!recognizedOriginal.trim()||!convertWord.trim()||!convertFont} onClick={()=>void compareWordFonts()}>Compare embroidery fonts</button>
+    {fontGallery?.key===fontGalleryKey&&fontGallery.items.length>0&&<div className="density-comparison-grid" aria-label="Font stitch comparison">
+      <div><strong>Original artwork</strong><StitchCrop plan={fontGallery.items[0].preview.before} view={fontGallery.items[0].preview.view} label="Original lettering"/></div>
+      {fontGallery.items.map(({font,preview})=><div key={font}><strong>{font}</strong><StitchCrop plan={preview.after} view={preview.view} label={font+' generated stitches'}/><button disabled={busy||wordPreviewPending} aria-pressed={convertFont===font} onClick={()=>{setConvertFont(font);setWordPreview(null);setRecognitionError('')}}>Choose font</button></div>)}
+      <small>Choose a font, then Preview lettering to validate it before applying.</small>
+    </div>}
     {recognitionError&&<p role="alert">{recognitionError}</p>}
     {reviewedWord&&<div className="density-comparison-grid">
       {([['Traced',reviewedWord.before],['Editable',reviewedWord.after]] as const).map(([label,preview])=><div key={label}>
