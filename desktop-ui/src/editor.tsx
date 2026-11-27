@@ -221,9 +221,17 @@ async function addCanvasText(){
     const settings={...canvasEditTarget?.settings,
       text:canvasTextValue.trim(),font,size:canvasLetterHeight,spacing:canvasLetterSpacing,arc:canvasEditTarget?.settings.arc??0,bold:canvasLetterBold,italic:canvasLetterItalic,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:canvasEditTarget?.settings.align??'center',
     };
-    const next=canvasEditTarget?await invoke<Plan>('update_lettering',{uid:canvasEditTarget.uid,settings}):await invoke<Plan>('insert_lettering_settings',{placement,settings});
+    let next:Plan|null;
+    if(canvasEditTarget){
+      if(lockedObjects.includes(canvasEditTarget.uid))throw new Error('Unlock this lettering before editing.');
+      await invoke('update_lettering',{uid:canvasEditTarget.uid,settings});
+      next=await invoke<Plan|null>('current_preview');
+    }else{
+      next=await invoke<Plan>('insert_lettering_settings',{placement,settings});
+    }
+    if(!next)throw new Error('The embroidery preview could not be refreshed.');
     if(next.blocks.length!==plan?.blocks.length||next.blocks.some((block,index)=>block.color.join(',')!==plan?.blocks[index]?.color.join(',')))setThreadAssignments({});
-    setPlan(next);setPlayhead(null);setMessage(canvasEditTarget?'Lettering updated.':'Lettering added. Double-click it to edit.');setCanvasEditTarget(null);
+    setPlan(next);setPlayhead(null);setHidden([]);setMessage(canvasEditTarget?'Lettering updated.':'Lettering added. Double-click it to edit.');setCanvasEditTarget(null);
     setCanvasText(null);setCanvasTyping(false);
   }catch(error){setCanvasTextError(error instanceof Error?error.message:String(error));}
   finally{canvasTextSaving.current=false;setBusy(false);setInlineWork('');}
