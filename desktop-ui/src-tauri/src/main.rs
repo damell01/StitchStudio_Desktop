@@ -1149,7 +1149,24 @@ fn remove_interior_hatching(source:&zigzag::document::Document,uids:Option<&[usi
    if i==j||q.color!=s.color||source.records_text(j){return false}
    let a=&bounds[j];!a.is_empty()&&a.width()>b.width()*1.5&&a.height()>b.height()*1.5&&b.min.x>a.min.x+5.0&&b.max.x<a.max.x-5.0&&b.min.y>a.min.y+5.0&&b.max.y<a.max.y-5.0
   });
-  if enclosed{remove.push(i);}
+  if enclosed{
+   // Require a repeated local texture, not an isolated stroke or glyph.
+   let horizontal=b.width()>b.height();
+   let length=b.width().max(b.height());
+   let width=b.width().min(b.height()).max(0.1);
+   let neighbors=source.shapes.iter().enumerate().filter(|(j,q)|{
+    if *j==i||q.color!=s.color||source.records_text(*j)||!q.groups.is_empty(){return false}
+    let a=&bounds[*j];if a.is_empty()||(a.width()>a.height())!=horizontal{return false}
+    let l=a.width().max(a.height());let w=a.width().min(a.height());
+    if l<length*0.55||l>length*1.8||w<width*0.4||w>width*2.0{return false}
+    let dx=((a.min.x+a.max.x)-(b.min.x+b.max.x)).abs()*0.5;
+    let dy=((a.min.y+a.max.y)-(b.min.y+b.max.y)).abs()*0.5;
+    let (along,across)=if horizontal{(dx,dy)}else{(dy,dx)};
+    along<length*0.35&&across>width*0.5&&across<width*12.0
+     &&matches!(&q.geometry,Geometry::Fill{rings,rule} if zigzag::design::thin_centerline(rings,*rule).is_some())
+   }).take(3).count();
+   if neighbors>=3{remove.push(i);}
+  }
  }
  if remove.len()<4{return None}
  doc.delete_many(&remove).ok()?;doc.sync().ok()?;Some(doc)
