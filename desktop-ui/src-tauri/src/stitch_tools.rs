@@ -86,6 +86,28 @@ pub(super) async fn design_issues(
     .map_err(|e| e.to_string())?
 }
 
+#[derive(serde::Serialize)]
+pub(super) struct CoverageOverlay {
+    uid: usize,
+    points: Vec<[f64;2]>,
+    percent: f64,
+}
+
+#[tauri::command]
+pub(super) async fn coverage_gap_preview(app: tauri::AppHandle) -> Result<Vec<CoverageOverlay>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state=app.state::<Mutex<Workspace>>();
+        let (source,plan)={
+            let w=state.lock().map_err(|e|e.to_string())?;
+            (w.source.clone(),w.current.clone())
+        };
+        let (Some(doc),Some(plan))=(source,plan) else{return Ok(Vec::new())};
+        Ok(checks::coverage_gaps(&doc.shapes,&plan,&doc.plan_options()).into_iter()
+            .filter_map(|g|Some(CoverageOverlay{uid:doc.shapes.get(g.shape)?.uid,percent:100.0*g.missing as f64/g.inside as f64,points:g.points}))
+            .collect())
+    }).await.map_err(|e|e.to_string())?
+}
+
 #[derive(serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(super) enum PathEdit {
