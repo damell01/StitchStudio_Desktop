@@ -1990,6 +1990,15 @@ fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)-
                     .filter(|i|i.message.starts_with("Possible underfilled artwork:")).filter_map(|i|i.shape).collect::<Vec<_>>()
             };
             let flagged=gaps(&document,&design);
+            // Compare the actual sampled missing fraction as well as warning
+            // count, so a repair can improve a glyph without crossing the
+            // warning threshold in one step.
+            let gap_score=|doc:&zigzag::document::Document,p:&Design|{
+                let (samples,complete)=zigzag::checks::coverage_gap_scan(&doc.shapes,p,&doc.plan_options());
+                let score=samples.iter().map(|g|g.missing as f64/(g.inside.max(1) as f64)).sum::<f64>();
+                (score,complete)
+            };
+            let (baseline_gap,baseline_complete)=gap_score(document,design);
             if !flagged.is_empty(){
                 let baseline=measure_stitches(&design);
                 let mut best=None;
@@ -2021,7 +2030,9 @@ fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)-
                     let p=trial.plan();
                     let audit=measure_stitches(&p);
                     let remaining=gaps(&trial,&p);
-                    if remaining.len()<flagged.len()&&remaining.iter().all(|i|flagged.contains(i))
+                    let (score,complete)=gap_score(&trial,&p);
+                    if baseline_complete&&complete&&score+0.01<baseline_gap
+                        &&remaining.len()<=flagged.len()&&remaining.iter().all(|i|flagged.contains(i))
                         &&p.stitch_count()<=design.stitch_count().saturating_mul(125)/100
                         &&audit.long<=baseline.long&&audit.zero<=baseline.zero
                         &&production_not_worse(design,&p)
@@ -2031,11 +2042,11 @@ fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)-
                         &&design.per_shape.len()==p.per_shape.len()
                         &&design.per_shape.iter().zip(&p.per_shape).all(|(&a,&b)|a==0||b>0)
                         &&validate_resized_design(&p).is_ok()
-                        &&best.as_ref().is_none_or(|(_,old,n):&(zigzag::document::Document,Design,usize)|remaining.len()<*n||(remaining.len()==*n&&p.stitch_count()<old.stitch_count())){
-                        best=Some((trial,p,remaining.len()));
+                        &&best.as_ref().is_none_or(|(_,old,n,old_score):&(zigzag::document::Document,Design,usize,f64)|remaining.len()<*n||(remaining.len()==*n&&(score+0.001<*old_score||((score-*old_score).abs()<=0.001&&p.stitch_count()<old.stitch_count())))){
+                        best=Some((trial,p,remaining.len(),score));
                     }
                 }
-                if let Some((next,p,_))=best{return Some((next,p));}
+                if let Some((next,p,_,_))=best{return Some((next,p));}
             }
         }
     None
