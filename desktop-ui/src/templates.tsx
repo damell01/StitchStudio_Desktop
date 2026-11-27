@@ -243,8 +243,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
         <button type="button" className="template-art-select" aria-label={(quickInsert?'Insert ':'Select ')+template.name} aria-pressed={onPreview?selectedId===template.id:undefined} onClick={()=>onPreview?onPreview(template):setSelected(template)}><svg className="template-art" viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{ __html: template.art }} /></button>
         <small>{template.category}</small>
         <h3 title={template.name}>{template.name}</h3>
-        {!onPreview&&<button onClick={() => onPreview ? onPreview(template) : setSelected(template)} aria-label={`Preview ${template.name}`}
-          aria-pressed={onPreview ? selectedId === template.id : undefined}>
+        {!onPreview&&<button onClick={() => setSelected(template)} aria-label={`Preview ${template.name}`}>
           Preview design <ArrowRight size={15} />
         </button>}
       </article>)}
