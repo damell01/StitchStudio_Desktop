@@ -15,6 +15,20 @@ In hPanel, enable SSH, authorize a deployment public key, and record the SSH use
 3. Generate or locate the access key using the steps below. Upload only `access-key.sha256` to `stitch-studio-private`. Give the 64-character access key only to the people allowed to install updates. Keep it out of source control and URLs.
 4. Open `https://www.dbellcreations.com/stitch-updates/latest.json` without credentials. It must return **401**. Use the `www` address directly so the app never sends its access key across a redirect.
 
+To verify your access key from PowerShell, read it directly from your private release folder. A **204** confirms the endpoint accepts the key and is waiting for its first release. A **200** means it serves a manifest. A **503** means the server cannot read the access-key hash or the hash is invalid. A **401** with the key means the header or key did not match.
+
+```powershell
+$stitchRelease = Join-Path $env:LOCALAPPDATA 'StitchStudioRelease'
+$feedUrl = 'https://www.dbellcreations.com/stitch-updates/latest.json'
+$feedKey = (Get-Content (Join-Path $stitchRelease 'update-access.key') -Raw).Trim()
+try {
+    $response = Invoke-WebRequest -UseBasicParsing -Uri $feedUrl -MaximumRedirection 0 -Headers @{Authorization = "Bearer $feedKey"}
+    $response.StatusCode
+} finally {
+    Remove-Variable feedKey
+}
+```
+
 ## Generate or locate the keys on Windows
 
 Run this from the Stitch Studio repo in PowerShell. If you already have signing keys for an installed feed-enabled build, reuse that key pair and password. Keep the files in your private release folder and back them up before publishing.
@@ -58,6 +72,8 @@ The workflow defaults to the dbellcreations.com address. For another hostname, o
 ## Build and publish a release
 
 Choose a new version higher than every installed build using this feed. Keep the same updater public key in every build.
+
+You can provision Hostinger and save the GitHub settings before releasing. Publish from a Dev revision that passes **Desktop production checks**. The signed release uses those checks before publishing its packages to Hostinger.
 
 From the repo root in PowerShell, tag the current `Dev` commit with a new release version. This starts the workflow from `Dev` even when GitHub's **Run workflow** button is unavailable.
 
