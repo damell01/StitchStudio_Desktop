@@ -76,9 +76,31 @@ const garments = {
 type GarmentName = keyof typeof garments;
 const catalog: {id:GarmentName;label:string;group:string;size:SizeName;color:string}[]=[{id:'shirt',label:'Adult T-shirt',group:'Adult',size:'adult',color:'#f9f8f5'},{id:'shirt',label:'Youth T-shirt',group:'Kids',size:'kids',color:'#b4d4ee'},{id:'shirt',label:'Toddler T-shirt',group:'Kids',size:'toddler',color:'#d9c4ef'},{id:'polo',label:'Collared polo',group:'Kids',size:'kids',color:'#344967'},{id:'sweatshirt',label:'Sweatshirt',group:'Adult',size:'adult',color:'#c7c7cc'},{id:'hoodie',label:'Hoodie',group:'Adult',size:'adult',color:'#c9b3e6'},{id:'zip',label:'Zip hoodie',group:'Adult',size:'adult',color:'#9ebbd6'},{id:'bubble',label:'Bubble romper',group:'Infant',size:'toddler',color:'#b4d4ee'},{id:'onesie',label:'Onesie',group:'Infant',size:'toddler',color:'#f9f8f5'},{id:'smocked',label:'Smocked dress',group:'Infant',size:'toddler',color:'#ebadc8'},{id:'bishop',label:'Bishop gown',group:'Infant',size:'toddler',color:'#f2e4db'},{id:'dress',label:'Dress',group:'Kids',size:'kids',color:'#c9b3e6'},{id:'shorts',label:'Shorts',group:'Kids',size:'kids',color:'#a6bca8'},{id:'cap',label:'Cap',group:'Accessories',size:'adult',color:'#344967'},{id:'longSleeve',label:'Long-sleeve shirt',group:'Kids',size:'kids',color:'#b4d4ee'},{id:'raglan',label:'Raglan shirt',group:'Kids',size:'kids',color:'#f9f8f5'},{id:'bib',label:'Baby bib',group:'Infant',size:'toddler',color:'#ebadc8'},{id:'towel',label:'Hand towel',group:'Accessories',size:'adult',color:'#f2e4db'},{id:'blanket',label:'Baby blanket',group:'Infant',size:'adult',color:'#d9c4ef'}];
 
+const fabricTextures={jersey:'Cotton jersey',fleece:'Fleece',woven:'Woven cotton',pique:'Piqué knit',terry:'Terry cloth',smooth:'Smooth'} as const;
+type FabricTexture=keyof typeof fabricTextures;
+function defaultTexture(name:GarmentName):FabricTexture{
+ return name==='towel'?'terry':name==='hoodie'||name==='zip'||name==='sweatshirt'?'fleece':name==='polo'?'pique':name==='smocked'||name==='bishop'||name==='cap'||name==='dress'?'woven':'jersey';
+}
+function paintFabricTexture(context:CanvasRenderingContext2D,texture:FabricTexture){
+ if(texture==='smooth')return;
+ const tile=document.createElement('canvas');tile.width=24;tile.height=24;
+ const c=tile.getContext('2d');if(!c)return;
+ c.lineWidth=.65;
+ if(texture==='woven'||texture==='jersey'){
+  for(let x=0;x<24;x+=3){c.strokeStyle='#00000015';c.beginPath();c.moveTo(x,0);c.lineTo(x,24);c.stroke();}
+  for(let y=0;y<24;y+=texture==='woven'?3:6){c.strokeStyle='#ffffff25';c.beginPath();c.moveTo(0,y);c.lineTo(24,y);c.stroke();}
+ }else{
+  for(let y=0;y<24;y+=4)for(let x=0;x<24;x+=4){
+   const shift=(y/4%2)*2;
+   c.strokeStyle='#00000017';c.beginPath();c.ellipse(x+shift,y,texture==='terry'?1.5:.8,texture==='pique'?1.5:.9,0,0,Math.PI*2);c.stroke();
+   c.strokeStyle='#ffffff26';c.beginPath();c.arc(x+shift,y,1,Math.PI,Math.PI*2);c.stroke();
+  }
+ }
+ const pattern=context.createPattern(tile,'repeat');if(pattern){context.fillStyle=pattern;context.fillRect(0,0,size.width,size.height);}
+}
 function paintMockup(
   canvas: HTMLCanvasElement, garment: Garment, placement: Placement, blocks: Block[],
-  fabric: string, xOffset: number, yOffset: number, scale: number,
+  fabric: string, xOffset: number, yOffset: number, scale: number, texture:FabricTexture, threadWidth:number, sheen:number,
 ) {
   const context = canvas.getContext('2d');
   if (!context) return;
@@ -104,14 +126,7 @@ function paintMockup(
   shade.addColorStop(1, '#1a102d46');
   context.fillStyle = shade;
   context.fillRect(0, 0, size.width, size.height);
-  context.strokeStyle = '#432c580c';
-  context.lineWidth = .45;
-  context.beginPath();
-  for (let x = -440; x < size.width; x += 4) {
-    context.moveTo(x, 0);
-    context.lineTo(x + 440, 440);
-  }
-  context.stroke();
+  paintFabricTexture(context,texture);
   context.lineWidth = 1.4;
   context.strokeStyle = '#22183259';
   context.stroke(new Path2D(garment.seams));
@@ -135,11 +150,11 @@ function paintMockup(
     context.save();
     context.translate(.18,.22);
     context.strokeStyle = '#1a112b65';
-    context.lineWidth = .58;
+    context.lineWidth = threadWidth*1.38;
     context.stroke();
     context.restore();
     context.strokeStyle = `rgb(${block.color.join(',')})`;
-    context.lineWidth = .42;
+    context.lineWidth = threadWidth;
     context.stroke();
     // Batch highlights by direction instead of issuing a draw per stitch.
     const highlights=Array.from({length:4},()=>new Path2D());
@@ -149,8 +164,8 @@ function paintMockup(
       const p=highlights[Math.min(3,Math.floor(Math.abs(dx/len)*4))];
       p.moveTo(a[0],a[1]-.09);p.lineTo(b[0],b[1]-.09);
     }
-    context.lineWidth=.12;
-    highlights.forEach((p,i)=>{context.strokeStyle=`rgba(255,255,255,${.08+i*.07})`;context.stroke(p)});
+    context.lineWidth=threadWidth*.29;
+    highlights.forEach((p,i)=>{context.strokeStyle=`rgba(255,255,255,${sheen*(.08+i*.07)})`;context.stroke(p)});
   }
   context.restore();
 }
@@ -173,6 +188,10 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
   const turn=useRef<{id:number;x:number;angle:number}|null>(null);
   const [placementIndex,setPlacement] = useState(0);
   const [color,setColor] = useState('#e6dced');
+  const [textureOverride,setTextureOverride]=useState<FabricTexture|null>(null);
+  const [threadWidth,setThreadWidth]=useState(.40);
+  const [sheen,setSheen]=useState(.65);
+  const texture=textureOverride??defaultTexture(garmentName);
   const [showGuide,setShowGuide]=useState(false);
   const drag=useRef<{id:number;x:number;y:number;ox:number;oy:number}|null>(null);
   const [dragging,setDragging]=useState(false);
@@ -208,9 +227,9 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
   useEffect(()=>{
     if(!open || !canvas.current)return;
     const surface=canvas.current;
-    const frame=requestAnimationFrame(()=>paintMockup(surface,garment,placement,blocks,color,xOffset,yOffset,scale));
+    const frame=requestAnimationFrame(()=>paintMockup(surface,garment,placement,blocks,color,xOffset,yOffset,scale,texture,threadWidth,sheen));
     return ()=>cancelAnimationFrame(frame);
-  },[open,garment,placement,blocks,color,xOffset,yOffset,scale,is3d]);
+  },[open,garment,placement,blocks,color,xOffset,yOffset,scale,is3d,texture,threadWidth,sheen]);
 
   async function saveProof() {
     setSaveError('');
@@ -224,7 +243,7 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
       if(is3d){
         if(!hoodieCapture.current?.drawOnto(context))throw new Error('Wait for the 3D hoodie to load, then try again.');
       }else{
-        paintMockup(proof,garment,placement,blocks,color,xOffset,yOffset,scale);
+        paintMockup(proof,garment,placement,blocks,color,xOffset,yOffset,scale,texture,threadWidth,sheen);
       }
       context.setTransform(1,0,0,1,0,0);
       context.globalCompositeOperation='destination-over';
@@ -325,7 +344,7 @@ export function GarmentPreview({blocks}: {blocks:Block[]}) {
                 onChange={event=>setAngle(Number(event.target.value))}/></label>}
             </>}
             {garmentName==='hoodie'&&unavailable&&<p role="status">3D is unavailable here. Showing the flat mockup.</p>}
-            <label className="garment-color">Fabric color<input type="color" value={color} onChange={event=>setColor(event.target.value)}/></label>
+            {!is3d&&<details><summary>Fabric and thread appearance</summary><label>Fabric texture<select value={textureOverride??'auto'} onChange={e=>setTextureOverride(e.target.value==='auto'?null:e.target.value as FabricTexture)}><option value="auto">Automatic ({fabricTextures[defaultTexture(garmentName)]})</option>{Object.entries(fabricTextures).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>Visual thread width · {threadWidth.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={threadWidth} onChange={e=>setThreadWidth(Number(e.target.value))}/></label><label>Thread sheen · {Math.round(sheen*100)}%<input type="range" min="0" max="1" step=".05" value={sheen} onChange={e=>setSheen(Number(e.target.value))}/></label><button onClick={()=>{setTextureOverride(null);setThreadWidth(.40);setSheen(.65)}}>Reset appearance</button><small>Visual approximation only; does not change stitch settings.</small></details>}<label className="garment-color">Fabric color<input type="color" value={color} onChange={event=>setColor(event.target.value)}/></label>
             <div className="garment-fabric-swatches" role="group" aria-label="Fabric presets">{[["Lavender","#e6dced"],["White","#f9f8f5"],["Black","#24232a"],["Navy","#263953"],["Sage","#a4b4a0"],["Rose","#d9a1ad"]].map(([name,value])=><button key={name} title={name} aria-label={name} aria-pressed={color===value} style={{backgroundColor:value}} onClick={()=>setColor(value)}/>)}</div><button aria-expanded={showGuide} onClick={()=>setShowGuide(v=>!v)}>{showGuide?"Hide controls guide":"How to move the design"}</button>{showGuide&&<p className="muted">{is3d?'Drag to move the design or select Rotate garment. Hold Shift to rotate.':'Drag the design on the garment, or use arrow keys on the preview.'}</p>}
             <div className="garment-view-switch"><button onClick={centerDesign}>Center design</button><button onClick={()=>{setX('');setY('');}}>Reset placement</button></div>
             {Number.isFinite(bounds.left)&&<small>Design: {(bounds.right-bounds.left).toFixed(1)} × {(bounds.bottom-bounds.top).toFixed(1)} mm</small>}
