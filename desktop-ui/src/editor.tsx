@@ -119,6 +119,23 @@ const [artworkImport,setArtworkImport]=useState<{file:File|null}|null>(null);
 const uploadInput=useRef<HTMLInputElement>(null);
 const [recentStarterIds,setRecentStarterIds]=useState<string[]>(()=>{try{const ids=JSON.parse(localStorage.getItem('studio-design-recent')||'[]');return Array.isArray(ids)?ids.filter((id:unknown)=>typeof id==='string'):[]}catch{return []}});
 useEffect(()=>{const refresh=()=>{try{const ids=JSON.parse(localStorage.getItem('studio-design-recent')||'[]');if(Array.isArray(ids))setRecentStarterIds(ids.filter((id:unknown)=>typeof id==='string'))}catch{}};window.addEventListener('studio-template-used',refresh);return()=>window.removeEventListener('studio-template-used',refresh)},[]);
+const batchImportLock=useRef(false);
+async function importCanvasFiles(files:File[],xMm=0,yMm=0){
+  if(busy||editLock.current||batchImportLock.current||!files.length)return;
+  if(files.length===1){await importCanvasFile(files[0],xMm,yMm);return;}
+  if(files.some(file=>! /\.(dst|pes|jef|exp|vp3|hus|xxx|pec|sew|tap|u01)$/i.test(file.name))){
+    setMessage('Import multiple embroidery files together, or digitize images one at a time.');return;
+  }
+  batchImportLock.current=true;
+  let imported=0;
+  try{
+    for(const [index,file] of files.entries()){
+      const offset=Math.min(index*5,Math.min(width,height)*.2);
+      if(await importCanvasFile(file,Math.max(-width/2,Math.min(width/2,xMm+offset)),Math.max(-height/2,Math.min(height/2,yMm+offset))))imported++;
+    }
+    setMessage(imported+' of '+files.length+' embroidery files imported. Check placement and hoop fit.');
+  }finally{batchImportLock.current=false;}
+}
 async function importCanvasFile(file:File,xMm=0,yMm=0){
   if(busy||editLock.current)return;
   if(/\.(dst|pes|jef|exp|vp3|hus|xxx|pec|sew|tap|u01)$/i.test(file.name)){
@@ -126,7 +143,7 @@ async function importCanvasFile(file:File,xMm=0,yMm=0){
     try{
       const buffer=await file.arrayBuffer();
       const result=await edit('insert_embroidery',{bytes:Array.from(new Uint8Array(buffer)),name:file.name,xMm,yMm});
-      if(result.plan){setHidden([]);setCanvasMode('select');setRealistic(false);}
+      if(result.plan){setHidden([]);setCanvasMode('select');setRealistic(false);return true;}
     }catch{setMessage('Could not read the embroidery file.');}
   }else if(/\.(png|jpe?g|webp|bmp|svg)$/i.test(file.name)){setArtworkImport({file});}
   else setMessage('Choose a supported embroidery design or image.');
@@ -1494,7 +1511,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <h1 title={plan?.name || 'Untitled design'}>{plan?.name || 'Untitled design'}</h1>
   </div>
   <EditorHelp/>
-  <input ref={uploadInput} type="file" hidden accept=".dst,.pes,.jef,.exp,.vp3,.hus,.xxx,.pec,.sew,.tap,.u01,.png,.jpg,.jpeg,.webp,.bmp,.svg" onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void importCanvasFile(file)}}/>
+  <input ref={uploadInput} type="file" multiple hidden accept=".dst,.pes,.jef,.exp,.vp3,.hus,.xxx,.pec,.sew,.tap,.u01,.png,.jpg,.jpeg,.webp,.bmp,.svg" onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value='';void importCanvasFiles(files)}}/>
   <EditorDigitizer active={artworkImport} onOpen={()=>setArtworkImport({file:null})} onClose={()=>setArtworkImport(null)} disabled={busy} onInsert={async(id,strength)=>{
     const result=await invoke<Plan>('insert_digitizer_draft',{id,strength});
     setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);
@@ -1734,7 +1751,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     const matrix=canvasSurface.current?.querySelector<SVGSVGElement>('svg.design-canvas')?.getScreenCTM();
     const point=matrix?new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()):null;
     const inside=point&&Math.abs(point.x)<=width/2&&Math.abs(point.y)<=height/2;
-    void importCanvasFile(file,inside?point!.x:0,inside?point!.y:0);
+    void importCanvasFiles(Array.from(event.dataTransfer.files),inside?point!.x:0,inside?point!.y:0);
   }}>
 {artworkDrag&&<div className="canvas-artwork-drop" role="status">Drop an embroidery file, image or element onto the hoop</div>}
 <div className={`studio-camera studio-camera-docked ${cameraTop?'studio-camera-top':'studio-camera-bottom'}`} role="group" aria-label="Canvas view">
