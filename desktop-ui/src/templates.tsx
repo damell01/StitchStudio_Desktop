@@ -79,6 +79,12 @@ function readIds(key: string): string[] {
   }
 }
 
+export function rememberTemplate(id:string){
+  const next=[id,...readIds('studio-design-recent').filter(previous=>previous!==id)].slice(0,20);
+  localStorage.setItem('studio-design-recent',JSON.stringify(next));
+  window.dispatchEvent(new Event('studio-template-used'));
+  return next;
+}
 function TemplatePreview({ template, widthMm, insert, onCancel, onChoose }: {
   template: Template; widthMm: number; insert: boolean; onCancel: () => void; onChoose: () => void;
 }) {
@@ -129,6 +135,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   const [category, setCategory] = useState('All');
   const [favorites, setFavorites] = useState(() => readIds('studio-design-favorites'));
   const [recent, setRecent] = useState(() => readIds('studio-design-recent'));
+  useEffect(()=>{const refresh=()=>setRecent(readIds('studio-design-recent'));window.addEventListener('studio-template-used',refresh);return()=>window.removeEventListener('studio-template-used',refresh)},[]);
   const [selected, setSelected] = useState<Template | null>(null);
   const results = templates.filter(template => (
     category === 'All' || category === template.category
@@ -141,9 +148,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   const shown = onPreview ? results.slice(0,limit) : page.items;
 
   function choose(id: string) {
-    const next = [id, ...recent.filter(previous => previous !== id)].slice(0, 20);
-    setRecent(next);
-    localStorage.setItem('studio-design-recent', JSON.stringify(next));
+    setRecent(rememberTemplate(id));
     setSelected(null);
     onChoose?.(id);
   }
