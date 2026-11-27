@@ -31,7 +31,7 @@ type Review = {
 
 const defaults = {
   widthMm: 80, colors: 0, useOwnedThreads: localStorage.getItem('studio-use-owned-threads') === 'true', detail: 60, fabric: 'standard',
-  removeBackground: true, cleanup: true, tolerance: 32, thinLines: false, speckleMm: 1, optimizationStrength: 2, productionSpeed: 800, productionTrimSeconds: 3,
+  artworkSimplification: null as number|null, removeBackground: true, cleanup: true, tolerance: 32, thinLines: false, speckleMm: 1, optimizationStrength: 2, productionSpeed: 800, productionTrimSeconds: 3,
 };
 // All imports use the same automatic pipeline; gallery metadata must not force a palette.
 const artworkMimes: Record<string, string> = {
@@ -341,10 +341,10 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
         <FabricPicker value={settings.fabric} disabled={busy} onChange={fabric => update('fabric', fabric)}/>
         {!vector && <label><input type="checkbox" checked={settings.useOwnedThreads} disabled={!readThreads().some(t=>t.stock>0)} onChange={e=>{localStorage.setItem('studio-use-owned-threads',String(e.target.checked));update('useOwnedThreads',e.target.checked)}}/> Match my in-stock threads ({readThreads().filter(t=>t.stock>0).length})</label>}
         {!vector&&<section className="digitizer-options" aria-label="Artwork simplification">
-          <h3>Simplify before digitizing</h3><small>Reduce tiny texture and traced detail before generating stitches. Preview the result to check lettering and outlines.</small>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
-          {[{label:'Detailed',detail:80},{label:'Balanced',detail:50},{label:'Simplified',detail:20}].map(p=><button type="button" key={p.label} disabled={busy} aria-pressed={settings.detail===p.detail&&settings.cleanup} onClick={()=>setSettings(old=>({...old,detail:p.detail,cleanup:true}))}>{p.label}</button>)}
-          </div>
+          <h3>Smart Simplify · Offline</h3><small>Rebuild artwork before final stitch generation. Preserve recognizable shapes while removing decorative detail.</small>
+          <div role="group" aria-label="Artwork simplification" style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:6,margin:'8px 0'}}>{[{label:'Original',floor:null},{label:'Balanced',floor:93},{label:'Aggressive',floor:85},{label:'Maximum',floor:65}].map(p=><button type="button" key={p.label} className={settings.artworkSimplification===p.floor?'primary':''} disabled={busy} aria-pressed={settings.artworkSimplification===p.floor} onClick={()=>setSettings(old=>({...old,artworkSimplification:p.floor}))}>{p.label}</button>)}</div>
+          {settings.artworkSimplification!==null&&<label>Preserve appearance · {settings.artworkSimplification}%<input type="range" min={65} max={100} value={settings.artworkSimplification} disabled={busy} onChange={e=>setSettings(old=>({...old,artworkSimplification:Number(e.target.value)}))}/></label>}
+          <small>Review the regenerated stitch preview. If no safe improvement is found, the original trace is retained.</small>
           <button type="button" aria-pressed={settings.cleanup&&settings.colors===4} onClick={()=>setSettings(old=>({...old,cleanup:true,colors:4,detail:35}))}>Simplify textured mockup & colors</button>
         </section>}
         {!vector && <details className="digitizer-options">
