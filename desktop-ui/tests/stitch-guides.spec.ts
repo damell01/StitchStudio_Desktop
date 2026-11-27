@@ -30,7 +30,7 @@ test('reuses object settings and drags a pinned sewing entry in design units', a
   const select=(uid:number)=>canvas.locator('[data-artwork-uid="'+uid+'"]').click();
   const calls=()=>page.evaluate(()=>(window as unknown as {guideCalls:{command:string;args:Record<string,unknown>}[]}).guideCalls);
   await select(10);
-  await page.getByRole('group',{name:'Editor tools'}).getByRole('button',{name:'Stitches'}).click();
+  await page.getByRole('button',{name:'Open object stitch settings',exact:true}).click();
   await page.getByRole('button',{name:'Object stitch tools'}).click();
   const dialog=page.getByRole('dialog',{name:'Object stitch tools'});
   await dialog.getByRole('button',{name:'Copy stitch settings'}).click();

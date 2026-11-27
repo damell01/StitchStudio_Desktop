@@ -18,7 +18,7 @@ test.beforeEach(async({page})=>{
       if(command==='editable_objects')return objects;
       if(command==='coverage_gap_preview')return [{uid:12,points:[[.5,.5]],percent:22}];
       if(command==='design_issues')return [];
-      if(command==='recognize_selected_lettering')return [{text:'SEEO',font:'Arial'}];
+      if(command==='recognize_selected_lettering')return sessionStorage.getItem('sew-out-no-ocr')?[]:[{text:'SEEO',font:'Arial'}];
       if(command==='lettering_fonts')return ['Arial'];
       if(command==='convert_selected_lettering')return {...plan};
       if(command==='preview_density_repair')return {id:8,before:plan,after:{...plan,stitches:26},hits_before:30,hits_after:26,footprint_overlap:97};
@@ -56,6 +56,19 @@ test('corrects a misread word only after confirmation and can keep the original 
   await review.getByRole('button',{name:'Apply lettering'}).click();
   await expect.poll(async()=>(await logged(page)).find(call=>call.command==='convert_selected_lettering')?.args)
     .toEqual({uids:[12],text:'SEED',font:'Arial',replacement:'GROW'});
+});
+
+test('accepts manual lettering when recognition cannot read the traced shapes',async({page})=>{
+  await page.evaluate(()=>sessionStorage.setItem('sew-out-no-ocr','1'));
+  await page.locator('.design-canvas [data-artwork-uid="12"]').click();
+  await (await inspector(page)).getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByRole('button',{name:'Recognize selected word'}).click();
+  const review=page.getByRole('region',{name:'Review recognized lettering'});
+  await expect(review.getByRole('textbox',{name:'Original word'})).toHaveValue('');
+  await review.getByRole('textbox',{name:'Original word'}).fill('SEED');
+  await review.getByRole('button',{name:'Apply lettering'}).click();
+  await expect.poll(async()=>(await logged(page)).find(call=>call.command==='convert_selected_lettering')?.args)
+    .toEqual({uids:[12],text:'SEED',font:'Arial',replacement:'SEED'});
 });
 
 test('locates a density hotspot and applies the exact reviewed proposal',async({page})=>{
