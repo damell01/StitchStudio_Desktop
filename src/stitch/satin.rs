@@ -370,7 +370,7 @@ pub fn strip(r: &Rails, t0: f64, t1: f64) -> Rails {
 /// Rails for a satin of `width` along a single centerline.
 pub fn rails_from_centerline(line: &[P], closed: bool, width: f64) -> Rails {
     let mut base: Polyline = line.to_vec();
-    if closed && base.len() > 2 {
+    if closed && base.len() > 2 && base[0].dist(*base.last().unwrap()) > 1e-9 {
         base.push(base[0]);
     }
     // Resample finely so offset rails follow curves smoothly.
@@ -452,7 +452,7 @@ pub fn rails_from_subpaths(lines: &[(Polyline, bool)]) -> Option<Rails> {
     let closed = lines[ia].1 && lines[ib].1;
     let close = |l: &Polyline| {
         let mut l = l.clone();
-        if closed && l.len() > 2 {
+        if closed && l.len() > 2 && l[0].dist(*l.last().unwrap()) > 1e-9 {
             l.push(l[0]);
         }
         l
@@ -634,7 +634,7 @@ pub fn auto_rails(comp: &[Polyline]) -> Result<Rails, AutoSatinError> {
         1 => split_at_tips(&comp[0]).ok_or(AutoSatinError::TooComplex)?,
         2 => {
             let mut a = comp[0].clone();
-            a.push(a[0]);
+            if a[0].dist(*a.last().unwrap()) > 1e-9 { a.push(a[0]); }
             let mut b = comp[1].clone();
             align_loop(&a, &mut b);
             Rails {
@@ -1020,5 +1020,22 @@ mod malformed_satin_input_tests {
     fn empty_rings_do_not_break_component_detection() {
         let outer=vec![P::new(0.,0.),P::new(40.,0.),P::new(40.,40.),P::new(0.,40.)];
         assert_eq!(components(&[vec![],outer],FillRule::EvenOdd).len(),1);
+    }
+}
+
+#[cfg(test)]
+mod closed_satin_seam_tests {
+    use super::*;
+    #[test]
+    fn explicitly_closed_centerline_matches_implicit_closure() {
+        let open=vec![P::new(0.,0.),P::new(40.,0.),P::new(40.,40.),P::new(0.,40.)];
+        let mut closed=open.clone();
+        closed.push(open[0]);
+        let a=rails_from_centerline(&open,true,8.);
+        let b=rails_from_centerline(&closed,true,8.);
+        assert_eq!(a.a.len(),b.a.len());
+        assert_eq!(a.b.len(),b.b.len());
+        assert!(a.a.iter().zip(&b.a).all(|(p,q)|p.dist(*q)<1e-9));
+        assert!(a.b.iter().zip(&b.b).all(|(p,q)|p.dist(*q)<1e-9));
     }
 }
