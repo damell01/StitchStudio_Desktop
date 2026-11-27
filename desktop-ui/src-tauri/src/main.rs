@@ -744,6 +744,7 @@ struct SimplifyOptions {
     target_minutes:Option<f64>, target_stitches:Option<usize>, speed:Option<f64>, trim_seconds:Option<f64>, quick:bool,
     solid_only: bool,
     goal_search: bool,
+    texture_reduction: bool,
     solid_color: Option<[u8; 3]>,
     #[serde(skip)]
     budget: Option<SimplifyBudget>,
@@ -1129,6 +1130,42 @@ fn combined_economy_candidate(source:&zigzag::document::Document,original:&Desig
     doc.sync().ok()?;
     let plan=doc.plan();
     Some((doc,plan))
+}
+// Explicit appearance-changing preview; never used by conservative optimization.
+fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
+    let mut mode=options.clone();
+    mode.solid=true;mode.merge=true;mode.auto_types=true;
+    let speed=mode.speed.unwrap_or(800.).clamp(100.,1500.);
+    let trim=mode.trim_seconds.unwrap_or(3.).clamp(0.,30.);
+    let audit=measure_stitches(original);
+    let bounds=original.bounds();
+    let eligible=|d:&Design|{
+        let q=measure_stitches(d);let b=d.bounds();
+        d.stitch_count()>0&&d.stitch_count()<original.stitch_count()
+        &&d.trim_count()<=original.trim_count()
+        &&optimization_seconds(d,speed,trim)<optimization_seconds(original,speed,trim)
+        &&q.long<=audit.long&&q.zero<=audit.zero&&q.short<=audit.short.saturating_add(5)
+        &&bounds.min.dist(b.min)<=10.&&bounds.max.dist(b.max)<=10.
+        &&optimization_quality(original,d,speed,trim).coverage>=75.
+        &&original.blocks.iter().map(|b|b.color).collect::<std::collections::BTreeSet<_>>()
+          ==d.blocks.iter().map(|b|b.color).collect::<std::collections::BTreeSet<_>>()
+    };
+    let mut best=None;
+    for radius in [8.,12.,18.,24.] {
+        if mode.exhausted(){break}
+        let mut doc=rebuild_solid_artwork(source,uids,radius,&mode).unwrap_or_else(||source.clone());
+        if optimize_geometry(&mut doc,&mode,uids,radius).is_err()||mode.exhausted(){continue}
+        let plan=doc.plan();
+        let mut candidates=vec![(doc.clone(),plan.clone())];
+        if !mode.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,uids,5,0.){candidates.push(v);}}
+        for (doc,plan) in candidates {
+            if eligible(&plan)&&best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|plan.stitch_count()<old.stitch_count()){
+                best=Some((doc,plan));
+            }
+        }
+        if best.as_ref().is_some_and(|(_,p)|mode.target_stitches.is_some_and(|n|p.stitch_count()<=n)){break}
+    }
+    best.ok_or("No texture-changing preview passed the coverage and stitch safety checks.".into())
 }
 fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
     let speed=options.speed.unwrap_or(800.).clamp(100.,1500.);let trim=options.trim_seconds.unwrap_or(3.).clamp(0.,30.);
@@ -1640,6 +1677,7 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
         options.budget = Some(budget.clone());
         let mut variants=Vec::new();let mut stored=Vec::new();
         let strengths: &[u8] = if options.solid_only { &[4] }
+            else if options.texture_reduction { &[6] }
             else if options.goal_search { &[3, 2, 5, 4] }
             else if options.quick { &[2, 3] }
             else if previous_id.is_some() { &[5, 4] }
@@ -1647,7 +1685,7 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
         for &strength in strengths{
             if options.exhausted(){break}
             if strength>=4{
-                match if strength==4{choose_silhouette(&source,&original,uids.as_deref(),&options)}else{choose_fast_stitch(&source,&original,uids.as_deref(),&options)}{
+                match if strength==6{choose_texture_reduction(&source,&original,uids.as_deref(),&options)}else if strength==4{choose_silhouette(&source,&original,uids.as_deref(),&options)}else{choose_fast_stitch(&source,&original,uids.as_deref(),&options)}{
                     Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
                     Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
                 }
