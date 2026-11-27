@@ -1,6 +1,7 @@
 import {invoke} from '@tauri-apps/api/core';
 import {FileText,History,Plus,X} from 'lucide-react';
 import {useEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import type {Command} from './command-palette';
 import {confirmAction} from './dialogs';
 import {Editor} from './editor';
@@ -131,8 +132,7 @@ export function StudioWorkspace({navigation,initialAssistant,onAssistantOpened}:
 
   // Editor remains mounted when the tab list is discovered, so on first load
   // it consumes project settings even when opened from Home or the library.
-  return <>
-    {list&&<div className="project-tab-strip" role="group" aria-label="Open projects">
+  const tabStrip=list&&<div className="project-tab-strip" role="group" aria-label="Open projects">
       <div className="project-tab-scroll" role="tablist" aria-label="Project tabs">
         {list.tabs.map((tab,index)=>{
           const active=list.active===tab.id;
@@ -158,7 +158,10 @@ export function StudioWorkspace({navigation,initialAssistant,onAssistantOpened}:
       <button className="studio-tool-icon" type="button" title="Restore a project tab" aria-label="Restore a project tab"
         disabled={restoreTab.disabled} onClick={restoreTab.run}><History size={17}/></button>
       {error&&!dialog.current?.open&&<small role="alert">{error}</small>}
-    </div>}
+    </div>;
+  const navigationDock=document.getElementById('studio-project-tabs');
+  return <>
+    {navigationDock ? createPortal(tabStrip, navigationDock) : tabStrip}
     <dialog ref={dialog} className="studio-modal" aria-label="Restore a project tab">
       <div className="studio-modal-heading"><h2>Restore a project tab</h2><button onClick={()=>dialog.current?.close()}>Close</button></div>
       {loadingRecovery?<p role="status">Checking for recovery copies…</p>:closedRecovery.length?

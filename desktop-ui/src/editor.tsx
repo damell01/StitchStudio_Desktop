@@ -58,7 +58,7 @@ const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
 const dockBreakpoint=1100;
-const [left,setLeft]=useState(()=>window.innerWidth>=dockBreakpoint),[right,setRight]=useState(()=>window.innerWidth>=dockBreakpoint),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",216,180,320)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,220,360));
+const [left,setLeft]=useState(false),[right,setRight]=useState(false),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",216,180,320)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,220,360));
 function showLayers(open:boolean){
   if(open&&focusCanvas)changeFocus(false);
   if(open&&window.innerWidth<dockBreakpoint)setRight(false);
@@ -738,7 +738,12 @@ async function prepareAssistant(input: string): Promise<string | AssistantPropos
   }
 }
 
-function fit(stretch=false){if(!plan||busy||invalidField||machineExceeded||incompatibleHoop)return;void edit('maximize_in_hoop',{widthMm:width,heightMm:height,marginMm:2,stretch});}
+function fit(stretch=false){
+  if(!plan||busy||invalidField||machineExceeded||incompatibleHoop)return;
+  void edit('maximize_in_hoop',{widthMm:width,heightMm:height,marginMm:2,stretch}).then(({plan:next})=>{
+    if(next){setZoom(100);setPan([0,0]);}
+  });
+}
 useEffect(()=>{if(!initialView){const m=machines.find(p=>p.id===machine);const h=hoops.find(p=>p.id===hoop);if(!m)setMachine('');if(h&&hoopFits(h,m)){setWidth(h.width);setHeight(h.height)}else{setHoop('');if(m){setWidth(m.width);setHeight(m.height)}}if(m?.format)setFormat(m.format.toLowerCase());}try{const target=sessionStorage.getItem('studio-digitizer-output-format');if(target){if(['dst','pes','pec','jef','exp','vp3'].includes(target))setFormat(target);sessionStorage.removeItem('studio-digitizer-output-format')}const raw=sessionStorage.getItem('studio-open-project-settings');if(raw){const p=JSON.parse(raw);setWidth(p.width);setHeight(p.height);setFormat(p.format);setThreadAssignments(p.thread_assignments??{});sessionStorage.removeItem('studio-open-project-settings')}}catch{}let active=true;invoke<Plan|null>('current_preview').then(p=>{if(active&&p)setPlan(p)}).catch(()=>{});return ()=>{active=false}},[]);
 useEffect(()=>{let active=true;invoke<EditableObject[]>('editable_objects').then(items=>{if(active){setObjects(items);setSelectedObject(old=>items.some(o=>o.uid===old&&!o.locked&&!o.hidden)?old:null)}}).catch(()=>{if(active){setObjects([]);if(plan)setLayerTab('threads')}});return()=>{active=false}},[plan]);
 useEffect(()=>{
@@ -775,17 +780,38 @@ const designBounds=useMemo(()=>{
   for(const [x,y] of points){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y);}
   return {left,top,width:right-left,height:bottom-top};
 },[points]);
+const canvasSurface=useRef<HTMLDivElement>(null);
+const [canvasRatio,setCanvasRatio]=useState(0);
+useEffect(()=>{
+  const canvas=canvasSurface.current;
+  if(!canvas)return;
+  const observer=new ResizeObserver(([entry])=>{
+    const {width,height}=entry.contentRect;
+    if(width>0&&height>0)setCanvasRatio(width/height);
+  });
+  observer.observe(canvas);
+  return()=>observer.disconnect();
+},[]);
+
+// Use the actual canvas aspect ratio so wide workspaces can frame wide designs.
+const hoopViewWidth=Number.isFinite(width)&&width>0?width*1.12:1;
+const hoopViewHeight=Number.isFinite(height)&&height>0?height*1.12:1;
+const ratio=canvasRatio||hoopViewWidth/hoopViewHeight;
+const viewWidth=Math.max(hoopViewWidth,hoopViewHeight*ratio);
+const viewHeight=viewWidth/ratio;
+const screenWidth=viewWidth*100/zoom;
+const screenHeight=viewHeight*100/zoom;
+function artworkZoom(w:number,h:number) {
+  return Math.max(25,Math.min(400,Math.min(viewWidth/Math.max(1,w),viewHeight/Math.max(1,h))*82));
+}
 const framedFirstDesign=useRef(!!initialView);
 useEffect(()=>{
-  if(framedFirstDesign.current||!designBounds)return;
+  if(framedFirstDesign.current||!designBounds||!canvasRatio||!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)return;
   framedFirstDesign.current=true;
   const {left,top,width:artWidth,height:artHeight}=designBounds;
-  const framing=Math.min(165,Math.min(width/Math.max(1,artWidth),height/Math.max(1,artHeight))*82);
-  if(framing>100){
-    setZoom(framing);
-    setPan([left+artWidth/2,top+artHeight/2]);
-  }
-},[designBounds,width,height]);
+  setZoom(Math.min(350,artworkZoom(artWidth,artHeight)));
+  setPan([left+artWidth/2,top+artHeight/2]);
+},[designBounds,canvasRatio,viewWidth,viewHeight,width,height]);
 const sizePreview=useMemo(()=>{
  const b=movementBounds;
  if(b&&resizePreview)return {w:b[2]*resizePreview.sx,h:b[3]*resizePreview.sy,active:true};
@@ -811,6 +837,7 @@ const renderedRuns=useMemo(()=>{
     return count===run.length?fullRenderedRuns[i][j]:run.slice(0,count).map(p=>p.join(',')).join(' ');
   }));
 },[plan,stitchIndex,points.length,fullRenderedRuns]);
+const stitchedArtwork=useMemo(()=>plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} fill="none" strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((_r,j)=>{const visible=renderedRuns[i]?.[j];if(!visible)return null;const color='rgb('+b.color.join(',')+')';return realistic?<g key={j} pointerEvents="none"><polyline points={visible} stroke={color} strokeWidth=".46"/><polyline points={visible} stroke="#ffffff" opacity=".17" strokeWidth=".12" transform="translate(-.06 -.07)"/></g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}</g>),[plan,hidden,realistic,renderedRuns]);
 useEffect(()=>{
   if(!playing)return;
   const interval=window.setInterval(()=>{
@@ -1066,7 +1093,7 @@ function fitArtwork() {
   const {left,top,width:w,height:h}=designBounds;
   // The bounds are already cached for the current plan. Avoid scanning every
   // penetration again whenever the user changes the camera.
-  setZoom(Math.max(25,Math.min(400,Math.min(width/Math.max(1,w),height/Math.max(1,h))*88)));
+  setZoom(artworkZoom(w,h));
   setPan([left+w/2,top+h/2]);
 }
 
@@ -1080,7 +1107,7 @@ function locateIssue(uid:number) {
     setPlaying(false);
     setPlayhead(null);
     setPan([x+w/2,y+h/2]);
-    setZoom(Math.max(25,Math.min(400,Math.min(width/Math.max(1,w),height/Math.max(1,h))*88)));
+    setZoom(artworkZoom(w,h));
   }
 }
 
@@ -1361,7 +1388,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
       if(Math.abs(movement)<7)setCameraTop(value=>!value);
       else setCameraTop(movement<0);
     }}><GripHorizontal size={16}/></button>
-  <button className="studio-hoop-shortcut" title="Change machine or hoop dimensions" onClick={()=>setHoopOpen(true)}><SquareDashed size={16}/><strong>{(width/25.4).toFixed(2)} × {(height/25.4).toFixed(2)} in</strong></button>
+  <button className="studio-hoop-shortcut" title="Change machine or hoop dimensions" aria-label="Change machine or hoop dimensions" onClick={()=>setHoopOpen(true)}><SquareDashed size={16}/><strong>{(width/25.4).toFixed(2)} × {(height/25.4).toFixed(2)} in</strong></button>
   
   <DrawingControls drawing={drawing} disabled={busy}/>
   <button className="studio-selection-mode" title="Select and move the entire design" aria-label="Move whole design" aria-pressed={canvasMode==='design'} onClick={()=>{drawing.pick(null);selectObject(null);setCanvasMode('design');setActiveGroup(designGroups.length===1?designGroups[0].key:null);setPlaying(false);setPlayhead(null)}}><Group size={17}/><span className="camera-label">Design</span></button>
@@ -1385,8 +1412,9 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button aria-pressed={solidAreaShape==='oval'} onClick={()=>setSolidAreaShape('oval')}>Oval</button>
   <span>Drag around the artwork to make solid.</span>
 </div>}
-{plan&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'4px 10px',flexWrap:'wrap',fontSize:12,borderBottom:'1px solid var(--border,#ddd)'}}><span title="Current artwork or live resize dimensions">{sizePreview?.active?'Resizing':'Design'}: <strong>{sizePreview?(sizePreview.w/25.4).toFixed(2)+' × '+(sizePreview.h/25.4).toFixed(2)+' in':'—'}</strong>{sizePreview&&<span> · {Math.round(sizePreview.w)} × {Math.round(sizePreview.h)} mm</span>}{sizePreview&&(sizePreview.w>width||sizePreview.h>height)&&<strong style={{color:'#b45309'}}> · Exceeds hoop size</strong>}</span>{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
-  title="Preview the selected artwork as a solid fill">Make selection solid</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4,flexWrap:"wrap"}} role="group" aria-label="Selected object actions">
+<div className="workspace-canvas" ref={canvasSurface}>
+{plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar">{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
+  title="Preview the selected artwork as a solid fill">Make selection solid</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" role="group" aria-label="Selected object actions">
   <span style={{fontSize:12,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected.label||'Object '+selected.uid}</span>
   <button className="studio-tool-icon" title="Edit the selected object" aria-label="Open object editing tools"
     onClick={()=>{showInspector(true);setInspectorTab('transform')}}><MousePointer2 size={16}/></button>
@@ -1405,14 +1433,13 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button className="studio-tool-icon" title="Duplicate selection" aria-label="Duplicate selection" disabled={busy} onClick={()=>editSelection({kind:'duplicate'})}><Copy size={16}/></button>
   <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={16}/></button>
 </div>}</div>}
-<div className="workspace-canvas">
 <svg aria-label="Stitch preview; drag empty space to select objects in Objects mode, or use Pan to move the canvas" data-mode={drawing.tool?'draw':canvasMode}
  onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerLeave={()=>setHoverUid(null)}
  onPointerUp={event=>finishCanvasGesture(event,true)}
  onPointerCancel={event=>finishCanvasGesture(event,false)}
- onLostPointerCapture={event=>finishCanvasGesture(event,false)} viewBox={[pan[0]-width*.56*100/zoom,pan[1]-height*.56*100/zoom,width*1.12*100/zoom,height*1.12*100/zoom].join(' ')} className="design-canvas" onWheel={e=>{const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const anchor=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());const next=Math.max(25,Math.min(400,zoom*(e.deltaY<0?1.1:1/1.1)));if(next===zoom)return;const ratio=zoom/next;setPan([anchor.x+(pan[0]-anchor.x)*ratio,anchor.y+(pan[1]-anchor.y)*ratio]);setZoom(next)}} style={{width:'100%',background:'var(--lav-bg,var(--canvas,#edf1ed))'}}><defs><pattern id="hoop-fabric" width="1.4" height="1.4" patternUnits="userSpaceOnUse"><path d="M0 .2H1.4 M.2 0V1.4" fill="none" stroke="#967a68" strokeWidth=".075" opacity=".18"/></pattern><pattern id="hoop-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#d8cce6" strokeWidth=".75" vectorEffect="non-scaling-stroke"/></pattern></defs><rect x={-width/2} y={-height/2} width={width} height={height} fill="#fffdf5" stroke="#ad8cd1" strokeWidth="1.6" rx={4} vectorEffect="non-scaling-stroke" className="studio-hoop"/><rect x={-width/2} y={-height/2} width={width} height={height} fill="url(#hoop-fabric)" rx={2}/><rect x={-width/2} y={-height/2} width={width} height={height} fill={grid?"url(#hoop-grid)":"none"}/>{!invalidField&&<g pointerEvents="none" fill="#6945a2" stroke="#9478b6" strokeWidth=".6"><path d={`M ${-width/2} ${-height/2-5} H ${width/2} M ${-width/2} ${-height/2-7} v4 M ${width/2} ${-height/2-7} v4 M ${-width/2-5} ${-height/2} V ${height/2} M ${-width/2-7} ${-height/2} h4 M ${-width/2-7} ${height/2} h4`} fill="none" vectorEffect="non-scaling-stroke"/><text x={0} y={-height/2-7} textAnchor="middle" fontSize={Math.max(2.4,Math.min(width,height)*.025)} stroke="none">{(width/25.4).toFixed(2)} in · {Math.round(width)} mm</text><text transform={`translate(${-width/2-8} 0) rotate(-90)`} textAnchor="middle" fontSize={Math.max(2.4,Math.min(width,height)*.025)} stroke="none">{(height/25.4).toFixed(2)} in · {Math.round(height)} mm</text></g>}{grid&&<g stroke="#896d98" opacity=".6" pointerEvents="none">
+ onLostPointerCapture={event=>finishCanvasGesture(event,false)} viewBox={[pan[0]-screenWidth/2,pan[1]-screenHeight/2,screenWidth,screenHeight].join(' ')} className="design-canvas" onWheel={e=>{const matrix=e.currentTarget.getScreenCTM();if(!matrix)return;const anchor=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse());const next=Math.max(25,Math.min(400,zoom*(e.deltaY<0?1.1:1/1.1)));if(next===zoom)return;const ratio=zoom/next;setPan([anchor.x+(pan[0]-anchor.x)*ratio,anchor.y+(pan[1]-anchor.y)*ratio]);setZoom(next)}} style={{width:'100%',background:'var(--lav-bg,var(--canvas,#edf1ed))'}}><defs><pattern id="hoop-fabric" width="1.4" height="1.4" patternUnits="userSpaceOnUse"><path d="M0 .2H1.4 M.2 0V1.4" fill="none" stroke="#967a68" strokeWidth=".075" opacity=".18"/></pattern><pattern id="hoop-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#d8cce6" strokeWidth=".75" vectorEffect="non-scaling-stroke"/></pattern></defs><rect x={-width/2} y={-height/2} width={width} height={height} fill="#fffdf5" stroke="#ad8cd1" strokeWidth="1.6" rx={4} vectorEffect="non-scaling-stroke" className="studio-hoop"/><rect x={-width/2} y={-height/2} width={width} height={height} fill="url(#hoop-fabric)" rx={2}/><rect x={-width/2} y={-height/2} width={width} height={height} fill={grid?"url(#hoop-grid)":"none"}/>{!invalidField&&<g pointerEvents="none" fill="#6945a2" stroke="#9478b6" strokeWidth=".6"><path d={`M ${-width/2} ${-height/2-5} H ${width/2} M ${-width/2} ${-height/2-7} v4 M ${width/2} ${-height/2-7} v4 M ${-width/2-5} ${-height/2} V ${height/2} M ${-width/2-7} ${-height/2} h4 M ${-width/2-7} ${height/2} h4`} fill="none" vectorEffect="non-scaling-stroke"/><text x={0} y={-height/2-7} textAnchor="middle" fontSize={Math.max(2.4,Math.min(width,height)*.025)} stroke="none">{(width/25.4).toFixed(2)} in · {Math.round(width)} mm</text><text transform={`translate(${-width/2-8} 0) rotate(-90)`} textAnchor="middle" fontSize={Math.max(2.4,Math.min(width,height)*.025)} stroke="none">{(height/25.4).toFixed(2)} in · {Math.round(height)} mm</text></g>}{grid&&<g stroke="#896d98" opacity=".6" pointerEvents="none">
 <path d={`M ${-width/2} 0 H ${width/2} M 0 ${-height/2} V ${height/2}`} strokeDasharray="4 5" strokeWidth=".6" vectorEffect="non-scaling-stroke"/>
-</g>}<g transform={`translate(${designOffset.join(' ')})`}>{plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} fill="none" strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((_r,j)=>{const visible=renderedRuns[i]?.[j];if(!visible)return null;const color='rgb('+b.color.join(',')+')';return realistic?<g key={j} pointerEvents="none"><polyline points={visible} stroke={color} strokeWidth=".46"/><polyline points={visible} stroke="#ffffff" opacity=".17" strokeWidth=".12" transform="translate(-.06 -.07)"/></g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}</g>)}{showDirections&&<g pointerEvents="none" fill="none" stroke="#663399" strokeWidth="1.2">{directionSamples.filter(d=>d.index<stitchIndex&&!hidden.includes(d.block)).map(d=><path key={d.index} d="M-1.1 0H1.1M.4 -.65L1.1 0L.4 .65" transform={`translate(${d.x} ${d.y}) rotate(${d.angle}) scale(${100/zoom})`} vectorEffect="non-scaling-stroke"/>)}</g>}{canvasMode==='design'&&!independentGroups&&designBounds&&<rect
+</g>}<g transform={`translate(${designOffset.join(' ')})`}>{stitchedArtwork}{showDirections&&<g pointerEvents="none" fill="none" stroke="#663399" strokeWidth="1.2">{directionSamples.filter(d=>d.index<stitchIndex&&!hidden.includes(d.block)).map(d=><path key={d.index} d="M-1.1 0H1.1M.4 -.65L1.1 0L.4 .65" transform={`translate(${d.x} ${d.y}) rotate(${d.angle}) scale(${100/zoom})`} vectorEffect="non-scaling-stroke"/>)}</g>}{canvasMode==='design'&&!independentGroups&&designBounds&&<rect
   data-design-group x={designBounds.left-2} y={designBounds.top-2}
   width={designBounds.width+4} height={designBounds.height+4} rx={1}
   fill="transparent" pointerEvents="all" stroke="#8543aa" strokeWidth="1.5"
@@ -1630,7 +1657,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {selected&&canvasMode==='select'&&<button disabled={busy} onClick={()=>editSelection({kind:'scale',factor:scale/100})}>Scale selected object</button>}</div>
     <p className="workspace-helper">Editable artwork regenerates when resized. Test sew machine-only files after scaling.</p></details>
   </section>}
-</article></div><div className="playback-tools">
+</article></div><div className="editor-bottom-bar"><div className="playback-tools">
   <button disabled={!points.length} onClick={()=>{if(stitchIndex===points.length)setPlayhead(0);setPlaying(!playing)}}>{playing?<Pause size={15}/>:<Play size={15}/>} {playing?"Pause":"Play"}</button>
   <button aria-label="Restart simulation" title="Restart simulation" disabled={!points.length} onClick={()=>{setPlaying(false);setPlayhead(0)}}><RotateCcw size={15}/></button>
   <button title="Previous stitch" aria-label="Previous stitch" disabled={stitchIndex===0} onClick={()=>stepStitch(-1)}><StepBack size={15}/></button>
@@ -1639,12 +1666,12 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <select aria-label="Playback speed" value={playbackSpeed} onChange={event=>setPlaybackSpeed(Number(event.target.value))}>
     <option value={1}>1×</option><option value={4}>4×</option><option value={16}>16×</option><option value={64}>64×</option>
   </select>
-  <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>{plan&&<span className="simulation-fit" data-outside={outside}>{outside?"Outside hoop":"Fits hoop"}</span>}
+  <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>
 </div><footer className="workspace-status">{inlineWork&&<span className="inline-work-status" role="status"><span className="inline-work-spinner"/>{inlineWork}</span>}
   <button title="Open hoop settings" onClick={()=>setHoopOpen(true)}><SquareDashed size={16}/>{width>0&&height>0?`Hoop ${(width/25.4).toFixed(2)} × ${(height/25.4).toFixed(2)} in`:'Set a hoop size'}</button>
-  {plan&&<div className="status-metrics">{designBounds&&<span title="Sewn design dimensions">{(designBounds.width/25.4).toFixed(2)} × {(designBounds.height/25.4).toFixed(2)} in</span>}<span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span title="Unique RGB thread colors">{uniqueColors} colors</span><span><Scissors size={16}/>{plan.trims} trims</span><button className="sewing-estimate" title={'Estimated machine time at '+sewingSpm+' stitches/min, '+trimSeconds+' seconds per trim and '+changeSeconds+' seconds per block transition. Excludes hooping, setup and interruptions.'} onClick={()=>{showInspector(true);setInspectorTab('hoop')}}><Clock3 size={15}/> Est. {sewingDuration}</button></div>}
+  {plan&&<div className="status-metrics">{sizePreview&&<span title={`${Math.round(sizePreview.w)} × ${Math.round(sizePreview.h)} mm`}>{sizePreview.active?'Resizing · ':''}{(sizePreview.w/25.4).toFixed(2)} × {(sizePreview.h/25.4).toFixed(2)} in</span>}<span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span title="Unique RGB thread colors">{uniqueColors} colors</span><span><Scissors size={16}/>{plan.trims} trims</span><button className="sewing-estimate" title={'Estimated machine time at '+sewingSpm+' stitches/min, '+trimSeconds+' seconds per trim and '+changeSeconds+' seconds per block transition. Excludes hooping, setup and interruptions.'} onClick={()=>{showInspector(true);setInspectorTab('hoop')}}><Clock3 size={15}/> Est. {sewingDuration}</button></div>}
   <span className="workspace-fit-status" data-outside={outside}>{outside?'Outside hoop':plan?'Fits hoop · '+recoveryStatus:recoveryStatus}</span>
-</footer>
+</footer></div>
   <AssistantChat open={assistantOpen} busy={busy} onRequest={prepareAssistant} onClose={()=>setAssistantOpen(false)}/>
 
 {simplifyOpen&&<div role="presentation" onClick={cancelSimplify} style={{position:'fixed',inset:0,zIndex:1001,background:'#17102266',display:'grid',placeItems:'center'}}><section role="dialog" aria-modal="true" aria-label="Simplify design" aria-busy={busy} onClick={e=>e.stopPropagation()} className="workspace-inspector-group simplify-dialog" style={{background:'var(--panel,#fff)',padding:24,borderRadius:16,width:'min(1120px,94vw)',maxHeight:'85vh',overflow:'auto'}}><header className="simplify-dialog-heading"><h3><Scissors size={18}/> Simplify design</h3><button aria-label={searchingSimplify?undefined:"Close simplification"} disabled={busy&&!searchingSimplify} onClick={cancelSimplify}>{searchingSimplify?"Stop search":<X size={18}/>}</button></header><p>{solidOnly?'Compare a solid fill for the selected artwork. Fine shading may change.':'Reduce sewing time while preserving artwork outlines, lettering and thread order. Test sew before production.'}</p>{solidOnly&&solidColor&&<div className="studio-soft-area-tools">

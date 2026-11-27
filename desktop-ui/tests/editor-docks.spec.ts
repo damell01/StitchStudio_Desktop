@@ -20,6 +20,7 @@ test.beforeEach(async({page})=>{
       uid:number;name?:string;locked?:boolean;hidden?:boolean;direction?:string;targetUid?:number;
     }){
       if(command==='current_preview')return preview();
+      if(command==='workspace_tabs')return {active:'garden',tabs:[{id:'garden',name:'Garden',has_design:true}]};
       if(command==='editable_objects')return layers.map(layer=>({...layer}));
       if(command==='set_artwork_layer'){
         calls.push(args);
@@ -40,8 +41,12 @@ test('desktop keeps the canvas central and puts layer tools in compact dialogs',
   await page.getByRole('button',{name:/Blank design/}).last().click();
   const canvas=page.locator('.workspace-canvas');
   const docks=page.getByRole('group',{name:'Workspace view'});
-  await expect(docks.getByRole('button',{name:'Layers',exact:true})).toHaveAttribute('aria-pressed','true');
-  await expect(docks.getByRole('button',{name:'Inspector',exact:true})).toHaveAttribute('aria-pressed','true');
+  const layers = docks.getByRole('button',{name:'Layers',exact:true});
+  const inspector = docks.getByRole('button',{name:'Inspector',exact:true});
+  await expect(layers).toHaveAttribute('aria-pressed','false');
+  await expect(inspector).toHaveAttribute('aria-pressed','false');
+  await layers.click();
+  await inspector.click();
   expect((await canvas.boundingBox())!.width).toBeGreaterThan(840);
 
   const dock=page.locator('.studio-layers-dock');
@@ -116,4 +121,28 @@ test('narrow windows offer one tool drawer at a time and keep the camera toolbar
   await expect(toolbar).toHaveClass(/studio-camera-top/);
   const top=(await toolbar.boundingBox())!;
   expect(top.y+top.height).toBeLessThanOrEqual((await canvas.boundingBox())!.y+1);
+});
+
+test('the canvas occupies at least three quarters of the window with both docks closed',async({page})=>{
+  await page.setViewportSize({width:1280,height:668});
+  await page.goto('/');
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await expect(page.getByRole('heading',{name:'Garden'})).toBeVisible();
+  await expect(page.getByRole('tab',{name:'Garden'})).toBeVisible();
+  const canvas=page.locator('.design-canvas');
+  const zoom=page.getByRole('button',{name:'Reset zoom to 100%'});
+  await expect(zoom).toHaveText('350%');
+
+  const canvasBox=(await canvas.boundingBox())!;
+  expect(canvasBox.width*canvasBox.height/(1280*668)).toBeGreaterThanOrEqual(.75);
+  const stitch=canvas.locator('polyline').first();
+  const originalPoints=await stitch.getAttribute('points');
+
+  await page.getByRole('button',{name:'Fit hoop view'}).click();
+  const hoop=(await canvas.locator('.studio-hoop').boundingBox())!;
+  expect(hoop.height).toBeGreaterThan(canvasBox.height*.8);
+  expect(hoop.y+hoop.height).toBeLessThanOrEqual(canvasBox.y+canvasBox.height);
+  await page.getByRole('button',{name:'Fit artwork'}).click();
+  await expect(zoom).toHaveText('400%');
+  await expect(stitch).toHaveAttribute('points',originalPoints!);
 });
