@@ -176,9 +176,9 @@ pub(crate) async fn update_lettering(uid:usize,settings:LetteringSettings,app:ta
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
-pub(crate) async fn insert_lettering_settings(settings:LetteringSettings,app:tauri::AppHandle)->Result<Preview,String>{
+pub(crate) async fn insert_lettering_settings(settings:LetteringSettings,placement:Option<[f64;2]>,app:tauri::AppHandle)->Result<Preview,String>{
  use tauri::Manager;
- tauri::async_runtime::spawn_blocking(move||{let spec=settings.spec()?;let state=app.state::<std::sync::Mutex<Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;apply(&mut w,&spec,Some([0.0,0.0]))}).await.map_err(|e|e.to_string())?
+ tauri::async_runtime::spawn_blocking(move||{let spec=settings.spec()?;let state=app.state::<std::sync::Mutex<Workspace>>();let mut w=state.lock().map_err(|e|e.to_string())?;apply(&mut w,&spec,Some(placement.unwrap_or([0.0,0.0])))}).await.map_err(|e|e.to_string())?
 }
 #[cfg(test)]
 mod tests {

@@ -56,6 +56,10 @@ test.beforeEach(async ({ page }) => {
           const plan = { name:'Artwork', stitches:40, trims:0, blocks:[{color:[66,42,90],runs:[[[0,0],[3,3]]]}] };
           return [{strength:5,plan,reason:null,quality:{coverage:96,density_peak:2,seconds:4}}];
         }
+        if (command === 'inspect_digitizer_coverage') {
+          if(args?.strength===2)return {complete:false,gaps:[]};
+          return {complete:true,gaps:args?.strength===5?['Object 2 has gaps at 20% of sampled interior points.']:[]};
+        }
         if (command === 'apply_digitizer_draft') current = draft;
         if (command === 'current_preview') return current;
         return ['character_list', 'editable_objects'].includes(command) ? [] : null;
@@ -74,12 +78,12 @@ test('an artwork selection generates a draft immediately and only opens it on re
   const open = page.getByRole('button', { name: 'Open in design studio' });
   await expect(open).toBeVisible();
   await page.getByRole('button', { name: 'Density', exact: true }).click();
-  await expect(page.locator('.digitizer-stitch-image rect')).toHaveCount(1);
+  await expect(page.locator('.digitizer-stitch-image rect title')).toHaveCount(2);
   expect(await page.evaluate(() => (window as unknown as { stitchTestCalls: string[] }).stitchTestCalls))
     .not.toContain('apply_digitizer_draft');
 
   await page.getByText('Advanced artwork options').click();
-  const detail = page.getByRole('slider', { name: 'Detail' });
+  const detail = page.getByRole('slider', { name: /^Detail ·/ });
   await detail.press('ArrowRight');
   await detail.press('ArrowRight');
   await expect(open).toBeHidden();
@@ -142,7 +146,7 @@ test('upload recommends a checked plan near the stitch goal and updates it witho
   await page.getByRole('button',{name:'Choose or drop an image'}).click();
   await expect.poll(() => page.evaluate(() => typeof (window as unknown as {stitchTestRelease:unknown}).stitchTestRelease)).toBe('function');
   await page.evaluate(() => (window as unknown as {stitchTestRelease:()=>void}).stitchTestRelease());
-  await expect(page.getByRole('button',{name:/Maximum/})).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByRole('region',{name:'Compare embroidery-ready designs'}).getByRole('button',{name:/^Maximum Stitch paths/})).toHaveAttribute('aria-pressed','true');
   await expect(page.locator('.digitizer-preview-metrics')).toContainText('9,800');
   await page.getByLabel('Stitch-count goal').selectOption('15000');
   await expect(page.getByRole('region',{name:'Compare embroidery-ready designs'}).getByRole('button',{name:/Balanced/})).toHaveAttribute('aria-pressed','true');
@@ -152,4 +156,17 @@ test('upload recommends a checked plan near the stitch goal and updates it witho
     return {traces:host.stitchTestCalls.filter(name=>name==='digitize_artwork').length,goals:host.stitchTestGoals};
   });
   expect(state).toEqual({traces:1,goals:[10_000,15_000]});
+});
+
+
+test('quality checks the selected alternative and clears its coverage messages when switching', async ({page})=>{
+  await page.getByRole('button',{name:'Choose or drop an image'}).click();
+  await expect.poll(()=>page.evaluate(()=>typeof (window as unknown as {stitchTestRelease:unknown}).stitchTestRelease)).toBe('function');
+  await page.evaluate(()=>(window as unknown as {stitchTestRelease:()=>void}).stitchTestRelease());
+  await page.getByRole('button',{name:'Deep optimization',exact:true}).click();
+  await page.getByRole('button',{name:'Quality',exact:true}).click();
+  await expect(page.getByText('Object 2 has gaps at 20% of sampled interior points.')).toBeVisible();
+  await page.getByRole('region',{name:'Compare embroidery-ready designs'}).getByRole('button',{name:/^Original Stitch paths/}).click();
+  await expect(page.getByText('No gaps flagged in sampled fill and satin areas.')).toBeVisible();
+  await expect(page.getByText('Object 2 has gaps at 20% of sampled interior points.')).toHaveCount(0);
 });

@@ -274,6 +274,75 @@ pub(super) async fn restore_workspace_tab(
     .map_err(|error| error.to_string())?
 }
 
+#[derive(serde::Serialize)]
+pub(super) struct RecoveredSession {
+    tabs: TabList,
+    projects: HashMap<String, ProjectView>,
+    skipped: usize,
+}
+
+#[derive(serde::Serialize)]
+struct ProjectView {
+    width: f64,
+    height: f64,
+    format: String,
+    thread_assignments: HashMap<String, String>,
+}
+
+#[tauri::command]
+pub(super) async fn restore_workspace_session(
+    ids: Vec<String>,
+    active: String,
+    app: tauri::AppHandle,
+) -> Result<RecoveredSession, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if ids.is_empty() || ids.len() > LIMIT || !ids.contains(&active) {
+            return Err("The previous workspace tab list is invalid.".into());
+        }
+        let root = app.path().app_local_data_dir().map_err(|error| error.to_string())?;
+        let mut order = Vec::new();
+        let mut parked = HashMap::new();
+        let mut projects = HashMap::new();
+        let mut skipped = 0;
+        for id in ids {
+            if parked.contains_key(&id) { continue; }
+            let directory = recovery_directory(&root, &id)?;
+            let staged = Mutex::new(Workspace::default());
+            match project_recovery::open(&directory, &staged) {
+                Ok(Some(project)) => {
+                    projects.insert(id.clone(), ProjectView {
+                        width: project.width,
+                        height: project.height,
+                        format: project.format,
+                        thread_assignments: project.thread_assignments,
+                    });
+                    parked.insert(id.clone(), staged.into_inner().map_err(|error| error.to_string())?);
+                    order.push(id);
+                }
+                _ => skipped += 1,
+            }
+        }
+        let active = if parked.contains_key(&active) {
+            active
+        } else {
+            order.first().cloned().ok_or("No previous project copies could be opened.")?
+        };
+        let restored = parked.remove(&active).ok_or("The active recovery copy is unavailable.")?;
+        let tabs = app.state::<Mutex<WorkspaceTabs>>();
+        let mut tabs = tabs.lock().map_err(|error| error.to_string())?;
+        let state = app.state::<Mutex<Workspace>>();
+        let mut workspace = state.lock().map_err(|error| error.to_string())?;
+        tabs.ensure_idle(&workspace)?;
+        if tabs.order.len() != 1 || workspace.current.as_ref().is_some_and(|plan| plan.stitch_count() > 0)
+            || !workspace.undo.is_empty() || !workspace.redo.is_empty() {
+            return Err("Restore the previous workspace from an empty Studio.".into());
+        }
+        *tabs = WorkspaceTabs { active, order, parked };
+        *workspace = restored;
+        Ok(RecoveredSession { tabs: tabs.list(&workspace), projects, skipped })
+    }).await.map_err(|error| error.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

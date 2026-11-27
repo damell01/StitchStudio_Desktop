@@ -75,3 +75,47 @@ test('opens a separate project tab with its own viewport, history and recovery',
   await page.getByRole('dialog',{name:'Restore a project tab'}).getByRole('button',{name:'Second design'}).click();
   await expect(tabs.getByRole('tab',{name:'Second design'})).toHaveAttribute('aria-selected','true');
 });
+
+test('restores the previous tab order and active project after a restart',async({page})=>{
+  await page.addInitScript(()=>{
+    localStorage.setItem('studio-tour-seen','1');
+    const plan=(name:string)=>({name,stitches:3,trims:0,blocks:[{color:[20,30,40],runs:[[[0,0],[2,2],[3,1]]]}]});
+    const projects=[
+      {id:'primary',name:'First design',has_design:true},
+      {id:'second',name:'Second design',has_design:true},
+    ];
+    let list={active:'primary',tabs:[{id:'primary',name:'Untitled design',has_design:false}]};
+    Object.assign(window,{__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>){
+      if(command==='workspace_overview')return {current:null,recovery:true};
+      if(command==='workspace_tabs')return list;
+      if(command==='current_preview')return list.tabs.find(tab=>tab.id===list.active)?.has_design?
+        plan(list.tabs.find(tab=>tab.id===list.active)!.name):null;
+      if(command==='editable_objects'||command==='recoverable_workspace_tabs')return [];
+      if(command==='restore_workspace_session'){
+        if(JSON.stringify(args.ids)!==JSON.stringify(['primary','second'])||args.active!=='second')throw Error('Unexpected tabs');
+        list={active:'second',tabs:projects};
+        return {tabs:list,projects:{
+          primary:{width:130,height:180,format:'dst'},
+          second:{width:200,height:230,format:'pes'},
+        },skipped:0};
+      }
+      if(command==='change_workspace_tab'){
+        list={...list,active:(args.action as {id:string}).id};
+        return list;
+      }
+      return null;
+    }}});
+  });
+  await page.goto('/');
+  await page.evaluate(()=>localStorage.setItem('studio-previous-project-tabs',JSON.stringify({ids:['primary','second'],active:'second'})));
+  await page.reload();
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await page.getByRole('button',{name:'Restore a project tab',exact:true}).click();
+  await page.getByRole('button',{name:'Restore previous workspace',exact:true}).click();
+  const tabs=page.getByRole('tablist',{name:'Project tabs'});
+  await expect(tabs.getByRole('tab')).toHaveText(['First design','Second design']);
+  await expect(tabs.getByRole('tab',{name:'Second design'})).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('.studio-document h1')).toHaveText('Second design');
+  await tabs.getByRole('tab',{name:'First design'}).click();
+  await expect(page.locator('.studio-document h1')).toHaveText('First design');
+});

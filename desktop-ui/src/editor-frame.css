@@ -228,3 +228,17 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
   font-weight: 700;
   pointer-events: none;
 }
+
+.canvas-type-hint,.canvas-type-form {
+  position: absolute;
+  z-index: 6;
+  color: var(--text, #352744);
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #ded3ed);
+  border-radius: 12px;
+  box-shadow: 0 8px 22px #39235426;
+}
+.canvas-type-hint { left: 50%; transform: translateX(-50%); top: 12px; padding: 6px 10px; white-space: nowrap; }
+.canvas-type-form { display: grid; gap: 7px; width: min(288px, calc(100% - 16px)); padding: 10px; box-sizing: border-box; }
+.canvas-type-form label { font-weight: 650; }
+.canvas-type-form > div { display: flex; justify-content: flex-end; gap: 6px; }

@@ -154,9 +154,16 @@ function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
 }
 const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
 const [convertText,setConvertText]=useState(false);const recognitionCache=useRef(new Map<string,{text:string;font:string}[]>());const [recognizingWord,setRecognizingWord]=useState(false);const [recognizedOriginal,setRecognizedOriginal]=useState('');const [recognitionError,setRecognitionError]=useState('');const [failedWord,setFailedWord]=useState('');const [recognizedIds,setRecognizedIds]=useState<number[]>([]);const [convertWord,setConvertWord]=useState('');const [convertFont,setConvertFont]=useState('');const [convertFonts,setConvertFonts]=useState<string[]>([]);const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'|'quality'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(initialAssistant);useEffect(()=>{if(initialAssistant)onAssistantOpened?.()},[]);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [appearanceFloor,setAppearanceFloor]=useState(85);const [smartMode,setSmartMode]=useState<'light'|'balanced'|'aggressive'|'maximum'>('aggressive');const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{artwork_svg?:string|null;strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [targetReduction,setTargetReduction]=useState(50);const [targetMetric,setTargetMetric]=useState<'both'|'time'|'stitches'>('both');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);const baselineRequest=useRef(0);
+const [canvasTyping,setCanvasTyping]=useState(false);
+const [canvasText,setCanvasText]=useState<{point:[number,number];left:number;top:number}|null>(null);
+const [canvasTextValue,setCanvasTextValue]=useState('');
+const [canvasTextError,setCanvasTextError]=useState('');
+const canvasTextInput=useRef<HTMLInputElement>(null);
+const canvasTextSaving=useRef(false);
+useEffect(()=>{if(canvasText)canvasTextInput.current?.focus()},[canvasText]);
 const [baselinePicking,setBaselinePicking]=useState(false),[textBaseline,setTextBaseline]=useState<PickedBaseline|null>(null);
 useEffect(()=>{if(inspectorTab!=='text')setBaselinePicking(false)},[inspectorTab]);
-function openText(uid:number|null=null){++baselineRequest.current;setTextBaseline(null);setBaselinePicking(false);setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
+function openText(uid:number|null=null){setCanvasTyping(false);setCanvasText(null);++baselineRequest.current;setTextBaseline(null);setBaselinePicking(false);setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
 const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>initialView?.machine??(localStorage.getItem('studio-default-machine')||'')),[hoop,setHoop]=useState(()=>initialView?.hoop??(localStorage.getItem('studio-default-hoop')||''));const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState(initialView?.format??'dst'),[width,setWidth]=useState(initialView?.width??130),[height,setHeight]=useState(initialView?.height??180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 useEffect(()=>{
   onWorkspaceStatus?.({name:plan?.stitches?plan.name:null,busy,view:{width,height,format,machine,hoop,zoom,pan,threadAssignments}});
@@ -172,6 +179,39 @@ const drawing=useCanvasDrawing((tool,points,subpaths,settings)=>{
 });
 const stitchGuides=useStitchGuides(plan,selected&&!selected.locked&&!selected.hidden?selected.uid:null,
   (uid,action)=>void edit('edit_object_stitch_controls',{uid,action}));
+useEffect(()=>{
+  if((drawing.tool||canvasMode!=='select'||baselinePicking)&&canvasTyping){
+    setCanvasTyping(false);setCanvasText(null);
+  }
+},[drawing.tool,canvasMode,baselinePicking,canvasTyping]);
+function toggleCanvasTyping(){
+  setCanvasText(null);
+  setCanvasTyping(!canvasTyping);
+  if(!canvasTyping){
+    drawing.pick(null);
+    stitchGuides.setVisible(false);
+    setBaselinePicking(false);
+    setCanvasMode('select');
+  }
+}
+async function addCanvasText(){
+  if(!canvasText||!canvasTextValue.trim()||busy||canvasTextSaving.current)return;
+  const placement=canvasText.point;
+  canvasTextSaving.current=true;
+  setBusy(true);setInlineWork('Generating lettering…');setPlaying(false);setCanvasTextError('');
+  try{
+    const fonts=await invoke<string[]>('lettering_fonts');
+    const font=['Arial','Helvetica','DejaVu Sans'].find(name=>fonts.includes(name))??fonts[0];
+    if(!font)throw new Error('Install a font in the Font Library to add lettering.');
+    const next=await invoke<Plan>('insert_lettering_settings',{placement,settings:{
+      text:canvasTextValue.trim(),font,size:12,spacing:.4,arc:0,bold:true,italic:false,color:[105,69,162],align:'center',
+    }});
+    if(next.blocks.length!==plan?.blocks.length||next.blocks.some((block,index)=>block.color.join(',')!==plan?.blocks[index]?.color.join(',')))setThreadAssignments({});
+    setPlan(next);setPlayhead(null);setMessage('Lettering added. Double-click it to edit.');
+    setCanvasText(null);setCanvasTyping(false);
+  }catch(error){setCanvasTextError(error instanceof Error?error.message:String(error));}
+  finally{canvasTextSaving.current=false;setBusy(false);setInlineWork('');}
+}
 const [hasSettingsClipboard,setHasSettingsClipboard]=useState(()=>sessionStorage.getItem('studio-stitch-clipboard')==='1');
 const canCopyStitchSettings=!!selected&&!selected.locked&&!selected.hidden&&selected.kind!=='manual'&&selected.kind!=='skip';
 const canPasteStitchSettings=hasSettingsClipboard&&movementIds.length>0&&
@@ -889,6 +929,17 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const target=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;
   let object=target?objects.find(item=>item.uid===Number(target.getAttribute('data-artwork-uid'))&&!lockedObjects.includes(item.uid)):undefined;
   const position=pointerPosition(event);
+  if(canvasTyping&&event.button===0){
+    const surface=canvasSurface.current?.getBoundingClientRect();
+    if(!position||!surface)return;
+    setCanvasText({
+      point:[position.x,position.y],
+      left:Math.max(8,Math.min(event.clientX-surface.left,surface.width-300)),
+      top:Math.max(8,Math.min(event.clientY-surface.top,surface.height-115)),
+    });
+    setCanvasTextValue('');setCanvasTextError('');
+    return;
+  }
   if(position&&drawing.tool&&drawing.down(event,drawingPoint(position)))return;
   if(position&&stitchGuides.down(event,[position.x,position.y]))return;
   if(canvasMode==='solid'&&event.button===0&&position){
@@ -1162,6 +1213,7 @@ async function projectSave(){setBusy(true);try{const project=await invoke<Projec
 async function projectOpen(){if(plan&&!await confirmAction('Replace the current design? Save your project first if needed.'))return;setBusy(true);try{const p=await invoke<{plan:Plan;width:number;height:number;format:string;thread_assignments?:ThreadAssignments}|null>('open_project');if(p){setThreadAssignments(p.thread_assignments??{});setPlan(p.plan);setWidth(p.width);setHeight(p.height);setFormat(p.format);setMachine('');setHoop('');setHidden([]);setPlayhead(null)}}catch(e){setMessage(String(e))}finally{setBusy(false)}}
 async function save(companions=false,images?:{sheet?:number[];preview?:number[]}){if(outside||machineExceeded||incompatibleHoop||invalidField||!plan?.stitches){const reason='Select a compatible hoop with valid dimensions and fit the design before exporting.';setMessage(reason);throw new Error(reason)}setBusy(true);try{if(await invoke<boolean>('export_design',{format,width,height,companions,assignments:threadAssignments,sheetPng:images?.sheet,previewPng:images?.preview}))toast((companions||images?.sheet||images?.preview)?'Embroidery file and companion documents saved. Test sew before production.':'Embroidery file saved. Test sew before production.')}catch(e){setMessage(String(e));throw e}finally{setBusy(false)}}
 useEffect(()=>{const key=(e:KeyboardEvent)=>{if (document.querySelector('dialog[open]')||busy) return;
+if(e.key==='Escape'&&canvasTyping){toggleCanvasTyping();return;}
 if(e.key==='Escape'&&baselinePicking){setBaselinePicking(false);return;}
 if(e.key==='Escape'&&drawing.tool){drawing.pick(null);return;}
 if(e.key==='Escape'&&canvasMode==='solid'){setCanvasMode('select');setMarquee(null);marqueeGesture.current=null;return;}
@@ -1178,7 +1230,7 @@ if(e.key==='F11'){e.preventDefault();toggleFocus();return;}
 if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='i'){e.preventDefault();openInsertDialog();return;}
 if(e.key==='Delete'||e.key==='Backspace'){if(deletionTarget()){e.preventDefault();void deleteDesign()}return;}
 if(!selectionIds.length&&selectedObject!==null&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();editSelection({kind:'duplicate'});return;}
-if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setContext(null);setMulti([]);setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right,multi,activeGroup,canvasMode,objects,nudgeStep,lockedObjects]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} editorBusy={busy} anchorBounds={movementBounds??(()=>{const b=objects.filter(o=>!o.hidden&&o.bounds).map(o=>o.bounds!);if(!b.length)return null;const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return [x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]})()} onInsert={result=>{
+if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setContext(null);setMulti([]);setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right,multi,activeGroup,canvasMode,objects,nudgeStep,lockedObjects,canvasTyping,drawing.tool,baselinePicking]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} editorBusy={busy} anchorBounds={movementBounds??(()=>{const b=objects.filter(o=>!o.hidden&&o.bounds).map(o=>o.bounds!);if(!b.length)return null;const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return [x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]})()} onInsert={result=>{
   setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);setMessage('');
 }}/><div className={`studio-edit-bar ${focusCanvas?'studio-focus-active':''}`} role="group" aria-label="Design commands">
   {focusCanvas&&<button className="studio-exit-focus" onClick={()=>changeFocus(false)}><Minimize size={16}/> Exit focus</button>}
@@ -1204,6 +1256,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={18}/></button>
     <button className="studio-tool-icon" title="Transform design" aria-label="Transform design" disabled={!plan} onClick={()=>{showInspector(true);setInspectorTab('transform')}}><Move size={17}/></button>
     
+    <button className="studio-tool-icon" title="Type on canvas" aria-label="Type on canvas" aria-pressed={canvasTyping} disabled={busy} onClick={toggleCanvasTyping}><Type size={16}/><MousePointer2 size={11}/></button>
     <button className="studio-add-text studio-toolbar-text" title="Add text" aria-label="Add text" disabled={busy} onClick={()=>openText()}><Type size={17}/><span>Add text</span></button>
   </div>
   <div className="studio-command-group studio-view-tools" role="group" aria-label="Workspace view">
@@ -1229,6 +1282,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {label:'Show sewing order',group:'View',run:()=>stitchGuides.setOrder(!stitchGuides.order),disabled:!plan},
     {label:stitchGuides.data?.textForm==='outlines'?'Restore editable text':'Convert lettering to outlines',group:'Lettering',run:changeTextForm,disabled:busy||!stitchGuides.data?.textForm},
     {label:'Add Text',group:'Create',run:()=>openText(),disabled:busy},
+    {label:'Type on canvas',group:'Create',run:toggleCanvasTyping,disabled:busy},
     {label:'Insert design',group:'File',run:openInsertDialog,disabled:busy},
     {label:'Import image and digitize',group:'File',run:()=>setArtworkImport({file:null}),disabled:busy},
     {label:'Duplicate selection',group:'Edit',run:()=>editSelection({kind:'duplicate'}),disabled:busy||!selected},
@@ -1498,13 +1552,25 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </g>}
 {inspectorTab==='quality'&&<g pointerEvents="none" aria-label="Quality overlay">{qualityOverlay==='coverage'?<>{coverageGaps.map(g=><path key={g.uid} d={g.points.map(([x,y])=>`M${x-.14} ${y}h.28`).join(' ')} fill="none" stroke="#ef4444" strokeWidth=".28" strokeLinecap="round"><title>{g.percent.toFixed(1)}% sampled gaps</title></path>)}{objects.filter(o=>qualityObjects.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="#ef4444" fillOpacity=".16" stroke="#dc2626" strokeDasharray="4 2" vectorEffect="non-scaling-stroke"/>)}</>:qualityDensity.map(c=><rect key={c.x+','+c.y} x={c.x} y={c.y} width={1} height={1} fill={c.n>=40?'#dc2626':'#f59e0b'} opacity=".65"/>)}</g>}
 {!drawing.tool&&<StitchGuideOverlay guides={stitchGuides} zoom={zoom}/>}
-</svg>{!plan?.stitches&&!drawing.tool&&<section className="workspace-empty studio-canvas-start" aria-labelledby="canvas-start-title">
+</svg>
+{canvasTyping&&!canvasText&&<div className="canvas-type-hint" role="status">Click where you want the lettering. <button type="button" onClick={toggleCanvasTyping}>Cancel</button></div>}
+{canvasText&&<form className="canvas-type-form" aria-label="Canvas lettering" style={{left:canvasText.left,top:canvasText.top}}
+  onSubmit={event=>{event.preventDefault();void addCanvasText()}}
+  onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'&&!canvasTextSaving.current){event.preventDefault();toggleCanvasTyping()}}}>
+  <label htmlFor="canvas-lettering-text">Canvas lettering</label>
+  <input id="canvas-lettering-text" ref={canvasTextInput} value={canvasTextValue} maxLength={120}
+    disabled={busy} placeholder="Type your text" onChange={event=>setCanvasTextValue(event.target.value)}/>
+  {canvasTextError&&<small role="alert">{canvasTextError}</small>}
+  <div><button type="button" disabled={busy} onClick={toggleCanvasTyping}>Cancel</button>
+    <button type="submit" className="primary" disabled={busy||!canvasTextValue.trim()}>{busy?'Adding…':'Add'}</button></div>
+</form>}
+{!plan?.stitches&&!drawing.tool&&!canvasTyping&&!canvasText&&<section className="workspace-empty studio-canvas-start" aria-labelledby="canvas-start-title">
   <span className="canvas-start-icon"><SquareDashed size={24}/></span>
   <h2 id="canvas-start-title">Your hoop is ready</h2>
   <p>Bring in artwork or start drawing on the canvas.</p>
   <button className="primary" onClick={openInsertDialog}><FilePlus size={17}/> Browse designs</button>
   <div className="canvas-start-secondary">
-    <button onClick={()=>openText()}><Type size={16}/> Add lettering</button>
+    <button onClick={toggleCanvasTyping}><Type size={16}/> Place lettering</button>
     <button onClick={()=>drawing.pick('pen')} title="Draw a running path (P)"><PenLine size={16}/> Draw a path</button>
   </div>
 </section>}</div>
@@ -1583,7 +1649,15 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <InspectorDialog label="Sewing commands" title="Trim and stop after objects" disabled={busy||!movementIds.length}>
       <p className="workspace-helper">Apply explicit sewing commands to selected artwork. Automatic restores planner defaults. Verify stops in the exported machine format.</p>
       <div className="workspace-stack">
-        {([{label:'Trim after selection',trim:true,stop:null},{label:'Stop after selection',trim:null,stop:true},{label:'Trim and stop',trim:true,stop:true},{label:'Restore automatic commands',trim:null,stop:null}]).map(option=><button key={option.label} disabled={busy||!movementIds.length} onClick={()=>void edit('set_sewing_commands',{uids:movementIds,trim:option.trim,stop:option.stop})}>{option.label}</button>)}
+        {([
+          ['Trim after selection','add_trim'],
+          ['Stop after selection','add_stop'],
+          ['Trim and stop','add_both'],
+          ['Restore automatic trim','automatic_trim'],
+          ['Restore automatic stop','automatic_stop'],
+          ['Restore automatic commands','automatic_both'],
+        ] as const).map(([label,action])=><button key={action} disabled={busy||!movementIds.length}
+          onClick={()=>void edit('set_sewing_commands',{uids:movementIds,action})}>{label}</button>)}
       </div>
     </InspectorDialog>
     <div className="stitch-inspector-shortcuts">

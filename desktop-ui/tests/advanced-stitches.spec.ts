@@ -11,7 +11,7 @@ test('applies satin options and picks an open path for new lettering', async ({p
     Object.assign(window,{advancedCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>){
       calls.push({command,args});
       if(command==='workspace_overview')return {current:plan.name,recovery:false};
-      if(command==='current_preview'||command==='set_advanced_stitches'||command==='preview_lettering')return {...plan};
+      if(command==='current_preview'||command==='set_advanced_stitches'||command==='set_sewing_commands'||command==='preview_lettering')return {...plan};
       if(command==='editable_objects')return inserted?[body,{...body,uid:5,label:'Curve text'}]:[body];
       if(command==='advanced_stitch_settings')return {kind:'satin',style:'satin',split:7,underlay:null,shortStitches:true};
       if(command==='lettering_fonts')return ['Arial'];
@@ -34,7 +34,7 @@ test('applies satin options and picks an open path for new lettering', async ({p
   const calls=()=>page.evaluate(()=>(window as unknown as {advancedCalls:{command:string;args:unknown}[]}).advancedCalls);
   await canvas.locator('[data-artwork-uid="4"]').first().waitFor({state:"attached"});
   await selectPath();
-  await page.getByRole('group',{name:'Editor tools'}).getByRole('button',{name:'Stitches'}).click();
+  await page.getByRole('button',{name:'Open object stitch settings',exact:true}).click();
   await page.getByRole('button',{name:'Advanced stitch settings'}).click();
   const detail=page.getByRole('dialog',{name:'Advanced stitch settings'});
   await detail.getByLabel('Pattern').selectOption('s');
@@ -46,6 +46,16 @@ test('applies satin options and picks an open path for new lettering', async ({p
     uid:4,settings:{kind:'satin',style:'s',split:5,underlay:5},
   });
   await detail.getByRole('button',{name:'Close advanced stitch settings'}).click();
+
+  await page.getByRole('button',{name:'Sewing commands',exact:true}).click();
+  const sewing=page.getByRole('dialog',{name:'Trim and stop after objects'});
+  await sewing.getByRole('button',{name:'Trim after selection',exact:true}).click();
+  await sewing.getByRole('button',{name:'Stop after selection',exact:true}).click();
+  await sewing.getByRole('button',{name:'Restore automatic trim',exact:true}).click();
+  await sewing.getByRole('button',{name:'Close trim and stop after objects'}).click();
+  expect((await calls()).filter(call=>call.command==='set_sewing_commands').map(call=>call.args)).toEqual([
+    {uids:[4],action:'add_trim'}, {uids:[4],action:'add_stop'}, {uids:[4],action:'automatic_trim'},
+  ]);
 
   await page.getByRole('button',{name:'Add text',exact:true}).click();
   const lettering=page.locator('.inline-lettering');
