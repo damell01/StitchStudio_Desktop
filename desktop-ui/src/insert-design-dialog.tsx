@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Crosshair, FileInput, FolderOpen, Image, LayoutGrid, Plus, Search, X } from 'lucide-react';
 import { CharacterGallery } from './character-gallery';
 import { compareNames, ListNavigation, matchesName, usePagedList } from './list-navigation';
-import { TemplateAttribution, TemplateLibrary, type Template } from './templates';
+import { TemplateAttribution, TemplateLibrary, rememberTemplate, type Template } from './templates';
 import { importToLibrary, type LibraryImportSource } from './library-import';
 import './insert-design-dialog.css';
 
@@ -196,6 +196,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
           : candidate.source === 'layouts' ? await invoke<Plan>('insert_saved_template',{...position,file:candidate.file})
           : await invoke<Plan | null>('insert_embroidery', { ...position, file: candidate.file });
       if (!result) return;
+      if(candidate.source==='templates')rememberTemplate(candidate.template.id);
       onInsert(result);
       dialogRef.current?.close();
     });
