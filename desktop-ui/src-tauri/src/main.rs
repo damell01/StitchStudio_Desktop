@@ -1191,6 +1191,11 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
     };
     let mut best=None;
     let hatch=remove_interior_hatching(source,uids,&mode);
+    // Compare against the intentionally simplified artwork as well as the
+    // original. Decorative marks removed by the hatch detector should not
+    // count as missing structural coverage.
+    let structural_reference=hatch.as_ref().map(|doc|doc.plan());
+    let structural_ok=|d:&Design|structural_reference.as_ref().is_none_or(|reference|optimization_quality(reference,d,speed,trim).coverage>=85.);
     for (attempt,radius) in [24.,18.,32.,12.,40.,8.].into_iter().enumerate() {
         if mode.exhausted(){break}
         let seed=if attempt%2==0{hatch.as_ref().unwrap_or(source)}else{source};
@@ -1204,7 +1209,7 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
         for (doc,plan) in candidates {
             // A structural candidate must preserve every recorded text object and its geometry.
             let protected=source.shapes.iter().enumerate().filter(|(i,s)|source.records_text(*i)||s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")||source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)).all(|(_,s)|doc.shapes.iter().any(|q|q.uid==s.uid&&q.color==s.color&&q.params==s.params&&zigzag::svg::shapes_bounds(std::slice::from_ref(q)).min.dist(zigzag::svg::shapes_bounds(std::slice::from_ref(s)).min)<0.01&&zigzag::svg::shapes_bounds(std::slice::from_ref(q)).max.dist(zigzag::svg::shapes_bounds(std::slice::from_ref(s)).max)<0.01));
-            if protected&&eligible(&plan)&&best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|(plan.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(&plan,speed,trim)/optimization_seconds(original,speed,trim).max(1.))<(old.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(old,speed,trim)/optimization_seconds(original,speed,trim).max(1.))){
+            if protected&&structural_ok(&plan)&&eligible(&plan)&&best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|(plan.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(&plan,speed,trim)/optimization_seconds(original,speed,trim).max(1.))<(old.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(old,speed,trim)/optimization_seconds(original,speed,trim).max(1.))){
                 best=Some((doc,plan));
             }
         }
