@@ -1826,3 +1826,4 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 }
 .font-picker.studio-modal { width: min(1120px, calc(100vw - 32px)); }
 .font-picker .font-picker-results { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); margin-bottom: 12px; }
+.font-drop-dialog.studio-modal { width: min(1120px, calc(100vw - 32px)); }

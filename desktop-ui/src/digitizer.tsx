@@ -308,6 +308,7 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
     className={`lower digitizer-layout digitizer-stage-${art ? 3 : 0}`}
     onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
     onDrop={event => {
+      if (event.defaultPrevented) return;
       event.preventDefault();
       const file = event.dataTransfer.files[0];
       if (file && !busy) void readDrop(file);

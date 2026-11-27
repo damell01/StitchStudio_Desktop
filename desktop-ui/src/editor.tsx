@@ -1340,8 +1340,9 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   onDragLeave={event=>{if(!(event.relatedTarget instanceof Node)||!event.currentTarget.contains(event.relatedTarget))setArtworkDrag(false)}}
   onDrop={event=>{
     if(!event.dataTransfer.types.includes('Files'))return;
-    event.preventDefault();
     setArtworkDrag(false);
+    if(event.defaultPrevented)return;
+    event.preventDefault();
     if(!busy&&event.dataTransfer.files[0])setArtworkImport({file:event.dataTransfer.files[0]});
   }}>
 {artworkDrag&&<div className="canvas-artwork-drop" role="status">Drop an image to digitize</div>}

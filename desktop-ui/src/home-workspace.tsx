@@ -86,7 +86,9 @@ export function HomeWorkspace({navigate,studio,projects,onArtworkDrop}:Props) {
       onDragLeave={event=>{if(!(event.relatedTarget instanceof Node)||!event.currentTarget.contains(event.relatedTarget))setDragging(false)}}
       onDrop={event=>{
         if(!event.dataTransfer.types.includes('Files'))return;
-        event.preventDefault();setDragging(false);
+        setDragging(false);
+        if(event.defaultPrevented)return;
+        event.preventDefault();
         const file=event.dataTransfer.files[0];
         if(!busy&&file)onArtworkDrop(file);
       }}>

@@ -24,7 +24,7 @@ The [desktop build and packaging guide](docs/DESKTOP.md) has local commands for 
 
 Use **?** in the editor toolbar to search how-to guides and view screenshots while your project stays open. Digitize, Lettering, and Appliqué also have a **?** for help with that tool. Open **Help → Help Center** for the visual stitch reference or to restart the optional tour.
 
-In **Font Manager**, drop TTF or OTF files onto the import area to use them in Stitch Studio lettering. BX files can be stored in the library.
+Drop BX, TTF, or OTF files, or a folder of fonts, onto Stitch Studio to import them. Folder imports include subfolders. TTF and OTF files are available for lettering. BX files are saved in the library for use with a compatible decoder.
 
 ## Automatic updates
 
