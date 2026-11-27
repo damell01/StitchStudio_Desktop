@@ -68,6 +68,75 @@ fn facts(geometry: &Geometry, settings: Option<&str>, measure: impl FnOnce() -> 
     f
 }
 
+/// Sampled geometric coverage gaps, in design millimeters (not physical fabric prediction).
+#[derive(Clone, Debug)]
+pub struct CoverageGap {
+    pub shape: usize,
+    pub inside: usize,
+    pub missing: usize,
+    pub points: Vec<[f64;2]>,
+}
+pub fn coverage_gaps(shapes:&[Shape],design:&Design,_opt:&PlanOptions)->Vec<CoverageGap>{
+    let mut out=Vec::new();
+    // Sample the interior of intended filled artwork against sewn segments.
+    // This is a geometric gap warning, not a physical thread-width simulation.
+    if shapes.len() <= 350 && design.stitch_count() <= 100_000 {
+        use std::collections::HashMap;
+        let mut sewn:HashMap<([u8;3],i32,i32),Vec<crate::geom::P>>=HashMap::new();
+        let mut sample_budget=1_000_000usize;
+        'sampling: for block in &design.blocks {
+            for run in &block.runs {
+                for pair in run.pts.windows(2) {
+                    let n = (pair[0].dist(pair[1])/1.5).ceil().clamp(1.0,200.0) as usize;
+                    for k in 0..=n {
+                        if sample_budget==0{break 'sampling}
+                        sample_budget-=1;
+                        let p = pair[0].lerp(pair[1], k as f64/n as f64);
+                        let cell=sewn.entry((block.color,(p.x/4.0).floor() as i32,(p.y/4.0).floor() as i32)).or_default();
+                        // Retain spatially distinct samples rather than letting repeated
+                        // penetrations at one location exhaust the cell capacity.
+                        if !cell.iter().any(|q|q.dist(p)<0.5){cell.push(p);}
+                    }
+                }
+            }
+        }
+        // Inspect only the geometry that actually needs sewing after overlap removal.
+        let effective=crate::design::effective_geometry(shapes,&design.sew_order,_opt);
+        let mut budget=120_000usize;
+        for (i,s) in shapes.iter().enumerate() {
+            if budget==0 || sample_budget==0 {break}
+            if design.covered.get(i).copied().unwrap_or(false) || !matches!(s.params.kind.unwrap_or(Kind::Fill),Kind::Fill|Kind::Satin) {continue}
+            let kind=s.params.kind.unwrap_or(Kind::Fill);
+            if (kind==Kind::Fill&&s.params.fill_spacing(&_opt.fabric)>0.65)
+                || (kind==Kind::Satin&&(s.params.colors.is_some()||s.params.satin_spacing(&_opt.fabric)>0.65)){continue}
+            let Geometry::Fill{rings,rule}=effective.get(i).unwrap_or(&s.geometry) else{continue};
+            let b=ring_bounds(rings);
+            if b.is_empty() || b.width().min(b.height())<12.0 {continue}
+            let mut inside=0usize;let mut missing=0usize;let mut points=Vec::new();
+            let step=2.5_f64.max((b.width()*b.height()/4000.0).sqrt());
+            let mut y=b.min.y+step/2.0;
+            while y<b.max.y && budget>0 {
+                let mut x=b.min.x+step/2.0;
+                while x<b.max.x && budget>0 {
+                    budget-=1;
+                    let p=crate::geom::P::new(x,y);
+                    if crate::geom::point_inside(rings,*rule,p) {
+                        inside+=1;
+                        let cx=(x/4.0).floor() as i32;let cy=(y/4.0).floor() as i32;
+                        if !(-1..=1).any(|dx|(-1..=1).any(|dy|sewn.get(&(s.color,cx+dx,cy+dy)).is_some_and(|points|points.iter().any(|q|q.dist(p)<=3.0)))) {missing+=1;if points.len()<4000{points.push([x/10.0,y/10.0]);}}
+                    }
+                    x+=step;
+                }
+                y+=step;
+            }
+            if budget>0 && inside>=12 && missing>=4 && missing*100>inside*12 {
+                out.push(CoverageGap{shape:i,inside,missing,points});
+            }
+        }
+    }
+    out
+}
+
 /// Run all checks. `hoop_mm` is the hoop's (width, height). (`_opt`: the
 /// options the design was planned with; what overlaps cover comes from the
 /// plan itself.)
@@ -249,61 +318,8 @@ pub fn check(
             _ => {}
         }
     }
-    // Sample the interior of intended filled artwork against sewn segments.
-    // This is a geometric gap warning, not a physical thread-width simulation.
-    if shapes.len() <= 350 && design.stitch_count() <= 100_000 {
-        use std::collections::HashMap;
-        let mut sewn:HashMap<([u8;3],i32,i32),Vec<crate::geom::P>>=HashMap::new();
-        let mut sample_budget=1_000_000usize;
-        'sampling: for block in &design.blocks {
-            for run in &block.runs {
-                for pair in run.pts.windows(2) {
-                    let n = (pair[0].dist(pair[1])/1.5).ceil().clamp(1.0,200.0) as usize;
-                    for k in 0..=n {
-                        if sample_budget==0{break 'sampling}
-                        sample_budget-=1;
-                        let p = pair[0].lerp(pair[1], k as f64/n as f64);
-                        let cell=sewn.entry((block.color,(p.x/4.0).floor() as i32,(p.y/4.0).floor() as i32)).or_default();
-                        // Retain spatially distinct samples rather than letting repeated
-                        // penetrations at one location exhaust the cell capacity.
-                        if !cell.iter().any(|q|q.dist(p)<0.5){cell.push(p);}
-                    }
-                }
-            }
-        }
-        // Inspect only the geometry that actually needs sewing after overlap removal.
-        let effective=crate::design::effective_geometry(shapes,&design.sew_order,_opt);
-        let mut budget=120_000usize;
-        for (i,s) in shapes.iter().enumerate() {
-            if budget==0 || sample_budget==0 {break}
-            if design.covered.get(i).copied().unwrap_or(false) || !matches!(s.params.kind.unwrap_or(Kind::Fill),Kind::Fill|Kind::Satin) {continue}
-            let kind=s.params.kind.unwrap_or(Kind::Fill);
-            if (kind==Kind::Fill&&s.params.fill_spacing(&_opt.fabric)>0.65)
-                || (kind==Kind::Satin&&(s.params.colors.is_some()||s.params.satin_spacing(&_opt.fabric)>0.65)){continue}
-            let Geometry::Fill{rings,rule}=effective.get(i).unwrap_or(&s.geometry) else{continue};
-            let b=ring_bounds(rings);
-            if b.is_empty() || b.width().min(b.height())<12.0 {continue}
-            let mut inside=0usize;let mut missing=0usize;
-            let step=2.5_f64.max((b.width()*b.height()/4000.0).sqrt());
-            let mut y=b.min.y+step/2.0;
-            while y<b.max.y && budget>0 {
-                let mut x=b.min.x+step/2.0;
-                while x<b.max.x && budget>0 {
-                    budget-=1;
-                    let p=crate::geom::P::new(x,y);
-                    if crate::geom::point_inside(rings,*rule,p) {
-                        inside+=1;
-                        let cx=(x/4.0).floor() as i32;let cy=(y/4.0).floor() as i32;
-                        if !(-1..=1).any(|dx|(-1..=1).any(|dy|sewn.get(&(s.color,cx+dx,cy+dy)).is_some_and(|points|points.iter().any(|q|q.dist(p)<=3.0)))) {missing+=1;}
-                    }
-                    x+=step;
-                }
-                y+=step;
-            }
-            if budget>0 && inside>=12 && missing>=4 && missing*100>inside*12 {
-                add(Some(i),Level::Warning,format!("Possible underfilled artwork: {}% of sampled interior locations have no nearby same-color sewn path. Inspect letter strokes, fill spacing and pull compensation; this is a geometric estimate, not a physical sew-out.",missing*100/inside));
-            }
-        }
+    for gap in coverage_gaps(shapes,design,_opt) {
+        add(Some(gap.shape),Level::Warning,format!("Possible underfilled artwork: {}% of sampled interior locations have no nearby same-color sewn path. Inspect letter strokes, fill spacing and pull compensation; this is a geometric estimate, not a physical sew-out.",gap.missing*100/gap.inside));
     }
     // Compare nearby similarly sized solid glyph-like objects. This is a
     // settings consistency advisory, not a font recognition or weight test.
