@@ -302,6 +302,7 @@ pub fn check(
     // Compare nearby similarly sized solid glyph-like objects. This is a
     // settings consistency advisory, not a font recognition or weight test.
     if shapes.len()<=350 {
+        let mut chord_budget=250_000usize;
         for (i,s) in shapes.iter().enumerate(){
             let Geometry::Fill{rings,..}=&s.geometry else{continue};
             let b=ring_bounds(rings);
@@ -333,15 +334,18 @@ pub fn check(
                 let step=3.0_f64.max((b.width()*b.height()/256.0).sqrt());
                 let mut widths=Vec::new();
                 let mut y=b.min.y+step/2.0;
-                while y<b.max.y {
+                while y<b.max.y && chord_budget>0 {
                     let mut x=b.min.x+step/2.0;
-                    while x<b.max.x {
+                    while x<b.max.x && chord_budget>0 {
+                        chord_budget-=1;
                         let p=crate::geom::P::new(x,y);
                         if crate::geom::point_inside(rings,*rule,p){
                             let mut spans=[0.0_f64;2];
                             for (axis,(dx,dy)) in [(1.0,0.0),(0.0,1.0)].into_iter().enumerate(){
                                 for sign in [-1.0,1.0]{
                                     for k in 1..=40{
+                                        if chord_budget==0{break}
+                                        chord_budget-=1;
                                         let d=k as f64*1.0;
                                         if !crate::geom::point_inside(rings,*rule,crate::geom::P::new(x+dx*d*sign,y+dy*d*sign)){break}
                                         spans[axis]+=1.0;
@@ -354,7 +358,7 @@ pub fn check(
                     }
                     y+=step;
                 }
-                if widths.len()>=12{
+                if chord_budget>0&&widths.len()>=12{
                     widths.sort_by(|a,b|a.total_cmp(b));
                     let narrow=widths[widths.len()/10];
                     let wide=widths[widths.len()*9/10];
