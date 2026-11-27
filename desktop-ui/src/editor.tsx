@@ -1096,9 +1096,11 @@ function fitArtwork() {
 
 const [qualityOverlay,setQualityOverlay]=useState<'coverage'|'density'>('coverage');
 const [qualityObjects,setQualityObjects]=useState<number[]>([]);
+const [coverageGaps,setCoverageGaps]=useState<{uid:number;points:number[][];percent:number}[]>([]);
 useEffect(()=>{
-  if(inspectorTab!=='quality'||!plan){setQualityObjects([]);return}
-  let active=true;setQualityObjects([]);
+  if(inspectorTab!=='quality'||!plan){setQualityObjects([]);setCoverageGaps([]);return}
+  let active=true;setQualityObjects([]);setCoverageGaps([]);
+  invoke<{uid:number;points:number[][];percent:number}[]>('coverage_gap_preview').then(g=>{if(active)setCoverageGaps(g)}).catch(()=>{});
   invoke<{uid:number|null;message:string}[]>('design_issues',{width,height}).then(issues=>{if(active)setQualityObjects(issues.filter(i=>i.uid!==null&&i.message.includes('Possible underfilled artwork:')).map(i=>i.uid!))}).catch(()=>{});
   return()=>{active=false};
 },[inspectorTab,plan,width,height]);
@@ -1492,7 +1494,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
  </circle>)}
 <line x1={selected.bounds[0]+selected.bounds[2]/2} x2={selected.bounds[0]+selected.bounds[2]/2} y1={selected.bounds[1]} y2={selected.bounds[1]-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke"/><circle cx={selected.bounds[0]+selected.bounds[2]/2} cy={selected.bounds[1]-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" pointerEvents={busy?'none':'all'} style={{cursor:'grab'}}><title>Rotate object · Shift snaps to 15°</title></circle>
 </g>}
-{inspectorTab==='quality'&&<g pointerEvents="none" aria-label="Quality overlay">{qualityOverlay==='coverage'?objects.filter(o=>qualityObjects.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="#ef4444" fillOpacity=".16" stroke="#dc2626" strokeDasharray="4 2" vectorEffect="non-scaling-stroke"/>):qualityDensity.map(c=><rect key={c.x+','+c.y} x={c.x} y={c.y} width={1} height={1} fill={c.n>=40?'#dc2626':'#f59e0b'} opacity=".65"/>)}</g>}
+{inspectorTab==='quality'&&<g pointerEvents="none" aria-label="Quality overlay">{qualityOverlay==='coverage'?<>{coverageGaps.map(g=><path key={g.uid} d={g.points.map(([x,y])=>`M${x-.14} ${y}h.28`).join(' ')} fill="none" stroke="#ef4444" strokeWidth=".28" strokeLinecap="round"><title>{g.percent.toFixed(1)}% sampled gaps</title></path>)}{objects.filter(o=>qualityObjects.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="#ef4444" fillOpacity=".16" stroke="#dc2626" strokeDasharray="4 2" vectorEffect="non-scaling-stroke"/>)}</>:qualityDensity.map(c=><rect key={c.x+','+c.y} x={c.x} y={c.y} width={1} height={1} fill={c.n>=40?'#dc2626':'#f59e0b'} opacity=".65"/>)}</g>}
 {!drawing.tool&&<StitchGuideOverlay guides={stitchGuides} zoom={zoom}/>}
 </svg>{!plan?.stitches&&!drawing.tool&&<section className="workspace-empty studio-canvas-start" aria-labelledby="canvas-start-title">
   <span className="canvas-start-icon"><SquareDashed size={24}/></span>
@@ -1516,7 +1518,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
 </div>
   {plan&&<div className="inspector-metrics"><div><small>Stitches</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div><div><small>Est. time</small><strong>{Math.ceil(plan.stitches/sewingSpm+plan.trims*trimSeconds/60+Math.max(0,plan.blocks.length-1)*changeSeconds/60)} min</strong></div></div>}
-  {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage objects</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red outlines mark objects with possible missing coverage, not exact gaps.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small></div>}
+  {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage gaps</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red marks show sampled suspected gaps; outlines identify affected objects. Not a physical sew-out prediction.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small></div>}
   {inspectorTab==='quality'&&plan&&<section className="workspace-inspector-group"><h3>Thread simulation</h3><button aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}>{realistic?'Show stitch paths':'Show realistic sew-out'}</button><label>Visual thread width · {threadDiameter.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={threadDiameter} onChange={e=>{setThreadDiameter(Number(e.target.value));setRealistic(true)}}/></label><small>Preview only — does not alter stitch density or export. Zoom in to inspect letter edges and gaps.</small></section>}
   {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
   {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
