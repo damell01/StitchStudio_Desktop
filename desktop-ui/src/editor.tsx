@@ -839,11 +839,14 @@ const [canvasRatio,setCanvasRatio]=useState(0);
 useEffect(()=>{
   const canvas=canvasSurface.current;
   if(!canvas)return;
-  const observer=new ResizeObserver(([entry])=>{
-    const {width,height}=entry.contentRect;
-    if(width>0&&height>0)setCanvasRatio(width/height);
-  });
-  observer.observe(canvas.querySelector("svg.design-canvas")??canvas);
+  const surface=canvas.querySelector("svg.design-canvas")??canvas;
+  const measure=()=>{
+    const {width,height}=surface.getBoundingClientRect();
+    if(width>0&&height>0){const ratio=width/height;setCanvasRatio(old=>Math.abs(old-ratio)<.001?old:ratio);}
+  };
+  const observer=new ResizeObserver(measure);
+  observer.observe(surface);
+  measure();
   return()=>observer.disconnect();
 },[]);
 
