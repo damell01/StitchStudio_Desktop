@@ -249,6 +249,51 @@ pub fn check(
             _ => {}
         }
     }
+    // Sample the interior of intended filled artwork against sewn segments.
+    // This is a geometric gap warning, not a physical thread-width simulation.
+    if shapes.len() <= 350 && design.stitch_count() <= 100_000 {
+        use std::collections::HashSet;
+        let mut sewn = HashSet::new();
+        for block in &design.blocks {
+            for run in &block.runs {
+                for pair in run.pts.windows(2) {
+                    let n = (pair[0].dist(pair[1])/2.0).ceil().clamp(1.0,100.0) as usize;
+                    for k in 0..=n {
+                        let p = pair[0].lerp(pair[1], k as f64/n as f64);
+                        sewn.insert((block.color,(p.x/4.0).floor() as i32,(p.y/4.0).floor() as i32));
+                    }
+                }
+            }
+        }
+        let mut budget=120_000usize;
+        for (i,s) in shapes.iter().enumerate() {
+            if budget==0 {break}
+            if design.covered.get(i).copied().unwrap_or(false) || !matches!(s.params.kind.unwrap_or(Kind::Fill),Kind::Fill|Kind::Satin) {continue}
+            let Geometry::Fill{rings,rule}=&s.geometry else{continue};
+            let b=ring_bounds(rings);
+            if b.is_empty() || b.width().min(b.height())<12.0 {continue}
+            let mut inside=0usize;let mut missing=0usize;
+            let step=4.0_f64.max((b.width()*b.height()/4000.0).sqrt());
+            let mut y=b.min.y+step/2.0;
+            while y<b.max.y && budget>0 {
+                let mut x=b.min.x+step/2.0;
+                while x<b.max.x && budget>0 {
+                    budget-=1;
+                    let p=crate::geom::P::new(x,y);
+                    if crate::geom::point_inside(rings,*rule,p) {
+                        inside+=1;
+                        let cx=(x/4.0).floor() as i32;let cy=(y/4.0).floor() as i32;
+                        if !(-1..=1).any(|dx|(-1..=1).any(|dy|sewn.contains(&(s.color,cx+dx,cy+dy)))) {missing+=1;}
+                    }
+                    x+=step;
+                }
+                y+=step;
+            }
+            if inside>=12 && missing>=4 && missing*100>inside*12 {
+                add(Some(i),Level::Warning,format!("Possible underfilled artwork: {}% of sampled interior locations have no nearby same-color sewn path. Inspect letter strokes, fill spacing and pull compensation; intentional open patterns or overlaps may also trigger this.",missing*100/inside));
+            }
+        }
+    }
     // Inspect the actual planned needle movements, not just source geometry.
     // Run boundaries represent travel/trim decisions and are not sewn segments.
     let mut long = 0usize;
