@@ -957,8 +957,9 @@ const [threadSheen,setThreadSheen]=useState(.55);
 const [needleDetail,setNeedleDetail]=useState(true);
 // Batch direction-dependent highlights into four paths per thread block,
 // rather than creating a DOM element for every stitch.
+const detailedLighting=realistic&&needleDetail&&zoom>=100;
 const threadLighting=useMemo(()=>{
- if(!realistic||!plan||!needleDetail||zoom<100)return [];
+ if(!detailedLighting||!plan)return [];
  return plan.blocks.map(block=>{
   const paths=['','','',''];
   return {paths,block};
@@ -977,13 +978,14 @@ const threadLighting=useMemo(()=>{
   }
   return paths;
  });
-},[realistic,plan,needleDetail,zoom,renderedRuns,fullRenderedRuns]);
+},[detailedLighting,plan,renderedRuns,fullRenderedRuns]);
 
-const stitchedArtwork=useMemo(()=>plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} fill="none" strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((_r,j)=>{const visible=renderedRuns[i]?.[j];if(!visible)return null;const color='rgb('+b.color.join(',')+')';return realistic?<g key={j} pointerEvents="none">
+const batchedStitchPaths=useMemo(()=>renderedRuns.map(runs=>runs.filter(Boolean).map(run=>'M'+run.replace(/ /g,'L')).join('')),[renderedRuns]);
+const stitchedArtwork=useMemo(()=>plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} fill="none" strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{!realistic?<path d={batchedStitchPaths[i]} stroke={'rgb('+b.color.join(',')+')'} vectorEffect="non-scaling-stroke" strokeWidth="1"/>:b.runs.map((_r,j)=>{const visible=renderedRuns[i]?.[j];if(!visible)return null;const color='rgb('+b.color.join(',')+')';return realistic?<g key={j} pointerEvents="none">
 <polyline points={visible} stroke="#211b17" opacity=".28" strokeWidth={threadDiameter*1.18} transform="translate(.045 .065)"/>
 <polyline points={visible} stroke={color} strokeWidth={threadDiameter}/>
 <polyline points={visible} stroke="#ffffff" opacity={threadSheen*.25} strokeWidth={threadDiameter*.27} transform={`translate(${-threadDiameter*.18} ${-threadDiameter*.18})`}/>
-</g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}{realistic&&threadLighting[i]?.map((d,k)=>d&&<path key={'light'+k} d={d} stroke="white" strokeWidth={threadDiameter*.32} opacity={threadSheen*(.08+k*.13)} strokeLinecap="round" pointerEvents="none"/>)}</g>),[plan,hidden,realistic,renderedRuns,threadDiameter,threadSheen,threadLighting]);
+</g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}{realistic&&threadLighting[i]?.map((d,k)=>d&&<path key={'light'+k} d={d} stroke="white" strokeWidth={threadDiameter*.32} opacity={threadSheen*(.08+k*.13)} strokeLinecap="round" pointerEvents="none"/>)}</g>),[plan,hidden,realistic,renderedRuns,threadDiameter,threadSheen,threadLighting,batchedStitchPaths]);
 useEffect(()=>{
   if(!playing)return;
   const interval=window.setInterval(()=>{
