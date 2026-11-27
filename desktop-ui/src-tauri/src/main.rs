@@ -1701,7 +1701,7 @@ struct SimplifyDraft {
     variants:Vec<(u8,zigzag::document::Document,Design)>,
 }
 #[derive(serde::Serialize)]
-struct SimplifyVariant { strength:u8, plan:Option<Preview>, reason:Option<String>, quality:Option<OptimizationQuality> }
+struct SimplifyVariant { artwork_svg:Option<String>, strength:u8, plan:Option<Preview>, reason:Option<String>, quality:Option<OptimizationQuality> }
 #[derive(serde::Serialize)]
 struct SimplifyReview { id:u64, variants:Vec<SimplifyVariant>, limited: bool }
 fn same_stitch_plan(a:&Design,b:&Design)->bool{
@@ -1743,8 +1743,8 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
             if options.exhausted(){break}
             if strength>=4{
                 match if strength==6{choose_texture_reduction(&source,&original,uids.as_deref(),&options)}else if strength==4{choose_silhouette(&source,&original,uids.as_deref(),&options)}else{choose_fast_stitch(&source,&original,uids.as_deref(),&options)}{
-                    Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
-                    Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
+                    Ok((doc,design))=>{variants.push(SimplifyVariant{artwork_svg:doc.to_svg().ok(),strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
+                    Err(reason)=>variants.push(SimplifyVariant{artwork_svg:None,strength,plan:None,reason:Some(reason),quality:None})
                 }
                 continue
             }
@@ -1759,8 +1759,8 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
             if strength==2{mode.lighter_underlay=false;}
             if strength==3{mode.solid=true;mode.merge=true;mode.auto_types=true;}
             match choose_simplification(&source,&original,strength,uids.as_deref(),strength>1&&remove_detail.unwrap_or(false),&mode){
-                Ok((doc,design))=>{variants.push(SimplifyVariant{strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
-                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None})
+                Ok((doc,design))=>{variants.push(SimplifyVariant{artwork_svg:doc.to_svg().ok(),strength,plan:Some(preview(&design)),reason:None,quality:Some(optimization_quality(&original,&design,options.speed.unwrap_or(800.),options.trim_seconds.unwrap_or(3.)))});stored.push((strength,doc,design));}
+                Err(reason)=>variants.push(SimplifyVariant{artwork_svg:None,strength,plan:None,reason:Some(reason),quality:None})
             }
         }
         let mut w=state.lock().map_err(|e|e.to_string())?;
@@ -3726,7 +3726,7 @@ async fn compare_digitizer_draft(id:u64,quick:Option<bool>,target_stitches:Optio
             (d.document.clone(),d.design.clone(),alternatives)
         };
         let describe=|strength,plan:&Design| SimplifyVariant {
-            strength,plan:Some(preview(plan)),reason:None,quality:Some(optimization_quality(&original,plan,800.,3.)),
+            artwork_svg:None,strength,plan:Some(preview(plan)),reason:None,quality:Some(optimization_quality(&original,plan,800.,3.)),
         };
         let mut variants:Vec<_>=alternatives.iter().map(|(strength,_,plan)|describe(*strength,plan)).collect();
         let budget=SimplifyBudget::new(std::time::Duration::from_secs(10));
@@ -3747,7 +3747,7 @@ async fn compare_digitizer_draft(id:u64,quick:Option<bool>,target_stitches:Optio
                     variants.push(describe(strength,&plan));
                     alternatives.push((strength,d,plan));
                 }
-                Err(reason)=>variants.push(SimplifyVariant{strength,plan:None,reason:Some(reason),quality:None}),
+                Err(reason)=>variants.push(SimplifyVariant{artwork_svg:None,strength,plan:None,reason:Some(reason),quality:None}),
             }
         }
         variants.sort_by_key(|v|v.strength);
