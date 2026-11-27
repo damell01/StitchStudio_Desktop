@@ -1637,15 +1637,16 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button onClick={()=>{showInspector(true);setInspectorTab('transform')}} title="Dimensions and alignment"><Move size={16}/> Position</button>
   {selected.bounds&&<><button disabled={busy||lockedObjects.includes(selected.uid)} title="Reduce selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:.9})}>− Size</button><button disabled={busy||lockedObjects.includes(selected.uid)} title="Increase selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:1.1})}>+ Size</button></>}
   <button disabled={busy} title="Inspect selected design quality" onClick={()=>openQuality()}><ScanLine size={16}/> Check quality</button>
-  <button className="studio-tool-icon" title="Edit the selected object" aria-label="Open object editing tools"
-    onClick={()=>{showInspector(true);setInspectorTab('transform')}}><MousePointer2 size={16}/></button>
+  
   <button className="studio-tool-icon" title="Adjust stitches on the selected object" aria-label="Open object stitch settings"
     onClick={()=>{showInspector(true);setInspectorTab('stitches')}}><Scissors size={16}/></button>
-  <button className="studio-tool-icon" title="Move left" aria-label="Move selected object left" disabled={busy} onClick={()=>nudge(-nudgeStep,0)}><ArrowLeft size={16}/></button>
+  <details className="studio-selection-more"><summary title="More object actions"><MoreHorizontal size={17}/><span>More</span></summary><div className="studio-selection-more-actions">
+<button className="studio-tool-icon" title="Move left" aria-label="Move selected object left" disabled={busy} onClick={()=>nudge(-nudgeStep,0)}><ArrowLeft size={16}/></button>
   <button className="studio-tool-icon" title="Move up" aria-label="Move selected object up" disabled={busy} onClick={()=>nudge(0,-nudgeStep)}><ArrowUp size={16}/></button>
   <button className="studio-tool-icon" title="Move down" aria-label="Move selected object down" disabled={busy} onClick={()=>nudge(0,nudgeStep)}><ArrowDown size={16}/></button>
   <button className="studio-tool-icon" title="Move right" aria-label="Move selected object right" disabled={busy} onClick={()=>nudge(nudgeStep,0)}><ArrowRight size={16}/></button>
   <button className="studio-tool-icon" title="Rotate selection 90°" aria-label="Rotate selection 90 degrees" disabled={busy} onClick={()=>editSelection({kind:'rotate'})}><RotateCw size={16}/></button>
+</div></details>
   <PathEditor<Plan> key={selected.uid} object={selected} disabled={busy||lockedObjects.includes(selected.uid)}
     onApply={next=>{
       if(next.blocks.length!==plan.blocks.length||next.blocks.some((block,index)=>block.color.join(',')!==plan.blocks[index]?.color.join(',')))setThreadAssignments({});
