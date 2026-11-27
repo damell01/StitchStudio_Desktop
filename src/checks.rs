@@ -264,7 +264,9 @@ pub fn check(
                         sample_budget-=1;
                         let p = pair[0].lerp(pair[1], k as f64/n as f64);
                         let cell=sewn.entry((block.color,(p.x/4.0).floor() as i32,(p.y/4.0).floor() as i32)).or_default();
-                        if cell.len()<32{cell.push(p);}
+                        // Retain spatially distinct samples rather than letting repeated
+                        // penetrations at one location exhaust the cell capacity.
+                        if !cell.iter().any(|q|q.dist(p)<0.5){cell.push(p);}
                     }
                 }
             }
