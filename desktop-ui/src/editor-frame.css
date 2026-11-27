@@ -483,3 +483,19 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .studio-insert .template-elements-grid .design-favorite {position:absolute;top:7px;right:7px;z-index:1;min-width:26px;min-height:26px;padding:3px;}
 .studio-insert .template-elements-grid .template-selected {outline:2px solid var(--brand,#6945a2);outline-offset:-2px;}
 .studio-insert .template-elements-grid .template-art-select:focus-visible {outline:2px solid var(--brand,#6945a2);outline-offset:-2px;}
+
+/* Docked elements reuse the thumbnail browser without taking over the hoop. */
+.studio-elements-dock {display:flex;flex-direction:column;gap:7px;min-width:0;min-height:0;overflow-y:auto;scrollbar-width:thin;}
+.studio-elements-dock>small {font-size:11px;line-height:1.4;color:var(--workspace-muted);}
+.studio-elements-dock .template-category-strip {display:flex;flex-wrap:nowrap;overflow-x:auto;gap:4px;scrollbar-width:thin;flex-shrink:0;}
+.studio-elements-dock .template-category-strip button {flex:none;white-space:nowrap;padding:4px 8px;font-size:11px;border-radius:14px;}
+.studio-elements-dock .library-filters {display:flex;flex-direction:column;align-items:stretch;gap:5px;min-width:0;}
+.studio-elements-dock .library-filters input,.studio-elements-dock .library-filters select {min-width:0;width:100%;}
+.studio-elements-dock .template-elements-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;align-content:start;}
+.studio-elements-dock .template-elements-grid article {position:relative;min-width:0;padding:4px;display:flex;flex-direction:column;gap:3px;border-radius:8px;}
+.studio-elements-dock .template-art-select {width:100%;aspect-ratio:1;min-height:0;padding:3px;display:grid;place-items:center;}
+.studio-elements-dock .template-art {width:100%;height:100%;max-height:100px;}
+.studio-elements-dock .template-elements-grid h3 {font-size:10px;line-height:1.3;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.studio-elements-dock .template-elements-grid article>small {font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.studio-elements-dock .design-favorite {position:absolute;top:4px;right:4px;z-index:1;min-width:24px;min-height:24px;padding:2px;}
+.studio-elements-dock button:focus-visible {outline:2px solid var(--brand,#6945a2);outline-offset:-2px;}
