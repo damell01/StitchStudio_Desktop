@@ -265,8 +265,11 @@ pub fn column(r: &Rails, p: &SatinParams) -> Polyline {
                     }
                 } else { 0.0 }
             };
-            let fa = fraction(da, db);
-            let fb = fraction(db, da);
+            // Fine columns have little room for inset stitches: preserve
+            // more of the edge on small glyphs while still relieving crowding.
+            let inset_scale = (local_width / 15.0).clamp(0.0, 1.0);
+            let fa = fraction(da, db) * inset_scale;
+            let fb = fraction(db, da) * inset_scale;
             let (left, right) = (a2, b2);
             a2 = left.lerp(right, fa);
             b2 = right.lerp(left, fb);
