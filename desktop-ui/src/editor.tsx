@@ -1666,7 +1666,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button onClick={()=>{showInspector(true);setInspectorTab('threads')}} title="Change thread colors"><Palette size={16}/> Colors</button>
   <button onClick={()=>{showInspector(true);setInspectorTab('transform')}} title="Dimensions and alignment"><Move size={16}/> Position</button>
   {selected.bounds&&<><button disabled={busy||lockedObjects.includes(selected.uid)} title="Reduce selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:.9})}>− Size</button><button disabled={busy||lockedObjects.includes(selected.uid)} title="Increase selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:1.1})}>+ Size</button></>}
-  <button disabled={busy} title="Inspect selected design quality" onClick={()=>openQuality()}><ScanLine size={16}/> Check quality</button>
+  <button disabled={busy||!plan?.stitches} title="Inspect design coverage and density" onClick={()=>openQuality()}><ScanLine size={16}/> Check quality</button>
+  <button disabled={busy||!plan?.stitches} title="Try conservative stitch repair; changes can be undone" onClick={async()=>{if(await confirmAction("Try conservative repair? You can undo the change.")){const result=await edit('repair_stitches',{});if(result.plan)openQuality();}}}><Wrench size={16}/> Auto repair</button>
   
   <button className="studio-tool-icon" title="Adjust stitches on the selected object" aria-label="Open object stitch settings"
     onClick={()=>{showInspector(true);setInspectorTab('stitches')}}><Scissors size={16}/></button>
