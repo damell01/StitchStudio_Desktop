@@ -1604,7 +1604,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     </InspectorDialog>
     <InspectorDialog label="Embroidery effects" title="Quick stitch effects" disabled={busy||!movementIds.length}>
       <small>Apply a preset to selected compatible objects. Choose the appropriate stitch type first; review the stitch preview before sewing.</small>
-      {[
+      <div className="effect-gallery">{[
         {name:'Bean outline',description:'Triple-pass running stitch',settings:{repeats:3}},
         {name:'Light outline',description:'Single running pass',settings:{repeats:1}},
         {name:'Spiral contour',description:'Continuous contour pattern',settings:{spiral:true}},
@@ -1612,7 +1612,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
         {name:'Classic satin',description:'Plain satin top stitching',settings:{style:'satin',short_stitches:true}},
         {name:'Decorative S-stitch',description:'Patterned satin surface',settings:{style:'s'}},
         {name:'Open zigzag',description:'Open decorative satin pattern',settings:{style:'zigzag'}},
-      ].map(effect=><button key={effect.name} disabled={busy} onClick={()=>void edit('set_specialty_settings',{uids:movementIds,settings:effect.settings})}><strong>{effect.name}</strong><small>{effect.description}</small></button>)}
+      ].map((effect,i)=><button className="effect-tile" key={effect.name} disabled={busy} onClick={()=>void edit('set_specialty_settings',{uids:movementIds,settings:effect.settings})}><svg viewBox="0 0 120 48" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">{i<2?<>{Array.from({length:i===0?3:1},(_,j)=><path key={j} d="M8 35 Q32 4 60 24 T112 13" transform={`translate(0,${j-1})`} strokeDasharray="5 2"/>)}</>:i<4?<>{i===2?<path d="M12 24 C12 2 108 2 108 24 S24 46 24 24 S96 9 96 24 S36 38 36 24 S84 16 84 24 S48 30 48 24 L72 24"/>:[0,1,2,3].map(j=><ellipse key={j} cx="60" cy="24" rx={48-j*10} ry={20-j*4}/>)}</>:<polyline points={Array.from({length:i===4?64:i===5?40:22},(_,j)=>{const n=i===4?63:i===5?39:21;return (8+j*104/n)+',' + ((j%2?36:12)+(i===5?Math.sin(j)*3:0))}).join(' ')}/>}</svg><strong>{effect.name}</strong><small>{effect.description}</small></button>)}</div>
     </InspectorDialog>
     <InspectorDialog label="Advanced stitch controls" title="Specialty stitch settings" disabled={busy||!movementIds.length}>
       <p className="workspace-helper">Apply individual settings to selected artwork. Only compatible stitch types use each parameter.</p>
