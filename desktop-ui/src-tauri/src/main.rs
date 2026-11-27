@@ -1152,7 +1152,14 @@ fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->Optim
     let mut totals=HashMap::<[u8;3],(usize,usize)>::new();
     for cell in a.union(&b){let t=totals.entry(cell.0).or_default();t.0+=1;if a.contains(cell)&&b.contains(cell){t.1+=1;}}
     let weakest=totals.values().map(|(n,k)|*k as f64/(*n).max(1) as f64).fold(1.0_f64,f64::min);
-    let overlap=overlap.min(weakest);
+    // A disconnected same-thread detail can be lost even when the overall
+    // color footprint is almost unchanged. Preserve isolated cells, with
+    // one millimetre of tolerance for harmless needle-position changes.
+    let isolated_lost=a.difference(&b).any(|&(color,x,y)|{
+        let has_original_neighbor=(-2i32..=2).any(|dx|(-2i32..=2).any(|dy|(dx!=0||dy!=0)&&a.contains(&(color,x+dx,y+dy))));
+        !has_original_neighbor && !(-1i32..=1).any(|dx|(-1i32..=1).any(|dy|b.contains(&(color,x+dx,y+dy))))
+    });
+    let overlap=if isolated_lost {0.0} else {overlap.min(weakest)};
     OptimizationQuality{coverage:overlap*100.,density_peak:peak,seconds:optimization_seconds(plan,speed,trim)}
 }
 // Combine stitch economy with dependency-aware travel ordering. Unlike
@@ -1612,6 +1619,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
         let stitch_goal=options.target_stitches.or_else(||(original.stitch_count()>15_000).then_some(10_000));
         let before=measure_stitches(original);let a=original.bounds();let baseline_seconds=seconds(original);
+        let baseline_peak=optimization_quality(original,original,speed,trim).density_peak;
         let nearest_rejection = std::cell::Cell::new((usize::MAX, "No cheaper stitch plan was found for the eligible artwork."));
         let reject = |d: &Design, reason: &'static str| {
             if d.stitch_count() < nearest_rejection.get().0 {
@@ -1636,7 +1644,13 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
                 return reject(d, "A cheaper plan moved the design edges by more than 0.5 mm.");
             }
             let threshold = if strength == 1 { 95. } else if strength == 2 { 90. } else { 85. };
-            if optimization_quality(original,d,speed,trim).coverage < threshold {
+            let quality=optimization_quality(original,d,speed,trim);
+            // Allow minor cell-boundary variation, but do not trade lower
+            // total stitch counts for substantially worse local congestion.
+            if quality.density_peak>baseline_peak.saturating_add(3).max(baseline_peak.saturating_mul(110)/100) {
+                return reject(d, "A cheaper plan increased peak needle density.");
+            }
+            if quality.coverage < threshold {
                 return reject(d, "A cheaper plan changed too much of the visible stitch footprint.");
             }
             true
@@ -4444,6 +4458,22 @@ mod tests {
         candidate.blocks.pop();
         assert_eq!(optimization_quality(&original, &original, 800.0, 3.0).coverage, 100.0);
         assert_eq!(optimization_quality(&original, &candidate, 800.0, 3.0).coverage, 0.0);
+    }
+
+    #[test]
+    fn optimization_rejects_missing_isolated_same_thread_detail() {
+        use zigzag::{design::{Block,Run},geom::P};
+        let original=Design{blocks:vec![Block{color:[0,0,0],runs:vec![
+            Run{pts:vec![P::new(0.,0.),P::new(1000.,0.)],trim_before:false},
+            Run{pts:vec![P::new(500.,100.)],trim_before:true}
+        ]}],..Default::default()};
+        let mut candidate=original.clone();
+        candidate.blocks[0].runs.pop();
+        assert_eq!(optimization_quality(&original,&candidate,800.,3.).coverage,0.);
+        assert_eq!(optimization_quality(&original,&original,800.,3.).coverage,100.);
+        let mut shifted=original.clone();
+        shifted.blocks[0].runs[1].pts[0]=P::new(510.,100.);
+        assert!(optimization_quality(&original,&shifted,800.,3.).coverage>95.);
     }
 
     #[test]
