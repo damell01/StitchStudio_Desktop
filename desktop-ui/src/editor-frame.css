@@ -444,3 +444,28 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .editor-toolrail .studio-shapes-panel button{display:flex;flex-direction:column;align-items:center;gap:5px;width:100%;min-height:64px;white-space:normal;}
 .studio-shapes-panel svg{fill:var(--brand-accent,var(--brand));}
 .studio-shapes-panel>small{grid-column:1/-1;line-height:1.4;}
+
+/* Canvas-first compact desktop chrome. Keep commands accessible without covering artwork. */
+@media (min-width:1100px) {
+ .editor-workspace .editor-grid.studio-canvas-layout:not(.canvas-focus) {grid-template-columns:52px var(--left-dock) minmax(0,1fr) var(--right-dock);gap:3px;padding:3px;}
+ .editor-workspace .editor-grid.studio-canvas-layout > .editor-toolrail button {flex-basis:40px;gap:2px;font-size:9px;}
+ .editor-workspace .editor-toolrail button small {font-size:9px;}
+ .editor-workspace .editor-toolrail .studio-shapes-menu>summary {min-height:40px;}
+ .editor-workspace .editor-toolrail .studio-shapes-panel {left:60px;}
+}
+.editor-workspace .studio-edit-bar {padding:3px 6px;min-height:0;gap:3px;}
+.editor-workspace .studio-edit-bar button {min-height:28px;padding-block:3px;}
+.editor-workspace .studio-view-modes {padding:2px 5px;gap:2px;}
+.editor-workspace .studio-view-modes button {min-height:26px;padding:3px 8px;}
+.editor-workspace .studio-camera.studio-camera-docked {padding:2px 5px;min-height:0;gap:3px;}
+.editor-workspace .studio-camera.studio-camera-docked button {min-height:27px;padding-block:3px;}
+.editor-workspace .workspace-status {gap:6px;padding:3px 8px;min-height:30px;flex-wrap:wrap;overflow:visible;}
+.editor-workspace .workspace-status .status-metrics {gap:8px;min-width:0;flex-wrap:wrap;}
+.editor-workspace .studio-status-zoom {display:flex;align-items:center;gap:3px;flex:none;margin-inline-start:auto;}
+.editor-workspace .studio-status-zoom button {min-height:26px;padding:3px 5px;}
+.editor-workspace .studio-status-zoom .studio-zoom-options {top:auto;bottom:calc(100% + 8px);right:0;}
+.editor-workspace .studio-status-zoom .camera-zoom-value {font-variant-numeric:tabular-nums;min-width:48px;text-align:center;}
+.editor-workspace .studio-status-zoom .studio-zoom-options button {min-height:30px;}
+.editor-workspace .studio-inspector-dock .workspace-inspector-group {padding:7px;gap:6px;}
+.editor-workspace .studio-inspector-dock .workspace-inspector-group h3 {margin-block:2px 5px;font-size:13px;}
+.editor-workspace .studio-inspector-dock .workspace-segments button {min-height:26px;}
