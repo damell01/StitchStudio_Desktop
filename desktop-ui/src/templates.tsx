@@ -15,7 +15,14 @@ const twemojiTemplates: Template[] = twemojiCatalogue.map(({id,name,category,tag
   art: twemojiAssets[`./assets/twemoji/${asset}.svg`],
 }));
 
+// Generated artwork is intentionally labeled draft until reviewed.
+const curatedAssets = import.meta.glob<string>('./assets/curated/*.svg', {query:'?raw',import:'default',eager:true});
+const curatedTemplates: Template[] = Object.entries(curatedAssets).map(([path,art])=>{
+  const slug=path.split('/').pop()!.replace(/\.svg$/,'');
+  return {id:'curated-'+slug,name:slug.replace(/-/g,' ').replace(/^./,c=>c.toUpperCase()),category:'Curated drafts',tags:['draft','review required'],art};
+});
 export const templates: Template[] = [
+  ...curatedTemplates,
 {"id":"spring-bunny-trio","name":"Pastel Easter bunny trio","category":"Ready-made designs","tags":["easter","rabbit","spring","nursery","name optional"],"art":"<g transform=\"translate(0 23) scale(.34)\"><path fill=\"#c989a6\" d=\"M39 39 C26 28 24 7 32 5 C42 3 47 24 48 35 C50 17 60 3 67 8 C75 14 63 33 59 40 C75 48 80 66 69 79 C60 90 37 90 28 78 C17 65 24 47 39 39Z\"/><circle cx=\"50\" cy=\"76\" r=\"10\" fill=\"#f7eee0\"/></g><g transform=\"translate(33 23) scale(.34)\"><path fill=\"#83a57a\" d=\"M39 39 C26 28 24 7 32 5 C42 3 47 24 48 35 C50 17 60 3 67 8 C75 14 63 33 59 40 C75 48 80 66 69 79 C60 90 37 90 28 78 C17 65 24 47 39 39Z\"/><circle cx=\"50\" cy=\"76\" r=\"10\" fill=\"#f7eee0\"/></g><g transform=\"translate(66 23) scale(.34)\"><path fill=\"#9981b7\" d=\"M39 39 C26 28 24 7 32 5 C42 3 47 24 48 35 C50 17 60 3 67 8 C75 14 63 33 59 40 C75 48 80 66 69 79 C60 90 37 90 28 78 C17 65 24 47 39 39Z\"/><circle cx=\"50\" cy=\"76\" r=\"10\" fill=\"#f7eee0\"/></g>"},
 {"id":"spring-bunny","name":"Heirloom bunny silhouette","category":"Seasonal","tags":["easter","rabbit","spring"],"art":"<path fill=\"#c989a6\" d=\"M39 39 C26 28 24 7 32 5 C42 3 47 24 48 35 C50 17 60 3 67 8 C75 14 63 33 59 40 C75 48 80 66 69 79 C60 90 37 90 28 78 C17 65 24 47 39 39Z\"/><circle cx=\"50\" cy=\"76\" r=\"10\" fill=\"#f7eee0\"/>"},
 {"id":"nautical-sailboat","name":"Vintage coastal sailboat","category":"Coastal","tags":["sailing","nautical","beach","summer"],"art":"<path d=\"M48 9 V72\" stroke=\"#725a43\" stroke-width=\"3\"/><path d=\"M45 13 L12 62 H45Z\" fill=\"#e9dfc6\"/><path d=\"M52 23 L82 62 H52Z\" fill=\"#8ca7b4\"/><path d=\"M9 69 H91 L76 83 H26Z\" fill=\"#a65e50\"/><path d=\"M10 89 Q20 84 30 89 T50 89 T70 89 T90 89\" stroke=\"#66899b\" stroke-width=\"3\" fill=\"none\"/>"},
