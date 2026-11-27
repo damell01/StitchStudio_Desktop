@@ -7,16 +7,16 @@ type Hoop = {width:number;height:number};
 type PathOperation = {kind:'unite'|'minus_front'|'intersect'|'exclude'|'outline_stroke'|'join_open_paths'} |
   {kind:'offset'|'round_corners'|'simplify_outline'|'smooth_path';millimeters:number};
 
-function IssueList({width,height,onLocate}:{width:number;height:number;onLocate:(uid:number)=>void}) {
+function IssueList({width,height,onLocate,revision,scan}:{width:number;height:number;onLocate:(uid:number)=>void;revision?:unknown;scan?:number}) {
   const [issues,setIssues]=useState<Issue[]|null>(null);
   const [error,setError]=useState('');
   useEffect(()=>{
-    let active=true;
+    let active=true;setIssues(null);setError('');
     invoke<Issue[]>('design_issues',{width,height}).then(result=>{
       if(active)setIssues(result);
     }).catch(error=>{if(active)setError(String(error));});
     return ()=>{active=false;};
-  },[width,height]);
+  },[width,height,revision,scan]);
   if(error)return <p role="alert">{error}</p>;
   if(issues===null)return <p role="status">Checking the current stitch plan…</p>;
   if(!issues.length)return <p role="status">No issues found in this check.</p>;
@@ -30,6 +30,16 @@ function IssueList({width,height,onLocate}:{width:number;height:number;onLocate:
       }}>Locate {issue.label||'object'}</button>}
     </li>
   )}</ul>;
+}
+
+export function QualityInspector({width,height,revision,onLocate,onRepair,disabled}:{width:number;height:number;revision:unknown;onLocate:(uid:number)=>void;onRepair:()=>void;disabled:boolean}){
+  const [scan,setScan]=useState(0);
+  return <section className="workspace-inspector-group quality-inspector">
+    <h3>Quality Inspector</h3>
+    <small>Coverage, density, stitch lengths and hoop safety. Test sew before production.</small>
+    <div className="inspector-actions"><button disabled={disabled} onClick={()=>setScan(n=>n+1)}>Refresh inspection</button><button disabled={disabled} onClick={onRepair}>Try conservative repair</button></div>
+    <IssueList width={width} height={height} onLocate={onLocate} revision={revision} scan={scan}/>
+  </section>;
 }
 
 export function DesignIssuesDialog({width,height,disabled,onLocate}:Hoop&{disabled:boolean;onLocate:(uid:number)=>void}) {
