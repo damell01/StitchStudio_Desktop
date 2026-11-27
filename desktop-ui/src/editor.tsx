@@ -117,6 +117,8 @@ const lockedObjects=useMemo(()=>objects.filter(object=>object.locked||object.hid
 const [dragLayer,setDragLayer]=useState<number|null>(null);
 const [artworkImport,setArtworkImport]=useState<{file:File|null}|null>(null);
 const uploadInput=useRef<HTMLInputElement>(null);
+const [recentStarterIds,setRecentStarterIds]=useState<string[]>(()=>{try{const ids=JSON.parse(localStorage.getItem('studio-design-recent')||'[]');return Array.isArray(ids)?ids.filter((id:unknown)=>typeof id==='string'):[]}catch{return []}});
+useEffect(()=>{const refresh=()=>{try{const ids=JSON.parse(localStorage.getItem('studio-design-recent')||'[]');if(Array.isArray(ids))setRecentStarterIds(ids.filter((id:unknown)=>typeof id==='string'))}catch{}};window.addEventListener('studio-template-used',refresh);return()=>window.removeEventListener('studio-template-used',refresh)},[]);
 async function importCanvasFile(file:File,xMm=0,yMm=0){
   if(busy||editLock.current)return;
   if(/\.(dst|pes|jef|exp|vp3|hus|xxx|pec|sew|tap|u01)$/i.test(file.name)){
@@ -1882,8 +1884,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="primary" disabled={busy} onClick={()=>uploadInput.current?.click()}><FolderOpen size={17}/> Upload a file</button>
     <button disabled={busy} onClick={openInsertDialog}><FilePlus size={17}/> Browse templates & designs</button>
   </div>
-  <div className="studio-start-templates" aria-label="Quick start templates">
-    {templates.filter(t=>['heart','bow','football','wildflower'].includes(t.id)).map(t=><button key={t.id} disabled={busy} title={'Insert '+t.name} onClick={()=>void edit('insert_template',{id:t.id,art:t.art,widthMm:Math.min(50.8,width*.5,height*.5),xMm:0,yMm:0}).then(result=>{if(result.plan){rememberTemplate(t.id);setCanvasMode('select');setRealistic(false);}})}><svg viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{__html:t.art}}/><span>{t.name}</span></button>)}
+  <div className="studio-start-templates" aria-label="Recent and suggested quick start templates">
+    {Array.from(new Set([...recentStarterIds,'heart','bow','football','wildflower'])).flatMap(id=>templates.filter(t=>t.id===id)).slice(0,4).map(t=><button key={t.id} disabled={busy} title={'Insert '+t.name} onClick={()=>void edit('insert_template',{id:t.id,art:t.art,widthMm:Math.min(50.8,width*.5,height*.5),xMm:0,yMm:0}).then(result=>{if(result.plan){rememberTemplate(t.id);setCanvasMode('select');setRealistic(false);}})}><svg viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{__html:t.art}}/><span>{t.name}</span></button>)}
   </div>
   <div className="canvas-start-secondary">
     <button onClick={toggleCanvasTyping}><Type size={16}/> Place lettering</button>
