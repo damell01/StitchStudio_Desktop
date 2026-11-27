@@ -947,11 +947,37 @@ const renderedRuns=useMemo(()=>{
   }));
 },[plan,stitchIndex,points.length,fullRenderedRuns]);
 const [threadDiameter,setThreadDiameter]=useState(.40);
+const [threadSheen,setThreadSheen]=useState(.55);
+const [needleDetail,setNeedleDetail]=useState(true);
+// Batch direction-dependent highlights into four paths per thread block,
+// rather than creating a DOM element for every stitch.
+const threadLighting=useMemo(()=>{
+ if(!realistic||!plan||!needleDetail||zoom<100)return [];
+ return plan.blocks.map(block=>{
+  const paths=['','','',''];
+  return {paths,block};
+ }).map(({paths,block},i)=>{
+  for(let j=0;j<block.runs.length;j++){
+   const visible=renderedRuns[i]?.[j];if(!visible)continue;
+   const run=block.runs[j];const count=visible===fullRenderedRuns[i][j]?run.length:visible.split(' ').length;
+   for(let k=1;k<count;k++){
+    const p=run[k-1],q=run[k];const dx=q[0]-p[0],dy=q[1]-p[1],len=Math.hypot(dx,dy);
+    if(len<.08)continue;
+    const light=Math.abs((dx+dy)/(Math.SQRT2*len));
+    const bin=Math.min(3,Math.floor(light*4));
+    const inset=Math.min(.12,len*.2)/len;
+    paths[bin]+='M'+(p[0]+dx*inset).toFixed(3)+','+(p[1]+dy*inset).toFixed(3)+'L'+(q[0]-dx*inset).toFixed(3)+','+(q[1]-dy*inset).toFixed(3);
+   }
+  }
+  return paths;
+ });
+},[realistic,plan,needleDetail,zoom,renderedRuns,fullRenderedRuns]);
+
 const stitchedArtwork=useMemo(()=>plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} fill="none" strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((_r,j)=>{const visible=renderedRuns[i]?.[j];if(!visible)return null;const color='rgb('+b.color.join(',')+')';return realistic?<g key={j} pointerEvents="none">
 <polyline points={visible} stroke="#211b17" opacity=".28" strokeWidth={threadDiameter*1.18} transform="translate(.045 .065)"/>
 <polyline points={visible} stroke={color} strokeWidth={threadDiameter}/>
-<polyline points={visible} stroke="#ffffff" opacity=".24" strokeWidth={threadDiameter*.27} transform={`translate(${-threadDiameter*.18} ${-threadDiameter*.18})`}/>
-</g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}</g>),[plan,hidden,realistic,renderedRuns,threadDiameter]);
+<polyline points={visible} stroke="#ffffff" opacity={threadSheen*.25} strokeWidth={threadDiameter*.27} transform={`translate(${-threadDiameter*.18} ${-threadDiameter*.18})`}/>
+</g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}{realistic&&threadLighting[i]?.map((d,k)=>d&&<path key={'light'+k} d={d} stroke="white" strokeWidth={threadDiameter*.32} opacity={threadSheen*(.08+k*.13)} strokeLinecap="round" pointerEvents="none"/>)}</g>),[plan,hidden,realistic,renderedRuns,threadDiameter,threadSheen,threadLighting]);
 useEffect(()=>{
   if(!playing)return;
   const interval=window.setInterval(()=>{
@@ -1943,7 +1969,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage gaps</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red marks show sampled suspected gaps; outlines identify affected objects. Not a physical sew-out prediction.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small>{qualityOverlay==='coverage'?<small role="status">{coverageStatus}</small>:
     <DensityReview cells={qualityDensity} focus={densityFocus} objects={focusedDensityObjects} onLocate={locateDensity} disabled={busy}
       onApply={async id=>{const result=await edit('apply_stitch_review',{id});return result.error}}/>}</div>}
-  {inspectorTab==='quality'&&plan&&<section className="workspace-inspector-group"><h3>Thread simulation</h3><button aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}>{realistic?'Show stitch paths':'Show realistic sew-out'}</button><label>Visual thread width · {threadDiameter.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={threadDiameter} onChange={e=>{setThreadDiameter(Number(e.target.value));setRealistic(true)}}/></label><small>Preview only — does not alter stitch density or export. Zoom in to inspect letter edges and gaps.</small></section>}
+  {inspectorTab==='quality'&&plan&&<section className="workspace-inspector-group"><h3>Thread simulation</h3><button aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}>{realistic?'Show stitch paths':'Show realistic sew-out'}</button><label>Visual thread width · {threadDiameter.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={threadDiameter} onChange={e=>{setThreadDiameter(Number(e.target.value));setRealistic(true)}}/></label><label>Thread sheen · {Math.round(threadSheen*100)}%<input type="range" min="0" max="1" step=".05" value={threadSheen} onChange={e=>{setThreadSheen(Number(e.target.value));setRealistic(true)}}/></label><label><input type="checkbox" checked={needleDetail} onChange={e=>setNeedleDetail(e.target.checked)}/> Directional stitch highlights at 100% zoom and above</label><small>Preview only — does not alter stitch density or export. Zoom in to inspect letter edges and gaps.</small></section>}
   {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onApply={async id=>(await edit('apply_stitch_review',{id})).error} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
   {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
     <strong title={selected?.label}>{selected?.label||`${movementIds.length} selected`}</strong>
