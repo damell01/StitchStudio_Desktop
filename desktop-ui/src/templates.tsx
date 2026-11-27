@@ -16,6 +16,12 @@ const twemojiTemplates: Template[] = twemojiCatalogue.map(({id,name,category,tag
 }));
 
 export const templates: Template[] = [
+{"id":"scallop-frame","name":"Scalloped name frame","category":"Frames","art":"<rect x=\"10\" y=\"23\" width=\"80\" height=\"54\" rx=\"20\" fill=\"none\" stroke=\"#b86e83\" stroke-width=\"4\"/><path d=\"M20 23 Q30 8 40 23 Q50 8 60 23 Q70 8 80 23 M20 77 Q30 92 40 77 Q50 92 60 77 Q70 92 80 77\" fill=\"none\" stroke=\"#b86e83\" stroke-width=\"3\"/>"},
+{"id":"oval-name-frame","name":"Oval name frame","category":"Frames","art":"<ellipse cx=\"50\" cy=\"50\" rx=\"44\" ry=\"30\" fill=\"none\" stroke=\"#789779\" stroke-width=\"4\"/><ellipse cx=\"50\" cy=\"50\" rx=\"38\" ry=\"24\" fill=\"none\" stroke=\"#789779\" stroke-width=\"2\"/>"},
+{"id":"sparkle-accent","name":"Sparkle accents","category":"Decorations","art":"<path fill=\"#c18b32\" d=\"M50 8 L57 40 90 50 57 60 50 92 43 60 10 50 43 40Z M18 8 L22 18 32 22 22 26 18 36 14 26 4 22 14 18Z\"/>"},
+{"id":"leaf-divider","name":"Leaf divider","category":"Decorations","art":"<path d=\"M8 50 H92\" stroke=\"#47775b\" stroke-width=\"3\"/><path fill=\"#73977b\" d=\"M30 50 Q8 22 42 36 L50 50 Q70 22 90 36 L65 50 Q90 78 58 65 L50 50 Q30 78 10 65Z\"/>"},
+{"id":"simple-cross-element","name":"Classic cross","category":"Faith","art":"<path fill=\"#9473b8\" d=\"M40 8 H60 V34 H84 V54 H60 V92 H40 V54 H16 V34 H40Z\"/>"},
+{"id":"ribbon-banner-element","name":"Ribbon name banner","category":"Frames","art":"<path fill=\"#b86e83\" d=\"M5 28 H25 V72 H5 L15 50Z M95 28 H75 V72 H95 L85 50Z\"/><rect x=\"18\" y=\"20\" width=\"64\" height=\"60\" rx=\"6\" fill=\"none\" stroke=\"#b86e83\" stroke-width=\"4\"/>"},
 {id:'heart',name:'Classic heart',category:'Everyday',art:'<path fill="#b84d65" d="M50 85 C15 60 5 42 19 25 C30 12 45 18 50 32 C55 18 70 12 81 25 C95 42 85 60 50 85Z"/>'},
 {id:'star',name:'Five-point star',category:'Everyday',art:'<path fill="#c18b32" d="M50 8 L62 36 93 38 69 58 77 89 50 72 23 89 31 58 7 38 38 36Z"/>'},
 {id:'leaf',name:'Botanical leaf',category:'Nature',art:'<path fill="#73977b" d="M16 85 Q8 12 88 12 Q90 80 16 85Z"/><path d="M16 85 Q48 48 80 20" stroke="#234536" stroke-width="3" fill="none"/>'},
