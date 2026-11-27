@@ -3181,7 +3181,7 @@ async fn recognize_selected_lettering(uids:Vec<usize>,app:tauri::AppHandle)->Res
   let mut bounds=zigzag::geom::Bounds::empty();
   for shape in &shapes{let b=zigzag::svg::shapes_bounds(std::slice::from_ref(*shape));if !b.is_empty(){bounds.add(b.min);bounds.add(b.max);}}
   if bounds.is_empty()||bounds.height()<=0.0||bounds.width()<=0.0{return Err("Select traced letters first".into())}
-  let scale=(96.0/bounds.height()).min(1400.0/bounds.width());
+  let scale=(144.0/bounds.height()).min(1800.0/bounds.width());
   let width=(bounds.width()*scale).ceil() as u32+24;
   let height=(bounds.height()*scale).ceil() as u32+24;
   let mut rgba=vec![255u8;width as usize*height as usize*4];
@@ -3191,7 +3191,12 @@ async fn recognize_selected_lettering(uids:Vec<usize>,app:tauri::AppHandle)->Res
     let i=(y as usize*width as usize+x as usize)*4;rgba[i..i+3].fill(0);
    }
   }}
-  zigzag::ocr::recognize_rgba(width,height,&rgba).map_err(|e|e.to_string())
+  let lines=zigzag::ocr::recognize_rgba(width,height,&rgba).map_err(|e|e.to_string())?;
+  if !lines.is_empty(){return Ok(lines)}
+  // Retry with a slightly expanded ink silhouette for thin traced lettering.
+  let mut expanded=rgba.clone();
+  for y in 1..height-1{for x in 1..width-1{let i=(y as usize*width as usize+x as usize)*4;if [i-4,i+4,i-width as usize*4,i+width as usize*4].iter().any(|&j|rgba[j]==0){expanded[i..i+3].fill(0);}}}
+  zigzag::ocr::recognize_rgba(width,height,&expanded).map_err(|e|e.to_string())
  }).await.map_err(|e|e.to_string())?
 }
 
