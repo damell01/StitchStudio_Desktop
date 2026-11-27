@@ -101,8 +101,10 @@ pub(super) async fn coverage_gap_preview(app: tauri::AppHandle) -> Result<Vec<Co
             let w=state.lock().map_err(|e|e.to_string())?;
             (w.source.clone(),w.current.clone())
         };
-        let (Some(doc),Some(plan))=(source,plan) else{return Ok(Vec::new())};
-        Ok(checks::coverage_gaps(&doc.shapes,&plan,&doc.plan_options()).into_iter()
+        let (Some(doc),Some(plan))=(source,plan) else{return Err("Coverage inspection requires editable source artwork; fixed stitch files cannot establish intended coverage.".into())};
+        let (gaps,complete)=checks::coverage_gap_scan(&doc.shapes,&plan,&doc.plan_options());
+        if !complete{return Err("Coverage inspection exceeded its analysis limits. Inspect a smaller design or test sew.".into())}
+        Ok(gaps.into_iter()
             .filter_map(|g|Some(CoverageOverlay{uid:doc.shapes.get(g.shape)?.uid,percent:100.0*g.missing as f64/g.inside as f64,points:g.points}))
             .collect())
     }).await.map_err(|e|e.to_string())?
