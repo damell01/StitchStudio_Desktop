@@ -935,11 +935,11 @@ function selectObject(object:EditableObject|null,inspectLettering=true){
   setSelectedObject(object?.uid??null);
   if(!object)return;
   setLayerTab('objects');setObjectKind(object.kind);
-  if(inspectorTab!=='stitches'&&inspectorTab!=='transform')setInspectorTab('transform');
+  if(inspectorTab!=='stitches'&&inspectorTab!=='transform'&&inspectorTab!=='quality'&&inspectorTab!=='threads')setInspectorTab('transform');
   if(!inspectLettering)return;
   void invoke<unknown>('lettering_settings',{uid:object.uid}).then(settings=>{
     if(selectionRequest.current!==request)return;
-    if(settings){openText(object.uid);return}
+    if(settings){if(inspectorTab!=='quality'&&inspectorTab!=='stitches'&&inspectorTab!=='threads')openText(object.uid);return}
     if(!object.bounds||!object.fill_rule||object.kind==='manual')return;
     const [,y,,h]=object.bounds;
     if(h<1.8)return;
@@ -1727,9 +1727,10 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
 </section>}</div>
 
-</article><article ref={inspectorScroll} className="workspace-sidebar workspace-inspector studio-inspector-dock"><div className="inspector-sticky-header"><div className="layers-dock-title"><h2>Inspector</h2>
+</article><article ref={inspectorScroll} className="workspace-sidebar workspace-inspector studio-inspector-dock"><div className="inspector-sticky-header"><div className="layers-dock-title"><h2>{inspectorTab==='text'?'Lettering':inspectorTab==='quality'?'Quality review':inspectorTab==='stitches'?'Stitch settings':inspectorTab==='threads'?'Thread colors':inspectorTab==='sequence'?'Sewing order':inspectorTab==='transform'?'Position & size':'Hoop settings'}</h2>
     <button className="studio-tool-icon" title="Close inspector" aria-label="Close inspector" onClick={()=>setRight(false)}><X size={15}/></button>
   </div>
+  {selected&&<div className="studio-property-context"><strong title={selected.label}>{selected.label||'Object '+selected.uid}</strong><small>{selected.bounds?(selected.bounds[2]/25.4).toFixed(2)+' × '+(selected.bounds[3]/25.4).toFixed(2)+' in':'Selected object'}</small></div>}
   <div className="workspace-segments" role="group" aria-label="Inspector">
     <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}><SquareDashed size={15}/>Hoop</button>
     <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={15}/>Sequence</button>
