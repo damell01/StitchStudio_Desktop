@@ -1008,19 +1008,22 @@ useEffect(()=>{
     if(!active)return;
     setAutoTextStatus('Looking for embedded lettering…');
     const found:{uids:number[];text:string}[]=[];
+    let failed=0;
     try{
       for(const row of groups){
         if(!active)return;
         const key=JSON.stringify(row.map(o=>[o.uid,o.bounds,o.path,o.color]));
         const uids=row.map(o=>o.uid);
-        const lines=recognitionCache.current.get(key)??await invoke<{text:string;font:string}[]>('recognize_selected_lettering',{uids});
+        let lines=recognitionCache.current.get(key);
+        if(!lines){try{lines=await invoke<{text:string;font:string}[]>('recognize_selected_lettering',{uids});}catch{if(!active)return;failed++;continue;}}
         if(!active)return;
         if(recognitionCache.current.size>=64)recognitionCache.current.clear();
         recognitionCache.current.set(key,lines);
         const text=lines.map(line=>line.text).join(' ').trim();
-        if(text)found.push({uids,text});
+        if(text){found.push({uids,text});setDetectedText([...found]);}
+        await new Promise<void>(resolve=>window.setTimeout(resolve,40));
       }
-      if(active){setDetectedText(found);setAutoTextStatus(found.length?'':'No embedded lettering detected.');}
+      if(active){setDetectedText(found);setAutoTextStatus(failed?'Some lettering candidates could not be checked. Manual recognition is available.':found.length?'':'No embedded lettering detected.');}
     }catch{if(active){setDetectedText(found);setAutoTextStatus('Automatic lettering detection unavailable. Manual recognition is still available.');}}
   },700);
   return()=>{active=false;window.clearTimeout(timer)};
