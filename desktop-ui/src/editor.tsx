@@ -264,6 +264,19 @@ function toggleCanvasTyping(){
     setCanvasMode('select');
   }
 }
+const [inlineLetterPreview,setInlineLetterPreview]=useState<Plan|null>(null);
+const [inlineLetterPreviewStatus,setInlineLetterPreviewStatus]=useState('');
+useEffect(()=>{
+  setInlineLetterPreview(null);setInlineLetterPreviewStatus('');
+  if(!canvasText||busy||!canvasTextValue.trim()||!canvasLetterFont||!Number.isFinite(canvasLetterHeight)||canvasLetterHeight<.5||canvasLetterHeight>80||!Number.isFinite(canvasLetterSpacing)||canvasLetterSpacing<0||canvasLetterSpacing>5)return;
+  let active=true;
+  setInlineLetterPreviewStatus('Preparing stitch preview…');
+  const timer=window.setTimeout(()=>{
+    const settings={...canvasEditTarget?.settings,text:canvasTextValue.trim(),font:canvasLetterFont,size:canvasLetterHeight,spacing:canvasLetterSpacing,arc:canvasEditTarget?.settings.arc??0,bold:canvasLetterBold,italic:canvasLetterItalic,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:canvasEditTarget?.settings.align??'center'};
+    void invoke<Plan>('preview_lettering',{settings}).then(next=>{if(active){setInlineLetterPreview(next);setInlineLetterPreviewStatus('')}}).catch(()=>{if(active)setInlineLetterPreviewStatus('Stitch preview unavailable')});
+  },450);
+  return()=>{active=false;window.clearTimeout(timer)};
+},[canvasText,busy,canvasTextValue,canvasLetterFont,canvasLetterHeight,canvasLetterSpacing,canvasLetterBold,canvasLetterItalic,canvasLetterColor,canvasEditTarget]);
 async function addCanvasText(){
   if(!canvasText||!canvasTextValue.trim()||busy||canvasTextSaving.current)return;
   if(!Number.isFinite(canvasLetterHeight)||canvasLetterHeight<.5||canvasLetterHeight>80){setCanvasTextError('Choose a lettering height from 0.5 to 80 mm.');return;}
@@ -1939,6 +1952,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <label>Font<select value={canvasLetterFont} disabled={busy||!canvasLetterFonts.length} onChange={e=>setCanvasLetterFont(e.target.value)}>{canvasLetterFonts.map(font=><option key={font} value={font}>{font}</option>)}</select></label><div className="canvas-lettering-quick"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.5" value={canvasLetterHeight} disabled={busy} onChange={e=>setCanvasLetterHeight(Number(e.target.value))}/></label><label>Thread color<input type="color" value={canvasLetterColor} disabled={busy} onChange={e=>setCanvasLetterColor(e.target.value)}/></label></div>
   <div className="canvas-lettering-quick" role="group" aria-label="Lettering style"><button type="button" disabled={busy} aria-label="Bold" aria-pressed={canvasLetterBold} onClick={()=>setCanvasLetterBold(v=>!v)}><b>B</b></button><button type="button" disabled={busy} aria-label="Italic" aria-pressed={canvasLetterItalic} onClick={()=>setCanvasLetterItalic(v=>!v)}><i>I</i></button><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={canvasLetterSpacing} disabled={busy} onChange={e=>setCanvasLetterSpacing(Number(e.target.value))}/></label></div>
   <label className="canvas-quality-option"><input type="checkbox" checked={reviewLetteringQuality} disabled={busy} onChange={e=>{setReviewLetteringQuality(e.target.checked);localStorage.setItem("studio-review-lettering",e.target.checked?"1":"0")}}/> Automatically review coverage after lettering or resizing</label>
+  {inlineLetterPreview&&(()=>{const runs=inlineLetterPreview.blocks.flatMap(b=>b.runs);let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const run of runs)for(const p of run){minX=Math.min(minX,p[0]);minY=Math.min(minY,p[1]);maxX=Math.max(maxX,p[0]);maxY=Math.max(maxY,p[1]);}if(!Number.isFinite(minX))return null;return <div className="inline-letter-preview"><svg viewBox={`${minX-1} ${minY-1} ${Math.max(2,maxX-minX+2)} ${Math.max(2,maxY-minY+2)}`} role="img" aria-label="Live lettering stitch preview">{inlineLetterPreview.blocks.map((b,i)=><path key={i} d={b.runs.filter(run=>run.length>1).map(run=>'M'+run.map(p=>p.join(',')).join('L')).join('')} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".28"/>)}</svg><small>{inlineLetterPreview.stitches.toLocaleString()} stitch points · preview</small></div>})()}
+  {inlineLetterPreviewStatus&&<small role="status">{inlineLetterPreviewStatus}</small>}
   {canvasTextError&&<small role="alert">{canvasTextError}</small>}
   <div><button type="button" disabled={busy} onClick={()=>{setCanvasText(null);setCanvasEditTarget(null);setCanvasTyping(false)}}>Cancel</button>
     <button type="submit" className="primary" disabled={busy||!canvasTextValue.trim()}>{busy?'Updating…':canvasEditTarget?'Apply':'Add'}</button></div>
