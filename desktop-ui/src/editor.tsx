@@ -2224,9 +2224,37 @@ function DensityComparison({before,after,name}:{before:Plan;after:Plan;name:stri
  return <section className="workspace-stack"><strong>{Math.abs(delta).toLocaleString()} {delta>=0?'fewer':'more'} stitches ({percent}%)</strong><div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:12}}>{[{label:'Original',plan:before},{label:name,plan:after}].map(({label,plan:p})=><div key={label} className="workspace-stack"><strong>{label}</strong><svg viewBox={bounds} role="img" aria-label={label+' stitch path preview'} style={{width:'100%',height:180,background:'#faf7f0',borderRadius:8}}>{p.blocks.map((block,i)=><g key={i} stroke={'rgb('+block.color.join(',')+')'} strokeWidth=".28" fill="none" strokeLinecap="round" strokeLinejoin="round">{block.runs.map((run,j)=><polyline key={j} points={run.map(pt=>pt.join(',')).join(' ')}/>)}</g>)}</svg><strong>{p.stitches.toLocaleString()} stitches</strong><small>{p.trims.toLocaleString()} trims</small></div>)}</div></section>;
 }
 
+const ARTWORK_COLOR_THEMES=[
+ {name:'Southern classic',colors:['#182B49','#A52A40','#F4E6CE','#56775D','#B58B54']},
+ {name:'Coastal',colors:['#245A73','#70A9B0','#F1D8B2','#DF8F77','#F8F4E8']},
+ {name:'Boutique pink',colors:['#A74F70','#ECA8BF','#F9E0E7','#718E78','#B999C7']},
+ {name:'Vintage garden',colors:['#526C48','#BA786E','#D7B66A','#8A719B','#EFE0C6']},
+ {name:'Crimson & cream',colors:['#9E1B32','#B8BCC3','#EDE6D6','#5B1523','#C79C68']},
+ {name:'Navy & gold',colors:['#193452','#C49A49','#EFE8D8','#58758C','#8F7142']},
+ {name:'Pastel nursery',colors:['#789DBA','#DB9EAF','#B3A1CE','#9BB89B','#E3C78D']},
+ {name:'Autumn',colors:['#934C33','#C68038','#E1BC78','#6A754B','#774D59']},
+];
 function ArtworkPaletteEditor({colors,busy,onApply}:{colors:number[][];busy:boolean;onApply:(original:number[][],colors:number[][])=>void}){
  const hex=(c:number[])=>'#'+c.map(v=>v.toString(16).padStart(2,'0')).join('');
  const [draft,setDraft]=useState(()=>colors.map(hex));
+ const [preserveNeutrals,setPreserveNeutrals]=useState(true);
+ const [themeName,setThemeName]=useState('');
  const changed=draft.some((v,i)=>v!==hex(colors[i]));
- return <div className="workspace-stack"><small>Change several colors together in one undoable edit. Other artwork stays unchanged.</small>{colors.map((c,i)=><label key={hex(c)} className="selection-color-row"><span style={{display:'inline-block',width:18,height:18,background:hex(c),border:'1px solid #888',borderRadius:4}}/><span>{hex(c).toUpperCase()} →</span><input aria-label={'New color for '+hex(c)} type="color" value={draft[i]} disabled={busy} onChange={e=>{const value=e.currentTarget.value;setDraft(old=>old.map((v,j)=>i===j?value:v))}}/></label>)}<div className="inspector-actions"><button disabled={busy||!changed} onClick={()=>onApply(colors,draft.map(v=>[1,3,5].map(i=>parseInt(v.slice(i,i+2),16))))}>Apply palette</button><button disabled={busy||!changed} onClick={()=>setDraft(colors.map(hex))}>Reset</button></div></div>
+ function selectTheme(theme:typeof ARTWORK_COLOR_THEMES[number]){
+   let slot=0;
+   const ranked=colors.map((c,i)=>({c,i})).sort((a,b)=>(Math.max(...b.c)-Math.min(...b.c))-(Math.max(...a.c)-Math.min(...a.c))||a.i-b.i);
+   const next=colors.map(hex);
+   for(const {c,i} of ranked){
+     const neutral=Math.max(...c)-Math.min(...c)<=25;
+     if(preserveNeutrals&&neutral)continue;
+     if(slot>=theme.colors.length)break;
+     next[i]=theme.colors[slot++];
+   }
+   setDraft(next);setThemeName(theme.name);
+ }
+ return <div className="workspace-stack"><small>Change several colors together in one undoable edit. Other artwork stays unchanged.</small>
+ <h3>Color themes</h3><label className="inspector-checkbox"><input type="checkbox" checked={preserveNeutrals} disabled={busy} onChange={e=>{setPreserveNeutrals(e.currentTarget.checked);setThemeName('')}}/> Keep neutral outlines and highlights</label>
+ <small>Themes replace up to five original colors, starting with the most saturated. Review the proposed colors below before applying.</small>
+ <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:6}}>{ARTWORK_COLOR_THEMES.map(theme=><button type="button" key={theme.name} disabled={busy||!colors.length} aria-pressed={themeName===theme.name} onClick={()=>selectTheme(theme)} style={{display:'grid',gap:5,textAlign:'left'}}><span>{theme.name}</span><span aria-hidden="true" style={{display:'flex',gap:3}}>{theme.colors.map(c=><span key={c} style={{background:c,width:16,height:16,borderRadius:3,border:'1px solid #888'}}/>)}</span></button>)}</div>
+ <h3>Proposed palette</h3>{colors.map((c,i)=><label key={hex(c)} className="selection-color-row"><span style={{display:'inline-block',width:18,height:18,background:hex(c),border:'1px solid #888',borderRadius:4}}/><span>{hex(c).toUpperCase()} →</span><input aria-label={'New color for '+hex(c)} type="color" value={draft[i]} disabled={busy} onChange={e=>{const value=e.currentTarget.value;setThemeName('');setDraft(old=>old.map((v,j)=>i===j?value:v))}}/></label>)}<div className="inspector-actions"><button disabled={busy||!changed} onClick={()=>onApply(colors,draft.map(v=>[1,3,5].map(i=>parseInt(v.slice(i,i+2),16))))}>Apply palette</button><button disabled={busy||!changed} onClick={()=>{setDraft(colors.map(hex));setThemeName('')}}}>Reset</button></div></div>
 }
