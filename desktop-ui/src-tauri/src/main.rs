@@ -1983,6 +1983,8 @@ struct CoverageRepairPreview {
     after: Preview,
     warnings_before: usize,
     warnings_after: usize,
+    lettering_before: usize,
+    lettering_after: usize,
 }
 #[tauri::command]
 async fn preview_coverage_repair(app:tauri::AppHandle)->Result<CoverageRepairPreview,String>{
@@ -1993,10 +1995,11 @@ async fn preview_coverage_repair(app:tauri::AppHandle)->Result<CoverageRepairPre
             let w=state.lock().map_err(|e|e.to_string())?;
             (w.source.clone().ok_or("Coverage repair requires editable artwork.")?,w.current.clone().ok_or("Open artwork first")?)
         };
-        let (next,plan)=repair_artwork_coverage(&source,&original).ok_or("No safe coverage improvement found.")?;
+        let (next,plan)=repair_artwork_coverage(&source,&original).or_else(||balance_lettering_density(&source,&original)).ok_or("No safe coverage or lettering improvement found.")?;
         validate_resized_design(&plan)?;
         let count=|doc:&zigzag::document::Document,p:&Design|zigzag::checks::check(&doc.shapes,p,&doc.plan_options(),None).iter().filter(|i|i.message.starts_with("Possible underfilled artwork:")).count();
-        Ok(CoverageRepairPreview{before:preview(&original),after:preview(&plan),warnings_before:count(&source,&original),warnings_after:count(&next,&plan)})
+        let lettering=|doc:&zigzag::document::Document,p:&Design|zigzag::checks::check(&doc.shapes,p,&doc.plan_options(),None).iter().filter(|i|i.message.starts_with("Possible inconsistent lettering density:")).count();
+        Ok(CoverageRepairPreview{lettering_before:lettering(&source,&original),lettering_after:lettering(&next,&plan),before:preview(&original),after:preview(&plan),warnings_before:count(&source,&original),warnings_after:count(&next,&plan)})
     }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
