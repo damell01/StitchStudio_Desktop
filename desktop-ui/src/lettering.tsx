@@ -4,23 +4,34 @@ import './lettering.css';
 import {compareNames,matchesName} from './list-navigation';
 import {FilePlus,Plus,Search,Type} from 'lucide-react';
 import {invoke} from '@tauri-apps/api/core';
-function FontPicker({fonts,selected,choose}:{fonts:string[];selected:string;choose:(font:string)=>void}) {
-  const dialog=useRef<HTMLDialogElement>(null);
+function FontPicker({fonts,selected,choose,sample='Aa'}:{fonts:string[];selected:string;choose:(font:string)=>void;sample?:string}) {
+  const root=useRef<HTMLDivElement>(null);
+  const trigger=useRef<HTMLButtonElement>(null);
+  const search=useRef<HTMLInputElement>(null);
+  const [open,setOpen]=useState(false);
   const [query,setQuery]=useState('');
-  const filtered=fonts.filter(font=>matchesName(font,query)).sort(compareNames);
   const [limit,setLimit]=useState(36);
-  return <>
-    <button className="font-picker-trigger" onClick={()=>{setQuery('');setLimit(36);dialog.current?.showModal()}} disabled={!fonts.length} aria-label="Choose font"><Type size={16}/> {selected||'Choose font'}</button>
-    <dialog className="studio-modal font-picker" ref={dialog} aria-label="Choose a lettering font">
-      <div className="studio-modal-heading"><h2>Choose a lettering font</h2><button onClick={()=>dialog.current?.close()}>Close</button></div>
-      <label className="library-search"><Search size={16}/><input autoFocus placeholder="Search fonts" aria-label="Find installed fonts" value={query} onChange={event=>{setQuery(event.target.value);setLimit(36);}}/></label>
+  const filtered=useMemo(()=>fonts.filter(font=>matchesName(font,query)).sort(compareNames),[fonts,query]);
+  useEffect(()=>{
+    if(!open)return;
+    search.current?.focus();
+    const outside=(event:PointerEvent)=>{if(!root.current?.contains(event.target as Node))setOpen(false)};
+    document.addEventListener('pointerdown',outside);
+    return()=>document.removeEventListener('pointerdown',outside);
+  },[open]);
+  function close(){setOpen(false);trigger.current?.focus()}
+  return <div className="font-picker-inline" ref={root} onKeyDown={event=>{if(open&&event.key==='Escape'){event.stopPropagation();close()}}}>
+    <button ref={trigger} className="font-picker-trigger" onClick={()=>{setQuery('');setLimit(36);setOpen(v=>!v)}} disabled={!fonts.length} aria-label="Choose font" aria-expanded={open}><Type size={16}/> {selected||'Choose font'}</button>
+    {open&&<section className="font-picker-inline-panel" aria-label="Lettering fonts">
+      <label className="library-search"><Search size={16}/><input ref={search} placeholder="Search fonts" aria-label="Find installed fonts" value={query} onChange={event=>{setQuery(event.target.value);setLimit(36)}}/></label>
       {!filtered.length&&<p role="status">No installed fonts match.</p>}
-      <div className="font-picker-results">{filtered.slice(0,limit).map(font=><button aria-pressed={font===selected} key={font} onClick={()=>{choose(font);dialog.current?.close();}}>
-        <span style={{fontFamily:font}}>Aa</span>{font}
+      <div className="font-picker-results">{filtered.slice(0,limit).map(font=><button aria-pressed={font===selected} key={font} onClick={()=>{choose(font);close()}}>
+        <span style={{fontFamily:font}}>{sample.trim().slice(0,24)||'Aa'}</span><small>{font}</small>
       </button>)}</div>
       {filtered.length>limit&&<button onClick={()=>setLimit(previous=>previous+36)}>Show more fonts</button>}
-    </dialog>
-  </>;
+      <small>Font appearance preview. Check the generated stitches before sewing.</small>
+    </section>}
+  </div>;
 }
 const letteringEffects = [["satin","Standard satin"],["puff","Foam satin with end caps (test sew)"],["double_outline","Double satin outline"],["shadow","Offset shadow"],["gradient","Two-thread blended satin"],["fill","Tatami fill"],["applique","Fabric appliqué"],["run","Running outline"],["bean","Bean stitch (triple pass)"],["ripple","Lightweight ripple"],["contour","Contour fill"],["cross","Cross stitch"],["meander","Quilted meander"],["blanket","Blanket edge"]] as const;
 type Settings = {
@@ -156,7 +167,7 @@ export function Lettering({monogram,onDone}:{monogram:boolean;onDone:()=>void}) 
       {monogram
         ? <label>Initials<input value={text} maxLength={3} onChange={e=>setText(e.target.value.toUpperCase())}/></label>
         : <><label>Text<textarea rows={3} value={text} maxLength={120} onChange={e=>setText(e.target.value)}/></label><div className="lettering-size-presets"><button onClick={()=>setText(text.toUpperCase())}>UPPERCASE</button><button onClick={()=>setText(text.toLowerCase())}>lowercase</button><button onClick={()=>setText(text.replace(/\p{L}[\p{L}\p{M}]*/gu,w=>w[0].toUpperCase()+w.slice(1).toLowerCase()))}>Title Case</button></div><small>{text.length}/120 characters · {text.split('\n').length} lines</small></>}
-      <FontPicker fonts={fonts} selected={font} choose={setFont}/>
+      <FontPicker fonts={fonts} selected={font} sample={text} choose={setFont}/>
       <label>Embroidery effect<select value={kind} onChange={e=>setKind(e.target.value)}>{letteringEffects.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       <EffectControls settings={settings} onChange={patch=>setEffectSettings(old=>({...old,...patch}))}/>
       {kind==="applique"&&<small>Review placement, tack-down and finishing stages before exporting. Use a suitable broad font.</small>}
@@ -246,7 +257,7 @@ export function InlineLettering({uid,disabled,onBusy,onDone,baseline,pickingBase
  </div>
  <label>Embroidery effect<select value={settings.kind??"satin"} onChange={e=>change("kind",e.target.value)}>{letteringEffects.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><EffectControls settings={settings} onChange={patch=>setSettings(old=>({...old,...patch}))}/>
  <label>Line spacing (× capital height)<input type="number" min=".5" max="5" step=".1" value={settings.leading??1.5} onChange={e=>change("leading",Number(e.target.value))}/></label>
- <div className="inline-font-control"><span>Font</span><FontPicker fonts={fonts} selected={settings.font} choose={font=>change('font',font)}/></div>
+ <div className="inline-font-control"><span>Font</span><FontPicker fonts={fonts} selected={settings.font} sample={settings.text} choose={font=>change('font',font)}/></div>
  <div className="inline-text-sample" style={{fontFamily:settings.font,fontWeight:settings.bold?'bold':'normal',fontStyle:settings.italic?'italic':'normal',color:hex}}>{preview&&previewBox?<svg viewBox={previewBox.join(' ')} role="img" aria-label="Actual planned stitches">{preview.blocks.map((b,i)=><g key={i} fill="none" stroke={'rgb('+b.color.join(',')+')'} strokeWidth=".24" strokeLinecap="round" strokeLinejoin="round">{b.runs.map((run,j)=><polyline key={j} points={run.map(p=>p.join(',')).join(' ')}/>)}</g>)}</svg>:settings.text}</div><small role="status">{previewPending?'Planning stitches…':preview?preview.stitches.toLocaleString()+' stitch points · '+(previewBox![2]-4).toFixed(1)+' × '+(previewBox![3]-4).toFixed(1)+' mm':'Font sample'}</small>
  <div className="lettering-size-presets" role="group" aria-label="Quick sizes">{[8,12,20,30].map(n=><button key={n} aria-pressed={settings.size===n} onClick={()=>change('size',n)}>{n} mm</button>)}</div><div className="inline-lettering-grid"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.1" value={settings.size} onChange={e=>change('size',Number(e.target.value))}/></label><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={settings.spacing} onChange={e=>change('spacing',Number(e.target.value))}/></label></div>
  <div className="inline-lettering-style"><button aria-pressed={settings.bold} onClick={()=>change('bold',!settings.bold)}><b>B</b></button><button aria-pressed={settings.italic} onClick={()=>change('italic',!settings.italic)}><i>I</i></button><label>Thread color<input type="color" value={hex} onChange={e=>change('color',[1,3,5].map(i=>parseInt(e.target.value.slice(i,i+2),16)))}/></label></div>
