@@ -327,6 +327,42 @@ pub fn check(
             if stroke>0.0&&stroke<0.8&&kind==Kind::Fill{
                 add(Some(i),Level::Info,format!("Thin lettering-like fill: estimated stroke thickness {stroke:.2} mm. Inspect satin or running-stitch suitability and avoid excessive density."));
             }
+            // Sample horizontal and vertical interior chords. The shorter
+            // axis is a conservative local-width proxy, not a satin rail.
+            if let Geometry::Fill{rule,..}=&s.geometry {
+                let step=3.0_f64.max((b.width()*b.height()/256.0).sqrt());
+                let mut widths=Vec::new();
+                let mut y=b.min.y+step/2.0;
+                while y<b.max.y {
+                    let mut x=b.min.x+step/2.0;
+                    while x<b.max.x {
+                        let p=crate::geom::P::new(x,y);
+                        if crate::geom::point_inside(rings,*rule,p){
+                            let mut spans=[0.0_f64;2];
+                            for (axis,(dx,dy)) in [(1.0,0.0),(0.0,1.0)].into_iter().enumerate(){
+                                for sign in [-1.0,1.0]{
+                                    for k in 1..=40{
+                                        let d=k as f64*1.0;
+                                        if !crate::geom::point_inside(rings,*rule,crate::geom::P::new(x+dx*d*sign,y+dy*d*sign)){break}
+                                        spans[axis]+=1.0;
+                                    }
+                                }
+                            }
+                            widths.push((spans[0].min(spans[1])+1.0)/10.0);
+                        }
+                        x+=step;
+                    }
+                    y+=step;
+                }
+                if widths.len()>=12{
+                    widths.sort_by(|a,b|a.total_cmp(b));
+                    let narrow=widths[widths.len()/10];
+                    let wide=widths[widths.len()*9/10];
+                    if narrow<0.8&&wide>narrow*2.5{
+                        add(Some(i),Level::Info,format!("Variable lettering stroke widths: sampled narrow sections about {narrow:.1} mm and wider sections about {wide:.1} mm. Inspect thin details and junctions separately."));
+                    }
+                }
+            }
             let mut peers=Vec::new();
             let mut other_kind=0usize;
             let mut same_kind=0usize;
