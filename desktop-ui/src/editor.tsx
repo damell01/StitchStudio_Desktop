@@ -169,6 +169,7 @@ const [canvasLetterColor,setCanvasLetterColor]=useState('#6945a2');
 const [canvasLetterBold,setCanvasLetterBold]=useState(true);
 const [canvasLetterItalic,setCanvasLetterItalic]=useState(false);
 const [canvasLetterSpacing,setCanvasLetterSpacing]=useState(.4);
+const [reviewLetteringQuality,setReviewLetteringQuality]=useState(()=>localStorage.getItem('studio-review-lettering')!=='0');
 const [canvasTextError,setCanvasTextError]=useState('');
 const canvasTextInput=useRef<HTMLInputElement>(null);
 const canvasTextSaving=useRef(false);
@@ -233,6 +234,7 @@ async function addCanvasText(){
     if(next.blocks.length!==plan?.blocks.length||next.blocks.some((block,index)=>block.color.join(',')!==plan?.blocks[index]?.color.join(',')))setThreadAssignments({});
     setPlan(next);setPlayhead(null);setHidden([]);setMessage(canvasEditTarget?'Lettering updated.':'Lettering added. Double-click it to edit.');setCanvasEditTarget(null);
     setCanvasText(null);setCanvasTyping(false);
+    if(reviewLetteringQuality)openQuality('coverage');
   }catch(error){setCanvasTextError(error instanceof Error?error.message:String(error));}
   finally{canvasTextSaving.current=false;setBusy(false);setInlineWork('');}
 }
@@ -1743,6 +1745,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     style={{fontFamily:canvasLetterFont||undefined,color:canvasLetterColor,fontWeight:canvasLetterBold?'bold':'normal',fontStyle:canvasLetterItalic?'italic':'normal'}} disabled={busy} placeholder="Type your text" onChange={event=>setCanvasTextValue(event.target.value)}/>
   <label>Font<select value={canvasLetterFont} disabled={busy||!canvasLetterFonts.length} onChange={e=>setCanvasLetterFont(e.target.value)}>{canvasLetterFonts.map(font=><option key={font} value={font}>{font}</option>)}</select></label><div className="canvas-lettering-quick"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.5" value={canvasLetterHeight} disabled={busy} onChange={e=>setCanvasLetterHeight(Number(e.target.value))}/></label><label>Thread color<input type="color" value={canvasLetterColor} disabled={busy} onChange={e=>setCanvasLetterColor(e.target.value)}/></label></div>
   <div className="canvas-lettering-quick" role="group" aria-label="Lettering style"><button type="button" disabled={busy} aria-label="Bold" aria-pressed={canvasLetterBold} onClick={()=>setCanvasLetterBold(v=>!v)}><b>B</b></button><button type="button" disabled={busy} aria-label="Italic" aria-pressed={canvasLetterItalic} onClick={()=>setCanvasLetterItalic(v=>!v)}><i>I</i></button><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={canvasLetterSpacing} disabled={busy} onChange={e=>setCanvasLetterSpacing(Number(e.target.value))}/></label></div>
+  <label className="canvas-quality-option"><input type="checkbox" checked={reviewLetteringQuality} disabled={busy} onChange={e=>{setReviewLetteringQuality(e.target.checked);localStorage.setItem("studio-review-lettering",e.target.checked?"1":"0")}}/> Review stitch coverage after applying</label>
   {canvasTextError&&<small role="alert">{canvasTextError}</small>}
   <div><button type="button" disabled={busy} onClick={()=>{setCanvasText(null);setCanvasEditTarget(null);setCanvasTyping(false)}}>Cancel</button>
     <button type="submit" className="primary" disabled={busy||!canvasTextValue.trim()}>{busy?'Updating…':canvasEditTarget?'Apply':'Add'}</button></div>
