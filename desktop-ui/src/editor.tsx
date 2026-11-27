@@ -953,8 +953,9 @@ const [detectedText,setDetectedText]=useState<{uids:number[];text:string}[]>([])
 const [autoTextStatus,setAutoTextStatus]=useState('');
 useEffect(()=>{
   let active=true;
+  if(busy)return;
   setDetectedText([]);setAutoTextStatus('');
-  if(!objects.length||busy)return;
+  if(!objects.length)return;
   const candidates=objects.filter(o=>o.bounds&&o.fill_rule&&!o.hidden&&!o.locked&&o.kind!=='manual'&&!o.groups?.some(g=>g.startsWith('tl-lettering-')));
   const rows:EditableObject[][]=[];
   for(const object of candidates.slice(0,400).sort((a,b)=>a.bounds![1]-b.bounds![1])){
@@ -963,7 +964,16 @@ useEffect(()=>{
     const row=rows.find(row=>{const first=row[0];const [,fy,,fh]=first.bounds!;return first.color.join(',')===object.color.join(',')&&h>=fh*.55&&h<=fh*1.65&&Math.abs(y+h/2-fy-fh/2)<=fh*.28});
     if(row)row.push(object);else rows.push([object]);
   }
-  const groups=rows.filter(row=>row.length>=2&&row.length<=128).slice(0,8);
+  const groups=rows.flatMap(row=>{
+    const sorted=[...row].sort((a,b)=>a.bounds![0]-b.bounds![0]);
+    const words:EditableObject[][]=[];
+    for(const object of sorted){
+      const word=words[words.length-1],previous=word?.[word.length-1];
+      if(!previous||object.bounds![0]-previous.bounds![0]-previous.bounds![2]>Math.max(object.bounds![3],previous.bounds![3])*.85)words.push([object]);
+      else word.push(object);
+    }
+    return words;
+  }).filter(row=>row.length>=2&&row.length<=128).sort((a,b)=>b.length-a.length).slice(0,12);
   if(!groups.length)return;
   const timer=window.setTimeout(async()=>{
     if(!active)return;
