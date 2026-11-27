@@ -2037,3 +2037,17 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .studio-choice-row > button:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
 
 .studio-search-choice{display:grid;gap:4px;min-width:0;font-size:12px}.studio-search-choice>button{text-align:left;justify-content:flex-start;white-space:normal}.studio-search-options{display:grid;gap:4px;padding:6px;border:1px solid var(--workspace-border);border-radius:8px}.studio-search-options>div{display:grid;gap:3px;max-height:180px;overflow:auto}.studio-search-options button{text-align:left;justify-content:flex-start;white-space:normal}.studio-search-options button[aria-pressed=true]{background:var(--brand-soft);font-weight:650}
+
+/* Compact contextual editor and visual stitch library */
+.effect-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;min-width:0}
+.effect-gallery .effect-tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:4px;min-width:0;padding:8px;text-align:left;white-space:normal;height:auto}
+.effect-tile svg{display:block;width:100%;height:54px;background:rgba(105,69,162,.07);border-radius:6px;color:#7953ad}
+.effect-tile small{font-size:11px;letter-spacing:normal;line-height:1.25;font-weight:400;white-space:normal}
+.studio-inspector-dock{min-width:0;overflow-x:hidden;scrollbar-gutter:stable}
+.studio-inspector-dock .workspace-inspector-group{min-width:0;padding:10px;gap:7px}
+.studio-inspector-dock .workspace-inspector-group h3{margin:0 0 6px;font-size:14px}
+.studio-inspector-dock label{font-size:12px;line-height:1.35;min-width:0}
+.studio-inspector-dock input:not([type=checkbox]):not([type=radio]),.studio-inspector-dock select{max-width:100%;min-width:0;min-height:30px;padding:5px 8px;font-size:12px}
+.studio-inspector-dock button{min-width:0;white-space:normal;min-height:28px;font-size:12px;padding:5px 8px}
+.studio-inspector-dock .palette-editor>*{min-width:0;max-width:100%}
+.studio-inspector-dock .workspace-helper,.studio-inspector-dock .muted,.studio-inspector-dock small{letter-spacing:normal;line-height:1.35;font-size:11px}
