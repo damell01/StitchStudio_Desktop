@@ -3312,7 +3312,7 @@ async fn recognize_artwork_lettering(bytes: Vec<u8>, remove_background: bool, to
 async fn digitize_artwork(
     bytes: Vec<u8>, name: String, mime: String, width_mm: f64, colors: u32,
     remove_background: bool, detail: f64, fabric: String, cleanup: bool,
-    tolerance: u8, thin_lines: bool, speckle_mm: Option<f64>, optimization_strength: Option<u8>, production_speed: Option<f64>, production_trim_seconds: Option<f64>, thread_palette: Option<Vec<[u8; 3]>>, lettering: Option<Vec<zigzag::ocr::RecognizedLine>>, state: tauri::State<'_, Mutex<Workspace>>,
+    tolerance: u8, thin_lines: bool, speckle_mm: Option<f64>, artwork_simplification: Option<f64>, optimization_strength: Option<u8>, production_speed: Option<f64>, production_trim_seconds: Option<f64>, thread_palette: Option<Vec<[u8; 3]>>, lettering: Option<Vec<zigzag::ocr::RecognizedLine>>, state: tauri::State<'_, Mutex<Workspace>>,
 ) -> Result<DigitizerReview, String> {
     if bytes.is_empty() || bytes.len() > 20_000_000 || !(5.0..=300.0).contains(&width_mm)
         || !(0.0..=100.0).contains(&detail) || !(colors == 0 || (2..=10).contains(&colors))
@@ -3495,6 +3495,16 @@ async fn digitize_artwork(
                         } else {break;}
                     } else {break;}
                 } else {break;}
+                }
+            }
+        }
+        // Explicit artwork simplification shares the editor's geometry reconstruction engine.
+        if let Some(floor)=artwork_simplification.filter(|v|v.is_finite()) {
+            let opts=SimplifyOptions{texture_reduction:true,appearance_floor:Some(floor.clamp(65.,100.)),speed:Some(speed),trim_seconds:Some(trim),budget:Some(SimplifyBudget::new(std::time::Duration::from_secs(12))),..Default::default()};
+            // Keep traced text intact when OCR replacement was not successful.
+            if !has_lettering || lettering_warnings.is_empty() {
+                if let Ok((next,plan))=choose_texture_reduction(&document,&design,None,&opts) {
+                    document=next;design=plan;
                 }
             }
         }
