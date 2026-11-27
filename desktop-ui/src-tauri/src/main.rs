@@ -1558,6 +1558,9 @@ fn remove_covered_fill_candidate(source:&zigzag::document::Document,uids:Option<
         for j in i+1..(i+12).min(source.shapes.len()){
             let b=&source.shapes[j];
             if !eligible(j)||a.color!=b.color||a.groups!=b.groups{break}
+            // Open fills are not opaque masks; preserve the original editable base.
+            let fabric=zigzag::params::Fabric::by_id(&source.settings.fabric).or_else(||zigzag::params::Fabric::by_id("standard"))?;
+            if b.params.fill_spacing(&fabric)>0.65{break}
             let bb=zigzag::svg::shapes_bounds(std::slice::from_ref(b));
             if ab.min.x>bb.max.x||ab.max.x<bb.min.x||ab.min.y>bb.max.y||ab.max.y<bb.min.y{continue}
             if let Geometry::Fill{rings,rule}=&b.geometry{covers.push((rings.clone(),*rule));}
@@ -4510,6 +4513,14 @@ mod tests {
         let candidate=Design{blocks:vec![Block{color:[0,0,0],runs:vec![run]}],..Default::default()};
         assert_eq!(optimization_quality(&original,&candidate,800.,3.).coverage,0.);
         assert_eq!(optimization_quality(&original,&original,800.,3.).coverage,100.);
+    }
+    #[test]
+    fn covered_fill_optimizer_preserves_base_under_open_fill() {
+        let svg=r#"<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="60mm" viewBox="0 0 80 60"><rect id="a" x="5" y="5" width="45" height="40" fill="navy"/><rect id="b" x="10" y="5" width="45" height="40" fill="navy"/></svg>"#;
+        let mut doc=zigzag::document::Document::from_svg(svg,"Open overlap",None).unwrap();
+        doc.shapes[1].params.spacing=Some(1.4);
+        let options=SimplifyOptions::default();
+        assert!(remove_covered_fill_candidate(&doc,None,&options).is_none());
     }
     #[test]
     fn optimizer_reports_savings_for_overlapping_fill_fixture() {
