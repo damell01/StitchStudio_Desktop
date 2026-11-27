@@ -1122,7 +1122,7 @@ function selectObject(object:EditableObject|null,inspectLettering=true,forceWord
   setSelectedObject(object?.uid??null);
   if(!object)return;
   setLayerTab('objects');setObjectKind(object.kind);
-  if(inspectorTab!=='stitches'&&inspectorTab!=='transform'&&inspectorTab!=='quality'&&inspectorTab!=='threads')setInspectorTab('transform');
+  if(inspectorTab!=='stitches'&&inspectorTab!=='quality'&&inspectorTab!=='threads')setInspectorTab('transform');
   if(!inspectLettering)return;
   void invoke<unknown>('lettering_settings',{uid:object.uid}).then(settings=>{
     if(selectionRequest.current!==request)return;
@@ -1963,6 +1963,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="studio-tool-icon" title="Close inspector" aria-label="Close inspector" onClick={()=>setRight(false)}><X size={15}/></button>
   </div>
   {selected&&<div className="studio-property-context"><strong title={selected.label}>{selected.label||'Object '+selected.uid}</strong><small>{selected.bounds?(selected.bounds[2]/25.4).toFixed(2)+' × '+(selected.bounds[3]/25.4).toFixed(2)+' in':'Selected object'}</small></div>}
+  {!selected&&<div className="studio-property-context"><strong>{movementIds.length>1?movementIds.length+' objects selected':plan?'Entire design':'No design selected'}</strong><small>{movementIds.length>1?'Group editing':''}</small></div>}
   <div className="workspace-segments" role="group" aria-label="Inspector">
     <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}><SquareDashed size={15}/>Hoop</button>
     <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={15}/>Sequence</button>
@@ -1970,7 +1971,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={15}/>Text</button><button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={15}/>Edit</button><button aria-pressed={inspectorTab==='stitches'} onClick={()=>setInspectorTab('stitches')}><Scissors size={15}/>Stitches</button><button aria-pressed={inspectorTab==='quality'} onClick={()=>setInspectorTab('quality')}>Quality</button>
   </div>
 </div>
-  {plan&&<div className="inspector-metrics"><div><small>Stitches</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div><div><small>Est. time</small><strong>{Math.ceil(plan.stitches/sewingSpm+plan.trims*trimSeconds/60+Math.max(0,plan.blocks.length-1)*changeSeconds/60)} min</strong></div></div>}
+
   {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage gaps</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red marks show sampled suspected gaps; outlines identify affected objects. Not a physical sew-out prediction.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small>{qualityOverlay==='coverage'?<><small role="status">{coverageStatus}</small>{coverageGaps.length>0&&<details open><summary>Inspect underfilled regions ({coverageGaps.length})</summary><small>Ranked by sampled gap percentage. Lettering and traced artwork may require different repairs.</small>{[...coverageGaps].sort((a,b)=>b.percent-a.percent).slice(0,30).map(g=>{const object=objects.find(o=>o.uid===g.uid);return <div key={g.uid} className="selection-color-row"><button disabled={busy||!object} onClick={()=>{locateIssue(g.uid);setRealistic(false)}} title="Zoom to suspected coverage gap">{object?.label||'Region '+g.uid} · {g.percent.toFixed(1)}%</button><button disabled={busy||!object} onClick={()=>{locateIssue(g.uid);setRealistic(true)}} title="Inspect thread coverage">Preview</button></div>})}{coverageGaps.length>30&&<small>Showing the 30 highest sampled gap percentages.</small>}</details>}</>:
     <DensityReview cells={qualityDensity} focus={densityFocus} objects={focusedDensityObjects} onLocate={locateDensity} disabled={busy}
       onApply={async id=>{const result=await edit('apply_stitch_review',{id});return result.error}}/>}</div>}
