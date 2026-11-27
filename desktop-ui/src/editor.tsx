@@ -185,17 +185,17 @@ const assistantLastTarget=useRef<{plan:Plan;uids:number[]}|null>(null);
 assistantContext.current = {plan, width, height, machine, hoop, objects};
 async function audit(){try{const a=await invoke<{short:number;long:number;zero:number;segments:number}>('audit_stitches');setMessage('Stitch audit: '+a.segments+' segments · '+a.short+' short · '+a.long+' long · '+a.zero+' near-zero. Review before production.')}catch(e){setMessage(String(e))}}
 const editLock=useRef(false);const [inlineWork,setInlineWork]=useState('');
-async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return {plan:null,error:'The editor is busy. Try again when it finishes.'};editLock.current=true;setInlineWork(command==='maximize_in_hoop'?'Fitting design and regenerating stitches…':command==='resize_artwork_selection'?'Regenerating stitches at new size…':command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null);return {plan:next,error:null}}catch(e){const error=String(e);setMessage(error);return {plan:null,error}}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview([1,1]);setRotationPreview(0);setBusy(false)}}
+async function edit(command:string,args:Record<string,unknown>){if(editLock.current||busy)return {plan:null,error:'The editor is busy. Try again when it finishes.'};editLock.current=true;setInlineWork(command==='move_artwork_objects'||(command==='edit_artwork_object'&&(args.operation as {kind?:string}|undefined)?.kind==='move')?'Updating placement…':command==='maximize_in_hoop'?'Fitting design and regenerating stitches…':command==='resize_artwork_selection'?'Regenerating stitches at new size…':command==='edit_artwork_object'?'Updating object stitches…':command==='transform_design'?'Updating placement…':'Updating design…');setBusy(true);setPlaying(false);setMessage('');try{const next=await invoke<Plan>(command,args);if(command!=='recolor_block' && (next.blocks.length!==plan?.blocks.length||next.blocks.some((b,i)=>b.color.join(',')!==plan?.blocks[i]?.color.join(','))))setThreadAssignments({});setPlan(next);setPlayhead(null);return {plan:next,error:null}}catch(e){const error=String(e);setMessage(error);return {plan:null,error}}finally{editLock.current=false;setInlineWork('');setDesignOffset([0,0]);setObjectOffset([0,0]);setResizePreview(null);setGroupScalePreview([1,1]);setRotationPreview(0);setBusy(false)}}
 const drawing=useCanvasDrawing((tool,points,subpaths,settings)=>{
   void edit('draw_canvas_shape',{tool,points,subpaths,...settings,field:[width,height]});
 });
 const stitchGuides=useStitchGuides(plan,selected&&!selected.locked&&!selected.hidden?selected.uid:null,
   (uid,action)=>void edit('edit_object_stitch_controls',{uid,action}));
 useEffect(()=>{
-  if((drawing.tool||canvasMode!=='select'||baselinePicking)&&canvasTyping){
-    setCanvasTyping(false);setCanvasText(null);
+  if((drawing.tool||canvasMode!=='select'||baselinePicking)&&(canvasTyping||canvasText)){
+    setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);
   }
-},[drawing.tool,canvasMode,baselinePicking,canvasTyping]);
+},[drawing.tool,canvasMode,baselinePicking,canvasTyping,canvasText]);
 function toggleCanvasTyping(){
   setCanvasEditTarget(null);
   setCanvasText(null);
