@@ -1095,6 +1095,30 @@ fn production_hotspots(design:&Design)->(usize,usize){
     }
     (cells.values().copied().max().unwrap_or(0),cells.values().filter(|&&n|n>=24).count())
 }
+// Preserve local sewn coverage inside each previously occupied neighborhood.
+ // A global footprint score alone can hide missing strokes in small lettering.
+fn local_coverage_preserved(original:&Design,candidate:&Design)->bool{
+    use std::collections::{HashSet,HashMap};
+    let sample=|d:&Design|{
+        let mut cells=HashSet::new();
+        for b in &d.blocks{for r in &b.runs{
+            for p in &r.pts{cells.insert((b.color,(p.x/5.).floor() as i32,(p.y/5.).floor() as i32));}
+            for pair in r.pts.windows(2){
+                let n=(pair[0].dist(pair[1])/2.5).ceil().clamp(1.,100.) as usize;
+                for k in 0..=n{let p=pair[0].lerp(pair[1],k as f64/n as f64);cells.insert((b.color,(p.x/5.).floor() as i32,(p.y/5.).floor() as i32));}
+            }
+        }}
+        cells
+    };
+    let before=sample(original);let after=sample(candidate);
+    let mut regions=HashMap::<([u8;3],i32,i32),(usize,usize)>::new();
+    for &(color,x,y) in &before{
+        let entry=regions.entry((color,x.div_euclid(8),y.div_euclid(8))).or_default();
+        entry.0+=1;
+        if after.contains(&(color,x,y)){entry.1+=1;}
+    }
+    regions.values().all(|&(total,covered)|total<8||covered*100>=total*85)
+}
 fn production_not_worse(original:&Design,candidate:&Design)->bool{
     let (peak,hot)=production_hotspots(original);
     let (next_peak,next_hot)=production_hotspots(candidate);
@@ -1232,7 +1256,8 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
     let uids=if protected_letters.is_empty(){uids}else{Some(allowed.as_slice())};
     if uids.is_some_and(|ids|ids.is_empty()){return Err("No unprotected artwork to simplify".into())}
     let mut mode=options.clone();
-    mode.solid=true;mode.merge=true;mode.auto_types=true;mode.lighter_underlay=true;
+    mode.solid=true;mode.merge=true;mode.auto_types=true; // Preserve the foundation unless explicitly requested.
+    mode.lighter_underlay=options.lighter_underlay;
     let speed=mode.speed.unwrap_or(800.).clamp(100.,1500.);
     let trim=mode.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let audit=measure_stitches(original);
@@ -3588,6 +3613,7 @@ async fn digitize_artwork(
                     &&p.trim_count()<=original.trim_count()
                     &&audit.long<=baseline.long&&audit.zero<=baseline.zero
                     &&production_not_worse(&original,p)
+                    &&local_coverage_preserved(&original,p)
                     &&a.min.dist(b.min)<=5.&&a.max.dist(b.max)<=5.
                     &&original.blocks.iter().map(|b|b.color).eq(p.blocks.iter().map(|b|b.color))
                     &&optimization_quality(&original,p,speed,trim).coverage>=90.
