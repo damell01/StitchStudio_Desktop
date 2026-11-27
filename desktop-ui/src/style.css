@@ -2019,3 +2019,13 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
  .editor-workspace .studio-edit-bar .studio-insert-action span { display: none; }
  .editor-workspace .studio-edit-bar .studio-document { min-width: 64px; flex-basis: 85px; }
 }
+
+.inspector-context-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; }
+.editor-workspace .studio-inspector-dock .inspector-context-actions button { font-size:11px; padding:4px; line-height:1.2; white-space:normal; }
+.editor-workspace .studio-layers-dock { overflow-x:hidden; min-width:0; }
+.editor-workspace .studio-layers-dock :is(button,input,select) { min-width:0; max-width:100%; }
+.editor-workspace .studio-layers-dock button { font-size:12px; }
+.editor-workspace .studio-inspector-dock .workspace-inspector-group { gap:6px; }
+.editor-workspace .studio-inspector-dock .workspace-inspector-group h3 { font-size:13px; margin-block:4px; }
+.editor-workspace .studio-inspector-dock .workspace-inspector-group label { font-size:12px; line-height:1.35; }
+.editor-workspace .studio-inspector-dock .workspace-segments button { min-width:0; min-height:28px; font-size:11px; }
