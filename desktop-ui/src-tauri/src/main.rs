@@ -1202,7 +1202,9 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
         if !mode.exhausted(){if let Some(v)=combined_economy_candidate(&doc,&plan,uids,&mode,5){candidates.push(v);}}
         if !mode.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,uids,5,0.){candidates.push(v);}}
         for (doc,plan) in candidates {
-            if eligible(&plan)&&best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|(plan.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(&plan,speed,trim)/optimization_seconds(original,speed,trim).max(1.))<(old.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(old,speed,trim)/optimization_seconds(original,speed,trim).max(1.))){
+            // A structural candidate must preserve every recorded text object and its geometry.
+            let protected=source.shapes.iter().enumerate().filter(|(i,s)|source.records_text(*i)||s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")||source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)).all(|(_,s)|doc.shapes.iter().any(|q|q.uid==s.uid&&q.color==s.color&&q.params==s.params&&zigzag::svg::shapes_bounds(std::slice::from_ref(q)).min.dist(zigzag::svg::shapes_bounds(std::slice::from_ref(s)).min)<0.01&&zigzag::svg::shapes_bounds(std::slice::from_ref(q)).max.dist(zigzag::svg::shapes_bounds(std::slice::from_ref(s)).max)<0.01));
+            if protected&&eligible(&plan)&&best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|(plan.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(&plan,speed,trim)/optimization_seconds(original,speed,trim).max(1.))<(old.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(old,speed,trim)/optimization_seconds(original,speed,trim).max(1.))){
                 best=Some((doc,plan));
             }
         }
