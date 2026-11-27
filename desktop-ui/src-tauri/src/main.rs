@@ -1178,7 +1178,44 @@ fn remove_interior_hatching(source:&zigzag::document::Document,uids:Option<&[usi
  if remove.len()<4{return None}
  doc.delete_many(&remove).ok()?;doc.sync().ok()?;Some(doc)
 }
+// Rasterize a bounded editable silhouette for offline lettering protection.
+fn simplify_lettering_regions(source:&zigzag::document::Document,options:&SimplifyOptions)->Vec<usize>{
+    use zigzag::{geom::{P,point_inside},svg::{Geometry,shapes_bounds}};
+    if source.shapes.len()>350||options.exhausted(){return Vec::new()}
+    let bounds=shapes_bounds(&source.shapes);
+    if bounds.is_empty()||bounds.width()<=0.||bounds.height()<=0.{return Vec::new()}
+    let scale=900.0/bounds.width().max(bounds.height());
+    let w=(bounds.width()*scale).ceil() as u32+16;
+    let h=(bounds.height()*scale).ceil() as u32+16;
+    let mut rgba=vec![255u8;w as usize*h as usize*4];
+    let boxes:Vec<_>=source.shapes.iter().map(|s|shapes_bounds(std::slice::from_ref(s))).collect();
+    for (s,b) in source.shapes.iter().zip(&boxes){
+        if options.exhausted(){return Vec::new()}
+        let Geometry::Fill{rings,rule}=&s.geometry else{continue};
+        if b.is_empty(){continue}
+        let x0=((b.min.x-bounds.min.x)*scale+8.).floor().max(0.) as u32;
+        let y0=((b.min.y-bounds.min.y)*scale+8.).floor().max(0.) as u32;
+        let x1=(((b.max.x-bounds.min.x)*scale+8.).ceil() as u32).min(w-1);
+        let y1=(((b.max.y-bounds.min.y)*scale+8.).ceil() as u32).min(h-1);
+        for y in y0..=y1{if options.exhausted(){return Vec::new()} for x in x0..=x1{
+            let p=P::new(bounds.min.x+(x as f64-8.)/scale,bounds.min.y+(y as f64-8.)/scale);
+            if point_inside(rings,*rule,p){let k=(y as usize*w as usize+x as usize)*4;rgba[k..k+3].fill(0);}
+        }}
+    }
+    let Ok(lines)=zigzag::ocr::recognize_rgba(w,h,&rgba) else{return Vec::new()};
+    source.shapes.iter().zip(&boxes).filter(|(_,b)|!b.is_empty()&&lines.iter().any(|l|{
+        let [x0,y0,x1,y1]=l.rect;
+        let pad=(y1-y0)*0.12;
+        let x=(b.min.x-bounds.min.x)*scale+8.;
+        let y=(b.min.y-bounds.min.y)*scale+8.;
+        x>=x0-pad&&y>=y0-pad&&(b.max.x-bounds.min.x)*scale+8.<=x1+pad&&(b.max.y-bounds.min.y)*scale+8.<=y1+pad
+    })).map(|(s,_)|s.uid).collect()
+}
 fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
+    let protected_letters=simplify_lettering_regions(source,options);
+    let allowed:Vec<_>=source.shapes.iter().filter(|s|uids.is_none_or(|ids|ids.contains(&s.uid))&&!protected_letters.contains(&s.uid)).map(|s|s.uid).collect();
+    let uids=if protected_letters.is_empty(){uids}else{Some(allowed.as_slice())};
+    if uids.is_some_and(|ids|ids.is_empty()){return Err("No unprotected artwork to simplify".into())}
     let mut mode=options.clone();
     mode.solid=true;mode.merge=true;mode.auto_types=true;mode.lighter_underlay=true;
     let speed=mode.speed.unwrap_or(800.).clamp(100.,1500.);
@@ -1215,7 +1252,7 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
         if !mode.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,uids,5,0.){candidates.push(v);}}
         for (doc,plan) in candidates {
             // A structural candidate must preserve every recorded text object and its geometry.
-            let protected=source.shapes.iter().enumerate().filter(|(i,s)|source.records_text(*i)||s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")||source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)).all(|(_,s)|doc.shapes.iter().any(|q|q.uid==s.uid&&q.color==s.color&&q.params==s.params&&zigzag::svg::shapes_bounds(std::slice::from_ref(q)).min.dist(zigzag::svg::shapes_bounds(std::slice::from_ref(s)).min)<0.01&&zigzag::svg::shapes_bounds(std::slice::from_ref(q)).max.dist(zigzag::svg::shapes_bounds(std::slice::from_ref(s)).max)<0.01));
+            let protected=source.shapes.iter().enumerate().filter(|(i,s)|protected_letters.contains(&s.uid)||source.records_text(*i)||s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail")||source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)).all(|(_,s)|doc.shapes.iter().any(|q|q.uid==s.uid&&q.color==s.color&&q.params==s.params&&zigzag::svg::shapes_bounds(std::slice::from_ref(q)).min.dist(zigzag::svg::shapes_bounds(std::slice::from_ref(s)).min)<0.01&&zigzag::svg::shapes_bounds(std::slice::from_ref(q)).max.dist(zigzag::svg::shapes_bounds(std::slice::from_ref(s)).max)<0.01));
             if protected&&structural_ok(&plan)&&eligible(&plan)&&best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|(plan.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(&plan,speed,trim)/optimization_seconds(original,speed,trim).max(1.))<(old.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(old,speed,trim)/optimization_seconds(original,speed,trim).max(1.))){
                 best=Some((doc,plan));
             }
