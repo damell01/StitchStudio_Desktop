@@ -22,6 +22,7 @@ import './editor-frame.css';
 import {ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {CommandPalette,type Command} from './command-palette';
 import {InsertDesignDialog} from './insert-design-dialog';
+import {templates} from './templates';
 import {EditorDigitizer} from './editor-digitizer';
 import {confirmAction,toast} from './dialogs';
 import {ExportCenter} from './export-center';
@@ -1551,20 +1552,36 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </article>
 {left&&panelResizeHandle("left")}{right&&panelResizeHandle("right")}<article className="canvas-panel"
   onDragOver={event=>{
-    if(!event.dataTransfer.types.includes('Files'))return;
+    if(!event.dataTransfer.types.includes('Files')&&!event.dataTransfer.types.includes('application/x-stitchstudio-template'))return;
     event.preventDefault();
     event.dataTransfer.dropEffect=busy?'none':'copy';
     if(!busy)setArtworkDrag(true);
   }}
   onDragLeave={event=>{if(!(event.relatedTarget instanceof Node)||!event.currentTarget.contains(event.relatedTarget))setArtworkDrag(false)}}
   onDrop={event=>{
+    const templateId=event.dataTransfer.getData('application/x-stitchstudio-template');
+    if(templateId){
+      event.preventDefault();setArtworkDrag(false);
+      const template=templates.find(t=>t.id===templateId);
+      const matrix=canvasSurface.current?.querySelector<SVGSVGElement>('svg.design-canvas')?.getScreenCTM();
+      if(!template||!matrix||busy)return;
+      const point=new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());
+      const widthMm=Math.min(50.8,width*.5,height*.5);
+      if(Math.abs(point.x)>width/2||Math.abs(point.y)>height/2){setMessage('Drop the element inside the hoop.');return;}
+      setBusy(true);
+      void invoke<Plan>('insert_template',{id:template.id,art:template.art,widthMm,xMm:point.x,yMm:point.y}).then(result=>{
+        setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);setMessage('');
+        insertDialog.current?.close();
+      }).catch(error=>setMessage(String(error))).finally(()=>setBusy(false));
+      return;
+    }
     if(!event.dataTransfer.types.includes('Files'))return;
     setArtworkDrag(false);
     if(event.defaultPrevented)return;
     event.preventDefault();
     if(!busy&&event.dataTransfer.files[0])setArtworkImport({file:event.dataTransfer.files[0]});
   }}>
-{artworkDrag&&<div className="canvas-artwork-drop" role="status">Drop an image to digitize</div>}
+{artworkDrag&&<div className="canvas-artwork-drop" role="status">Drop artwork or an element onto the hoop</div>}
 <div className={`studio-camera studio-camera-docked ${cameraTop?'studio-camera-top':'studio-camera-bottom'}`} role="group" aria-label="Canvas view">
   <button className="studio-tool-icon camera-dock-grip" title="Move camera controls to the top or bottom"
     aria-label={cameraTop?'Move camera controls to bottom':'Move camera controls to top'}
