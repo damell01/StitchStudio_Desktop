@@ -1348,6 +1348,22 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   setHoverUid(null);
 }
 
+// Coalesce expensive artwork transform previews to the display refresh rate.
+const gestureFrame=useRef<number|null>(null);
+const pendingGesture=useRef<(()=>void)|null>(null);
+function queueGesturePreview(update:()=>void){
+ pendingGesture.current=update;
+ if(gestureFrame.current!==null)return;
+ gestureFrame.current=requestAnimationFrame(()=>{
+   gestureFrame.current=null;
+   const next=pendingGesture.current;pendingGesture.current=null;next?.();
+ });
+}
+function cancelGesturePreview(){
+ if(gestureFrame.current!==null)cancelAnimationFrame(gestureFrame.current);
+ gestureFrame.current=null;pendingGesture.current=null;
+}
+useEffect(()=>()=>{if(gestureFrame.current!==null)cancelAnimationFrame(gestureFrame.current);pendingGesture.current=null;gestureFrame.current=null;},[]);
 function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const position=pointerPosition(event);
   if(!position)return;
@@ -1357,27 +1373,29 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   const box=marqueeGesture.current;
   if(box?.pointer===event.pointerId){setMarquee({x:Math.min(box.x,position.x),y:Math.min(box.y,position.y),w:Math.abs(position.x-box.x),h:Math.abs(position.y-box.y)});return;}
   if(!event.buttons&&canvasMode==='select'&&!drawing.tool&&!canvasTyping&&!baselinePicking){const element=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;const uid=element?Number(element.getAttribute('data-artwork-uid')):null;setHoverUid(uid!==null&&objects.some(o=>o.uid===uid&&!o.hidden&&!o.locked&&!lockedObjects.includes(uid))?uid:null);}
-  if(rotationGesture.current?.pointer===event.pointerId){setRotationPreview(rotationAt(position,event.shiftKey));return}
-  if(groupResizeGesture.current?.pointer===event.pointerId){setGroupScalePreview(groupScaleAt(position,event.shiftKey));return}
+  if(rotationGesture.current?.pointer===event.pointerId){const angle=rotationAt(position,event.shiftKey);queueGesturePreview(()=>setRotationPreview(angle));return}
+  if(groupResizeGesture.current?.pointer===event.pointerId){const scale=groupScaleAt(position,event.shiftKey);queueGesturePreview(()=>setGroupScalePreview(scale));return}
   if(designGesture.current?.pointer===event.pointerId){
     const start=designGesture.current;
     const offset: [number,number] = movedOnScreen(event,start) ? snapped(position.x-start.x,position.y-start.y,start.uids,true) : [0,0];
-    if(start.uids)setObjectOffset(offset);else setDesignOffset(offset);
+    queueGesturePreview(()=>{if(start.uids)setObjectOffset(offset);else setDesignOffset(offset);});
     return;
   }
   if(resizeGesture.current?.pointer===event.pointerId){
-    setResizePreview(resizeAt(position,event.shiftKey));
+    const preview=resizeAt(position,event.shiftKey);queueGesturePreview(()=>setResizePreview(preview));
     return;
   }
   const gesture=objectGesture.current;
   if(gesture&&gesture.pointerId===event.pointerId){
-    setObjectOffset(movedOnScreen(event,gesture)
+    const offset:[number,number]=movedOnScreen(event,gesture)
       ? snapped(position.x-gesture.x,position.y-gesture.y,selectionIds.includes(gesture.uid)?selectionIds:[gesture.uid],true)
-      : [0,0]);
+      : [0,0];
+    queueGesturePreview(()=>setObjectOffset(offset));
   }
 }
 
 function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boolean) {
+  cancelGesturePreview();
   if(drag){setDrag(null);return;}
   if(drawing.tool){
     const point=commit?pointerPosition(event):null;
