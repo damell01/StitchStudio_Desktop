@@ -795,7 +795,7 @@ impl Document {
             let uid = self.shapes[i].uid;
             // Keep generated outlines and shadows attached to their live text.
             let siblings: Vec<usize> = self.shapes.iter().enumerate()
-                .filter(|(_, s)| s.groups.iter().any(|g| g == &format!("tl-lettering-{n}")))
+                .filter(|(_, s)| s.uid == uid || s.groups.iter().any(|g| g == &format!("tl-lettering-{n}")))
                 .map(|(k, _)| k).collect();
             self.transform(&siblings, crate::geom::translation(shift))?;
             return self
