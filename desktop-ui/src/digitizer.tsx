@@ -109,7 +109,9 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
       const trim=Number(localStorage.getItem('studio-trim-seconds')??3);
       const change=Number(localStorage.getItem('studio-change-seconds')??8);
       const time=(p:Plan)=>p.stitches/speed+p.trims*(Number.isFinite(trim)?trim:3)/60+Math.max(0,p.blocks.length-1)*(Number.isFinite(change)?change:8)/60;
-      const eligible=variants.filter(v=>v.plan&&v.strength!==4&&(v.quality?.coverage??0)>=85&&time(v.plan)<time(review.plan));
+      // Automatic recommendations favor faithful coverage over a stitch-count target.
+      // More aggressive alternatives remain available for explicit review.
+      const eligible=variants.filter(v=>v.plan&&v.strength!==4&&(v.quality?.coverage??0)>=95&&v.plan.trims<=review.plan.trims&&v.plan.blocks.length===review.plan.blocks.length&&time(v.plan)<time(review.plan));
       const aboveGoal=(p:Plan)=>Math.max(0,p.stitches-stitchGoal);
       eligible.sort((a,b)=>aboveGoal(a.plan!)-aboveGoal(b.plan!) || time(a.plan!)-time(b.plan!));
       const best=eligible[0]?.strength??0;setRecommended(best);setChosen(best);
