@@ -176,7 +176,7 @@ const canvasTextSaving=useRef(false);
 useEffect(()=>{if(canvasText)canvasTextInput.current?.focus()},[canvasText]);
 const [baselinePicking,setBaselinePicking]=useState(false),[textBaseline,setTextBaseline]=useState<PickedBaseline|null>(null);
 useEffect(()=>{if(inspectorTab!=='text')setBaselinePicking(false)},[inspectorTab]);
-function openText(uid:number|null=null){setCanvasTyping(false);setCanvasText(null);++baselineRequest.current;setTextBaseline(null);setBaselinePicking(false);setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
+function openText(uid:number|null=null){setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);++baselineRequest.current;setTextBaseline(null);setBaselinePicking(false);setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
 const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>initialView?.machine??(localStorage.getItem('studio-default-machine')||'')),[hoop,setHoop]=useState(()=>initialView?.hoop??(localStorage.getItem('studio-default-hoop')||''));const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState(initialView?.format??'dst'),[width,setWidth]=useState(initialView?.width??130),[height,setHeight]=useState(initialView?.height??180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
 useEffect(()=>{
   onWorkspaceStatus?.({name:plan?.stitches?plan.name:null,busy,view:{width,height,format,machine,hoop,zoom,pan,threadAssignments}});
@@ -1289,7 +1289,7 @@ const qualityDensity=useMemo(()=>{
   return Array.from(cells.values()).filter(c=>c.n>=24).sort((a,b)=>b.n-a.n).slice(0,1500);
 },[plan,inspectorTab,qualityOverlay]);
 function openQuality(overlay:'coverage'|'density'='coverage'){
-  dismissWordReview();showInspector(true);setInspectorTab('quality');setQualityOverlay(overlay);
+  insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setRealistic(false);setPlaying(false);setPlayhead(null);dismissWordReview();showInspector(true);setInspectorTab('quality');setQualityOverlay(overlay);
 }
 const canRecognizeSelection=objects.some(o=>movementIds.includes(o.uid)&&o.fill_rule&&o.kind!=='manual');
 const focusedDensityObjects=densityFocus?objects.filter(o=>{
@@ -1657,7 +1657,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button aria-pressed={!realistic&&!(right&&['quality','stitches'].includes(inspectorTab))} onClick={()=>{drawing.pick(null);setCanvasMode('select');setRealistic(false);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false)}}><MousePointer2 size={15}/> Design</button>
   <button aria-pressed={!realistic&&right&&inspectorTab==='stitches'} onClick={()=>{drawing.pick(null);setCanvasMode('select');setRealistic(false);showInspector(true);setInspectorTab('stitches')}}><Scissors size={15}/> Stitches</button>
   <button disabled={!plan?.stitches||busy} aria-pressed={right&&inspectorTab==='quality'} onClick={()=>{setRealistic(false);openQuality()}}><ScanLine size={15}/> Quality</button>
-  <button disabled={!plan?.stitches} aria-pressed={realistic&&!(right&&inspectorTab==='quality')} onClick={()=>{drawing.pick(null);if(right&&inspectorTab==='quality')showInspector(false);setRealistic(true)}}><Eye size={15}/> Preview</button>
+  <button disabled={!plan?.stitches} aria-pressed={realistic&&!(right&&inspectorTab==='quality')} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false);setRealistic(true)}}><Eye size={15}/> Preview</button>
 </div>
 {plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar">{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
   title="Preview the selected artwork as a solid fill">Make selection solid</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" role="group" aria-label="Selected object actions">
