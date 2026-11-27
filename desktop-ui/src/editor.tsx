@@ -1,3 +1,4 @@
+import {DensityReview,type NeedleCell} from './density-review';
 import {AdvancedStitches} from './advanced-stitches';
 import type {WorkspaceView} from './project-tabs';
 import {StitchGuideOverlay,useStitchGuides} from './stitch-guides';
@@ -11,7 +12,7 @@ import {assistantIntent} from './assistant-intent';
 import {AssistantChat,type AssistantProposal} from './assistant-chat';
 import {rememberProject,thumbnailOf,type Project} from './library';
 import {InlineLettering,type PickedBaseline} from './lettering';
-import {Type,Clock3,ArrowUp,ArrowDown,ArrowLeft,ArrowRight} from 'lucide-react';
+import {Type,Clock3,ArrowUp,ArrowDown,ArrowLeft,ArrowRight,ScanLine} from 'lucide-react';
 import {GarmentPreview} from './garment-preview';
 import {ThreadOrder,ReferenceColorPanel,type ThreadAssignments} from './thread-order';
 import {FabricPicker} from './fabric-picker';
@@ -136,7 +137,7 @@ function selectNearbyRegion(){
  for(let pass=0;pass<8;pass++){let added=false;for(const o of candidates){if(!group.has(o.uid)&&candidates.some(q=>group.has(q.uid)&&nearby(o,q))){group.add(o.uid);added=true}}if(!added)break}
  setMulti([...group]);setCanvasMode('select');setSelectedObject(null);setActiveGroup(null);setLayerTab('objects');showLayers(true);
 }
-function toggleMulti(uid:number){setCanvasMode('select');setMulti(old=>{const base=old.length?old:selectedObject!==null?[selectedObject]:[];return base.includes(uid)?base.filter(i=>i!==uid):[...base,uid]});setLayerTab('objects')}
+function toggleMulti(uid:number){dismissWordReview();setCanvasMode('select');setMulti(old=>{const base=old.length?old:selectedObject!==null?[selectedObject]:[];return base.includes(uid)?base.filter(i=>i!==uid):[...base,uid]});setLayerTab('objects')}
 const [guides,setGuides]=useState<{x:number|null;y:number|null}>({x:null,y:null});
 function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
  if(!snap){if(show)setGuides({x:null,y:null});return [dx,dy]}
@@ -153,7 +154,7 @@ function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
  if(show)setGuides({x:gx,y:gy});return [x,y]
 }
 const objectPage=usePagedList(objects.filter(object=>matchesName(object.label,objectQuery)),objectQuery,6);
-const [convertText,setConvertText]=useState(false);const recognitionCache=useRef(new Map<string,{text:string;font:string}[]>());const [recognizingWord,setRecognizingWord]=useState(false);const [recognizedOriginal,setRecognizedOriginal]=useState('');const [recognitionError,setRecognitionError]=useState('');const [failedWord,setFailedWord]=useState('');const [recognizedIds,setRecognizedIds]=useState<number[]>([]);const [convertWord,setConvertWord]=useState('');const [convertFont,setConvertFont]=useState('');const [convertFonts,setConvertFonts]=useState<string[]>([]);const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'|'quality'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(initialAssistant);useEffect(()=>{if(initialAssistant)onAssistantOpened?.()},[]);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [appearanceFloor,setAppearanceFloor]=useState(85);const [smartMode,setSmartMode]=useState<'light'|'balanced'|'aggressive'|'maximum'>('aggressive');const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{artwork_svg?:string|null;strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [targetReduction,setTargetReduction]=useState(50);const [targetMetric,setTargetMetric]=useState<'both'|'time'|'stitches'>('both');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);const baselineRequest=useRef(0);
+const [convertText,setConvertText]=useState(false);const recognitionCache=useRef(new Map<string,{text:string;font:string}[]>());const [recognizingWord,setRecognizingWord]=useState(false);const [recognizedOriginal,setRecognizedOriginal]=useState('');const [recognitionError,setRecognitionError]=useState('');const [recognizedIds,setRecognizedIds]=useState<number[]>([]);const [convertWord,setConvertWord]=useState('');const [convertFont,setConvertFont]=useState('');const [convertFonts,setConvertFonts]=useState<string[]>([]);const [inspectorTab,setInspectorTab]=useState<'hoop'|'stitches'|'transform'|'sequence'|'threads'|'text'|'quality'>('hoop');const inspectorScroll=useRef<HTMLElement|null>(null);useEffect(()=>{if(inspectorScroll.current)inspectorScroll.current.scrollTop=0},[inspectorTab]);const [assistantOpen,setAssistantOpen]=useState(initialAssistant);useEffect(()=>{if(initialAssistant)onAssistantOpened?.()},[]);const [hoopOpen,setHoopOpen]=useState(false);const [simplifyOpen,setSimplifyOpen]=useState(false);const [simplifyLevel,setSimplifyLevel]=useState(2);const [appearanceFloor,setAppearanceFloor]=useState(85);const [smartMode,setSmartMode]=useState<'light'|'balanced'|'aggressive'|'maximum'>('aggressive');const [simplifyRecommended,setSimplifyRecommended]=useState(0);const [simplifyReview,setSimplifyReview]=useState<{id:number;variants:{artwork_svg?:string|null;strength:number;plan:Plan|null;reason:string|null;quality?:{coverage:number;density_peak:number;seconds:number}|null}[]}|null>(null);const [simplifyScope,setSimplifyScope]=useState<'all'|'selection'>('all');const [simplifyDetail,setSimplifyDetail]=useState(false);const [solidMode,setSolidMode]=useState(false);const [mergeShapes,setMergeShapes]=useState(true);const [autoTypes,setAutoTypes]=useState(true);const [lighterUnderlay,setLighterUnderlay]=useState(false);const [targetMinutes,setTargetMinutes]=useState('');const [targetReduction,setTargetReduction]=useState(50);const [targetMetric,setTargetMetric]=useState<'both'|'time'|'stitches'>('both');const [simplifyBefore,setSimplifyBefore]=useState<Plan|null>(null);const [simplifyError,setSimplifyError]=useState('');const [textTarget,setTextTarget]=useState<number|null>(null);const [textSession,setTextSession]=useState(0);const baselineRequest=useRef(0);
 const [canvasTyping,setCanvasTyping]=useState(false);
 const [canvasText,setCanvasText]=useState<{point:[number,number];left:number;top:number}|null>(null);
 const [canvasTextValue,setCanvasTextValue]=useState('');
@@ -883,18 +884,91 @@ useEffect(()=>{
 useEffect(()=>{if(stitchIndex>=points.length)setPlaying(false);},[stitchIndex,points.length]);
 
 const selectionRequest=useRef(0);
-function selectObject(object:EditableObject|null) {
+function dismissWordReview(){
+  ++selectionRequest.current;
+  setRecognizingWord(false);setConvertText(false);setRecognizedIds([]);setRecognitionError('');
+}
+async function recognizeWord(shapes:EditableObject[],request:number,manual=false){
+  if(!shapes.length)return;
+  const ids=shapes.map(shape=>shape.uid);
+  const key=JSON.stringify(shapes.map(shape=>[shape.uid,shape.bounds,shape.path,shape.color]));
+  const cached=recognitionCache.current.get(key);
+  setRecognizingWord(true);
+  if(manual){showInspector(true);setInspectorTab('transform');}
+  try{
+    const [result,fonts]=await Promise.all([
+      cached?Promise.resolve(cached):invoke<{text:string;font:string}[]>('recognize_selected_lettering',{uids:ids})
+        .catch(error=>{if(!manual)throw error;return []}),
+      invoke<string[]>('lettering_fonts'),
+    ]);
+    if(selectionRequest.current!==request)return;
+    const lines=result??[];
+    if(lines.length&&!cached){
+      if(recognitionCache.current.size>=64)recognitionCache.current.clear();
+      recognitionCache.current.set(key,lines);
+    }
+    const word=lines.map(line=>line.text).join(' ').trim();
+    if(!word&&!manual)return;
+    setConvertFonts(fonts);setConvertFont(fonts.includes(lines[0]?.font)?lines[0].font:fonts[0]??'');
+    setRecognizedOriginal(word);setConvertWord(word);setRecognizedIds(ids);setConvertText(true);
+    setMulti(ids);setSelectedObject(null);showInspector(true);setInspectorTab('transform');
+  }catch(error){
+    if(manual&&selectionRequest.current===request)setMessage(String(error));
+  }finally{if(selectionRequest.current===request)setRecognizingWord(false)}
+}
+function recognizeSelection(){
+  dismissWordReview();
+  void recognizeWord(objects.filter(o=>movementIds.includes(o.uid)&&o.fill_rule&&o.kind!=='manual'),selectionRequest.current,true);
+}
+function selectObject(object:EditableObject|null,inspectLettering=true){
   if(object&&lockedObjects.includes(object.uid))return;
   if(object)setCanvasMode('select');
-  setMulti([]);setContext(null);
-  const request=++selectionRequest.current;
-  setRecognizingWord(false);setConvertText(false);setRecognizedOriginal('');setRecognizedIds([]);setRecognitionError('');setFailedWord('');
+  setMulti([]);setContext(null);dismissWordReview();
+  const request=selectionRequest.current;
   setSelectedObject(object?.uid??null);
-  if(object){setLayerTab('objects');setObjectKind(object.kind);if(inspectorTab!=='stitches'&&inspectorTab!=='transform')setInspectorTab('transform');void invoke<unknown>('lettering_settings',{uid:object.uid}).then(settings=>{if(selectionRequest.current!==request)return;if(settings){openText(object.uid);return}if(!object.bounds)return;const [,y,,h]=object.bounds;if(h<1.8)return;const row=objects.filter(o=>{if(!o.bounds||o.hidden||o.locked||o.color.join(',')!==object.color.join(','))return false;const [,oy,ow,oh]=o.bounds;return oh>=h*.55&&oh<=h*1.65&&ow<=h*2.5&&Math.abs(oy+oh/2-y-h/2)<=h*.28}).sort((a,b)=>a.bounds![0]-b.bounds![0]);const index=row.findIndex(o=>o.uid===object.uid);if(index<0)return;let lo=index,hi=index;const gap=(a:EditableObject,b:EditableObject)=>b.bounds![0]-a.bounds![0]-a.bounds![2];const typicalGaps=row.slice(1).map((o,i)=>gap(row[i],o)).filter(g=>g>=0&&g<=h*.85).sort((a,b)=>a-b);const tracking=typicalGaps.length>=3?typicalGaps[Math.floor((typicalGaps.length-1)/2)]:0;const threshold=Math.min(h*.85,Math.max(h*.38,tracking*1.65));while(lo>0&&gap(row[lo-1],row[lo])<=threshold)lo--;while(hi+1<row.length&&gap(row[hi],row[hi+1])<=threshold)hi++;const letters=row.slice(lo,hi+1);const left=Math.min(...letters.map(o=>o.bounds![0]));const right=Math.max(...letters.map(o=>o.bounds![0]+o.bounds![2]));const components=objects.filter(o=>{if(!o.bounds||o.hidden||o.locked||letters.some(l=>l.uid===o.uid)||o.color.join(',')!==object.color.join(','))return false;const [ox,oy,ow,oh]=o.bounds;return oh>0&&oh<=h*.55&&ow<=h*.55&&ox>=left-h*.12&&ox+ow<=right+h*.12&&oy>=y-h*.45&&oy+oh<=y+h*1.15});const wordShapes=[...letters,...components];const ids=wordShapes.map(o=>o.uid);const key=JSON.stringify(wordShapes.map(o=>[o.uid,o.bounds,o.path,o.color]));const cached=recognitionCache.current.get(key);setRecognizingWord(true);showInspector(true);return Promise.all([cached?Promise.resolve(cached):invoke<{text:string;font:string}[]>('recognize_selected_lettering',{uids:ids}).then(lines=>{if(recognitionCache.current.size>=64)recognitionCache.current.clear();recognitionCache.current.set(key,lines);return lines}),invoke<string[]>('lettering_fonts')]).then(([lines,fonts])=>{if(selectionRequest.current!==request)return;setRecognizingWord(false);if(!lines.length)return;const word=lines.map(l=>l.text).join(' ').trim();if(!word)return;setConvertFonts(fonts);setConvertFont(fonts.includes(lines[0].font)?lines[0].font:fonts[0]||'');setConvertWord(word);setRecognizedOriginal(word);setRecognizedIds(ids);setConvertText(true);setMulti(ids);setSelectedObject(null);showInspector(true);setInspectorTab('transform')})}).catch(()=>{if(selectionRequest.current===request)setRecognizingWord(false)});}
+  if(!object)return;
+  setLayerTab('objects');setObjectKind(object.kind);
+  if(inspectorTab!=='stitches'&&inspectorTab!=='transform')setInspectorTab('transform');
+  if(!inspectLettering)return;
+  void invoke<unknown>('lettering_settings',{uid:object.uid}).then(settings=>{
+    if(selectionRequest.current!==request)return;
+    if(settings){openText(object.uid);return}
+    if(!object.bounds||!object.fill_rule||object.kind==='manual')return;
+    const [,y,,h]=object.bounds;
+    if(h<1.8)return;
+    const row=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||o.color.join(',')!==object.color.join(','))return false;
+    const [,oy,ow,oh]=o.bounds;return oh>=h*.55&&oh<=h*1.65&&ow<=h*2.5&&Math.abs(oy+oh/2-y-h/2)<=h*.28}).sort((a,b)=>a.bounds![0]-b.bounds![0]);
+    const index=row.findIndex(o=>o.uid===object.uid);
+    if(index<0)return;
+    let lo=index,hi=index;
+    const gap=(a:EditableObject,b:EditableObject)=>b.bounds![0]-a.bounds![0]-a.bounds![2];
+    const typicalGaps=row.slice(1).map((o,i)=>gap(row[i],o)).filter(g=>g>=0&&g<=h*.85).sort((a,b)=>a-b);
+    const tracking=typicalGaps.length>=3?typicalGaps[Math.floor((typicalGaps.length-1)/2)]:0;
+    const threshold=Math.min(h*.85,Math.max(h*.38,tracking*1.65));
+    while(lo>0&&gap(row[lo-1],row[lo])<=threshold)lo--;
+    while(hi+1<row.length&&gap(row[hi],row[hi+1])<=threshold)hi++;
+    const letters=row.slice(lo,hi+1);
+    const left=Math.min(...letters.map(o=>o.bounds![0]));
+    const right=Math.max(...letters.map(o=>o.bounds![0]+o.bounds![2]));
+    const components=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||letters.some(l=>l.uid===o.uid)||o.color.join(',')!==object.color.join(','))return false;
+    const [ox,oy,ow,oh]=o.bounds;return oh>0&&oh<=h*.55&&ow<=h*.55&&ox>=left-h*.12&&ox+ow<=right+h*.12&&oy>=y-h*.45&&oy+oh<=y+h*1.15});
+    const wordShapes=[...letters,...components];
+    return recognizeWord(wordShapes,request);
+  }).catch(()=>{});
 }
-
-useEffect(()=>{if(!convertText||busy||!convertWord.trim()||convertWord===recognizedOriginal||convertWord===failedWord||!convertFont||!recognizedIds.length)return;const timer=setTimeout(()=>{void edit('convert_selected_lettering',{uids:recognizedIds,text:recognizedOriginal,font:convertFont,replacement:convertWord}).then(async result=>{if(!result.plan){setFailedWord(convertWord);setRecognitionError(result.error||'Could not reconstruct this word. Original artwork preserved.');return}setConvertText(false);const items=await invoke<EditableObject[]>('editable_objects');const item=items.find(o=>!objects.some(old=>old.uid===o.uid));if(item){openText(item.uid);setMessage('Lettering updated.')}})},650);return()=>clearTimeout(timer)},[convertText,convertWord,recognizedOriginal,convertFont,recognizedIds,busy,failedWord]);
-
+async function applyWordReview(){
+  const text=recognizedOriginal.trim(),replacement=convertWord.trim();
+  if(busy||!text||!replacement||!convertFont||!recognizedIds.length)return;
+  const result=await edit('convert_selected_lettering',{uids:recognizedIds,text,font:convertFont,replacement});
+  if(!result.plan){setRecognitionError(result.error||'Original artwork preserved.');return}
+  dismissWordReview();
+  try{
+    const items=await invoke<EditableObject[]>('editable_objects');
+    const item=items.find(o=>!objects.some(old=>old.uid===o.uid));
+    if(item)openText(item.uid);
+  }catch{/* The converted object remains editable in Layers. */}
+  setMessage('Editable lettering updated.');
+}
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
   if(uid!==null&&!busy&&!lockedObjects.includes(uid))void edit('edit_artwork_object',{uid,operation});
 }
@@ -1081,13 +1155,13 @@ function finishCanvasGesture(event:ReactPointerEvent<SVGSVGElement>,commit:boole
         colors.set(key,{area:previous+object.bounds![2]*object.bounds![3],color:object.color});
       }
       const dominant=[...colors.values()].reduce((a,b)=>a.area>=b.area?a:b).color;
-      ++selectionRequest.current;setSelectedObject(null);setMulti(ids);setLayerTab('objects');setCanvasMode('select');setMessage('');
+      dismissWordReview();setSelectedObject(null);setMulti(ids);setLayerTab('objects');setCanvasMode('select');setMessage('');
       openSelectedSolid(ids,dominant);
       return;
     }
     const next=Array.from(new Set([...(box.add?box.initial:[]),...ids]));
     if(next.length===1){selectObject(objects.find(o=>o.uid===next[0])??null);return;}
-    ++selectionRequest.current;setSelectedObject(null);setMulti(next);setLayerTab('objects');return;
+    dismissWordReview();setSelectedObject(null);setMulti(next);setLayerTab('objects');return;
   }
   if(rotationGesture.current?.pointer===event.pointerId){
     const g=rotationGesture.current,position=commit?pointerPosition(event):null;
@@ -1147,6 +1221,7 @@ function fitArtwork() {
 }
 
 const [qualityOverlay,setQualityOverlay]=useState<'coverage'|'density'>('coverage');
+const [densityFocus,setDensityFocus]=useState<NeedleCell|null>(null);
 const [qualityObjects,setQualityObjects]=useState<number[]>([]);
 const [coverageStatus,setCoverageStatus]=useState('');
 const [coverageGaps,setCoverageGaps]=useState<{uid:number;points:number[][];percent:number}[]>([]);
@@ -1166,10 +1241,23 @@ const qualityDensity=useMemo(()=>{
   }
   return Array.from(cells.values()).filter(c=>c.n>=24).sort((a,b)=>b.n-a.n).slice(0,1500);
 },[plan,inspectorTab,qualityOverlay]);
+function openQuality(overlay:'coverage'|'density'='coverage'){
+  dismissWordReview();showInspector(true);setInspectorTab('quality');setQualityOverlay(overlay);
+}
+const canRecognizeSelection=objects.some(o=>movementIds.includes(o.uid)&&o.fill_rule&&o.kind!=='manual');
+const focusedDensityObjects=densityFocus?objects.filter(o=>{
+  if(!o.bounds||!o.fill_rule||o.hidden||o.locked||o.kind!=='fill')return false;
+  const [x,y,w,h]=o.bounds;
+  return x<=densityFocus.x+1&&x+w>=densityFocus.x&&y<=densityFocus.y+1&&y+h>=densityFocus.y;
+}):[];
+function locateDensity(cell:NeedleCell) {
+  setDensityFocus(cell);setPlaying(false);setPlayhead(null);
+  setPan([cell.x+.5,cell.y+.5]);setZoom(artworkZoom(13,13));
+}
 function locateIssue(uid:number) {
   const object=objects.find(object=>object.uid===uid);
   if(!object)return;
-  selectObject(object);
+  selectObject(object,false);
   setInspectorTab('quality');
   setQualityOverlay('coverage');
   showLayers(true);
@@ -1262,6 +1350,8 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <div className="studio-command-group studio-view-tools" role="group" aria-label="Workspace view">
     <button className="studio-tool-icon" title="Layers" aria-label="Layers" aria-pressed={left} onClick={()=>showLayers(!left)}><PanelLeft size={18}/></button>
     <button className="studio-tool-icon" title="Inspector" aria-label="Inspector" aria-pressed={right} onClick={()=>showInspector(!right)}><PanelRight size={18}/></button>
+    <button className="studio-tool-icon" title="Inspect stitch coverage and density" aria-label="Inspect stitch quality"
+      aria-pressed={right&&inspectorTab==='quality'} disabled={busy||!plan?.stitches} onClick={()=>openQuality()}><ScanLine size={18}/></button>
     <button className="studio-tool-icon" title={focusCanvas?'Exit focus view (Esc)':'Full-screen canvas (F11)'} aria-label={focusCanvas?'Exit focus view':'Focus canvas'} aria-pressed={focusCanvas} onClick={toggleFocus}>{focusCanvas?<Minimize size={18}/>:<Maximize size={18}/>}</button>
   </div>
   <CommandPalette commands={[
@@ -1273,7 +1363,10 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     {label:'Layers',group:'View',run:()=>showLayers(!left)},
     {label:'Hoop and machine',group:'Inspector',run:()=>{showInspector(true);setInspectorTab('hoop')}},
     {label:'Transform and resize',group:'Inspector',run:()=>{showInspector(true);setInspectorTab('transform')},disabled:!plan},
-    {label:'Stitch tools and quality',group:'Inspector',run:()=>{showInspector(true);setInspectorTab('stitches')},disabled:!plan},
+    {label:'Stitch settings',group:'Inspector',run:()=>{showInspector(true);setInspectorTab('stitches')},disabled:!plan},
+    {label:'Inspect stitch coverage',group:'Quality',run:()=>openQuality('coverage'),disabled:busy||!plan?.stitches},
+    {label:'Inspect density hotspots',group:'Quality',run:()=>openQuality('density'),disabled:busy||!plan?.stitches},
+    {label:'Recognize selected word',group:'Lettering',run:recognizeSelection,disabled:busy||!canRecognizeSelection},
     {label:'Copy stitch settings',group:'Stitches',run:()=>void copyStitchSettings(),disabled:busy||!canCopyStitchSettings},
     {label:'Paste stitch settings',group:'Stitches',run:pasteStitchSettings,disabled:busy||!canPasteStitchSettings},
     {label:'Select same stitch type',group:'Stitches',run:selectSameStitchType,disabled:busy||!selected},
@@ -1550,7 +1643,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
  </circle>)}
 <line x1={selected.bounds[0]+selected.bounds[2]/2} x2={selected.bounds[0]+selected.bounds[2]/2} y1={selected.bounds[1]} y2={selected.bounds[1]-Math.max(3,9*100/zoom)} stroke="#754bb0" vectorEffect="non-scaling-stroke"/><circle cx={selected.bounds[0]+selected.bounds[2]/2} cy={selected.bounds[1]-Math.max(3,9*100/zoom)} r={Math.max(.8,1.7*100/zoom)} fill="#754bb0" stroke="white" vectorEffect="non-scaling-stroke" data-rotation-handle="true" pointerEvents={busy?'none':'all'} style={{cursor:'grab'}}><title>Rotate object · Shift snaps to 15°</title></circle>
 </g>}
-{inspectorTab==='quality'&&<g pointerEvents="none" aria-label="Quality overlay">{qualityOverlay==='coverage'?<>{coverageGaps.map(g=><path key={g.uid} d={g.points.map(([x,y])=>`M${x-.14} ${y}h.28`).join(' ')} fill="none" stroke="#ef4444" strokeWidth=".28" strokeLinecap="round"><title>{g.percent.toFixed(1)}% sampled gaps</title></path>)}{objects.filter(o=>qualityObjects.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="#ef4444" fillOpacity=".16" stroke="#dc2626" strokeDasharray="4 2" vectorEffect="non-scaling-stroke"/>)}</>:qualityDensity.map(c=><rect key={c.x+','+c.y} x={c.x} y={c.y} width={1} height={1} fill={c.n>=40?'#dc2626':'#f59e0b'} opacity=".65"/>)}</g>}
+{inspectorTab==='quality'&&<g pointerEvents="none" aria-label="Quality overlay">{qualityOverlay==='coverage'?<>{coverageGaps.map(g=><path key={g.uid} d={g.points.map(([x,y])=>`M${x-.14} ${y}h.28`).join(' ')} fill="none" stroke="#ef4444" strokeWidth=".28" strokeLinecap="round"><title>{g.percent.toFixed(1)}% sampled gaps</title></path>)}{objects.filter(o=>qualityObjects.includes(o.uid)&&o.bounds).map(o=><rect key={o.uid} x={o.bounds![0]} y={o.bounds![1]} width={o.bounds![2]} height={o.bounds![3]} fill="#ef4444" fillOpacity=".16" stroke="#dc2626" strokeDasharray="4 2" vectorEffect="non-scaling-stroke"/>)}</>:<>{qualityDensity.map(c=><rect key={c.x+','+c.y} x={c.x} y={c.y} width={1} height={1} fill={c.n>=40?'#dc2626':'#f59e0b'} opacity=".65"/>)}{densityFocus&&<rect x={densityFocus.x} y={densityFocus.y} width={1} height={1} fill="none" stroke="#873bb1" strokeWidth="2" vectorEffect="non-scaling-stroke"/>}</>}</g>}
 {!drawing.tool&&<StitchGuideOverlay guides={stitchGuides} zoom={zoom}/>}
 </svg>
 {canvasTyping&&!canvasText&&<div className="canvas-type-hint" role="status">Click where you want the lettering. <button type="button" onClick={toggleCanvasTyping}>Cancel</button></div>}
@@ -1586,14 +1679,31 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
 </div>
   {plan&&<div className="inspector-metrics"><div><small>Stitches</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div><div><small>Est. time</small><strong>{Math.ceil(plan.stitches/sewingSpm+plan.trims*trimSeconds/60+Math.max(0,plan.blocks.length-1)*changeSeconds/60)} min</strong></div></div>}
-  {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage gaps</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red marks show sampled suspected gaps; outlines identify affected objects. Not a physical sew-out prediction.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small>{qualityOverlay==='coverage'&&<small role="status">{coverageStatus}</small>}</div>}
+  {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage gaps</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red marks show sampled suspected gaps; outlines identify affected objects. Not a physical sew-out prediction.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small>{qualityOverlay==='coverage'?<small role="status">{coverageStatus}</small>:
+    <DensityReview cells={qualityDensity} focus={densityFocus} objects={focusedDensityObjects} onLocate={locateDensity} disabled={busy}
+      onApply={async id=>{const result=await edit('apply_density_repair',{id});return result.error}}/>}</div>}
   {inspectorTab==='quality'&&plan&&<section className="workspace-inspector-group"><h3>Thread simulation</h3><button aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}>{realistic?'Show stitch paths':'Show realistic sew-out'}</button><label>Visual thread width · {threadDiameter.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={threadDiameter} onChange={e=>{setThreadDiameter(Number(e.target.value));setRealistic(true)}}/></label><small>Preview only — does not alter stitch density or export. Zoom in to inspect letter edges and gaps.</small></section>}
-  {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
+  {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onApply={async id=>(await edit('apply_density_repair',{id})).error} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
   {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
     <strong title={selected?.label}>{selected?.label||`${movementIds.length} selected`}</strong>
     {movementBounds&&<small>{(movementBounds[2]/25.4).toFixed(2)} × {(movementBounds[3]/25.4).toFixed(2)} in</small>}
   </div>}
-  {inspectorTab==='transform'&&recognizingWord&&<small role="status">Recognizing lettering…</small>}{inspectorTab==='transform'&&convertText&&<section className="workspace-inspector-group"><h3><Type size={16}/> Recognized lettering</h3><label>Text<input value={convertWord} disabled={busy} onChange={e=>{setConvertWord(e.target.value);setRecognitionError('');setFailedWord('')}}/></label><SearchChoice label="Font" value={convertFont} options={convertFonts.map(f=>({value:f,label:f}))} onChoose={setConvertFont}/><small>Edits regenerate stitches automatically.</small>{recognitionError&&<div role="alert"><small>{recognitionError}</small><label>Correct original recognition<input value={recognizedOriginal} onChange={e=>{setRecognizedOriginal(e.target.value);setFailedWord('')}}/></label></div>}</section>}{inspectorTab==='transform'&&movementIds.length>0&&<PathToolsDialog count={movementIds.length} disabled={busy}
+  {inspectorTab==='transform'&&recognizingWord&&<small role="status">Recognizing lettering…</small>}
+  {inspectorTab==='transform'&&convertText&&<section className="workspace-inspector-group lettering-review" aria-label="Review recognized lettering">
+    <h3><Type size={16}/> Recognized lettering</h3>
+    <label>Original word<input value={recognizedOriginal} maxLength={120} disabled={busy} onChange={e=>{
+      if(convertWord===recognizedOriginal)setConvertWord(e.target.value);
+      setRecognizedOriginal(e.target.value);setRecognitionError('');
+    }}/></label>
+    <label>Replacement text<input value={convertWord} maxLength={120} disabled={busy} onChange={e=>{setConvertWord(e.target.value);setRecognitionError('')}}/></label>
+    <SearchChoice label="Font" value={convertFont} options={convertFonts.map(f=>({value:f,label:f}))} onChoose={font=>{setConvertFont(font);setRecognitionError('')}}/>
+    {recognitionError&&<p role="alert">{recognitionError}</p>}
+    <div className="inspector-actions"><button disabled={busy} onClick={dismissWordReview}>Keep traced shapes</button><button className="primary"
+      disabled={busy||!recognizedOriginal.trim()||!convertWord.trim()||!convertFont} onClick={()=>void applyWordReview()}>Apply lettering</button></div>
+  </section>}
+  {inspectorTab==='transform'&&!convertText&&!recognizingWord&&canRecognizeSelection&&
+    <button disabled={busy} onClick={recognizeSelection}><Type size={15}/> Recognize selected word</button>}
+  {inspectorTab==='transform'&&movementIds.length>0&&<PathToolsDialog count={movementIds.length} disabled={busy}
     onApply={async operation=>(await edit('apply_path_tool',{uids:movementIds,operation})).error}/>}
   {inspectorTab==='transform'&&movementIds.length>0&&<section className="workspace-inspector-group" aria-label="Move selection"><h3><Move size={16}/> Move selection</h3><div className="studio-choice-field"><span>Movement step (mm)</span><div className="studio-choice-row" role="group" aria-label="Movement step in millimeters">{[.1,.5,1,5,10].map(n=><button key={n} aria-pressed={nudgeStep===n} onClick={()=>setNudgeStep(n)}>{n}</button>)}</div></div><div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:4,maxWidth:180,margin:'6px auto'}}><span/><button disabled={busy} aria-label="Nudge up" onClick={()=>nudge(0,-nudgeStep)}><ArrowUp size={17}/></button><span/><button disabled={busy} aria-label="Nudge left" onClick={()=>nudge(-nudgeStep,0)}><ArrowLeft size={17}/></button><span style={{textAlign:'center',alignSelf:'center'}}>{nudgeStep} mm</span><button disabled={busy} aria-label="Nudge right" onClick={()=>nudge(nudgeStep,0)}><ArrowRight size={17}/></button><span/><button disabled={busy} aria-label="Nudge down" onClick={()=>nudge(0,nudgeStep)}><ArrowDown size={17}/></button><span/></div><small>Arrow keys move · Shift ×10 · Alt ×0.1</small>{selectionCenter&&<><div className="workspace-hoop-fields"><label>X center (mm)<input type="number" step=".1" value={positionX} onChange={e=>setPositionX(e.target.value)}/></label><label>Y center (mm)<input type="number" step=".1" value={positionY} onChange={e=>setPositionY(e.target.value)}/></label></div><button disabled={busy||!positionX.trim()||!positionY.trim()||!Number.isFinite(Number(positionX))||!Number.isFinite(Number(positionY))} onClick={applyPosition}>Set exact position</button><small>Hoop center is 0, 0 · positive X right, positive Y down.</small></>}</section>}
   {inspectorTab==='transform'&&<section className="workspace-inspector-group multi-align"><h3>{selectionIds.length>1?selectionIds.length+' objects selected':selected?'Object properties':'Design properties'}</h3>{canvasMode==='design'&&designGroups.length>0&&<><label>Design group<select value={activeGroup??''} disabled={busy} onChange={e=>{setActiveGroup(e.target.value||null);setCanvasMode('design');setMulti([]);setSelectedObject(null)}}><option value="">Choose a design</option>{designGroups.map((g,i)=><option key={g.key} value={g.key}>Design {i+1} · {g.members.length} objects</option>)}</select></label>{designGroups.filter(g=>g.key===activeGroup).map(g=><div key={g.key}><small>{g.bounds?(g.bounds[2]/25.4).toFixed(2)+' × '+(g.bounds[3]/25.4).toFixed(2)+' in':''}</small>{g.bounds&&g.bounds[2]>0&&<><label>Target width (in)<input type="number" min=".05" step=".01" value={groupWidth} placeholder={(g.bounds[2]/25.4).toFixed(2)} onChange={e=>setGroupWidth(e.target.value)}/></label><button disabled={busy||!groupWidth||!Number.isFinite(Number(groupWidth))||Number(groupWidth)*25.4/g.bounds[2]<.1||Number(groupWidth)*25.4/g.bounds[2]>10} onClick={()=>{if(g.bounds){void edit('transform_artwork_group',{uids:g.members.map(o=>o.uid),scale:Number(groupWidth)*25.4/g.bounds[2],rotation:0});setGroupWidth('')}}}>Apply width proportionally</button></>}<label>Rotate by (degrees)<input type="number" min="-360" max="360" step="1" value={groupRotation} onChange={e=>setGroupRotation(e.target.value)}/></label><button disabled={busy||!Number(groupRotation)||!Number.isFinite(Number(groupRotation))||Math.abs(Number(groupRotation))>360} onClick={()=>{void edit('transform_artwork_group',{uids:g.members.map(o=>o.uid),scale:1,rotation:Number(groupRotation)});setGroupRotation('0')}}>Apply rotation</button><div className="alignment-pair">{[{label:'Smaller 10%',scale:.9,rotation:0},{label:'Larger 10%',scale:1.1,rotation:0},{label:'Rotate left',scale:1,rotation:-90},{label:'Rotate right',scale:1,rotation:90}].map(a=><button key={a.label} disabled={busy} onClick={()=>void edit('transform_artwork_group',{uids:g.members.map(o=>o.uid),scale:a.scale,rotation:a.rotation})}>{a.label}</button>)}</div><button disabled={busy} onClick={()=>{setMulti(g.members.map(o=>o.uid));setSelectedObject(null);setCanvasMode('select')}}>Select group objects</button><button disabled={busy||g.members.length<2} onClick={()=>{void edit('set_artwork_group',{uids:g.members.map(o=>o.uid),group:false});setActiveGroup(null)}}>Ungroup design</button><details><summary>Group thread colors</summary>{Array.from(new Map(g.members.map(o=>[o.color.join(','),o.color])).values()).map(color=><PaletteRow key={color.join(',')} color={color} count={g.members.filter(o=>o.color.join(',')===color.join(',')).length} disabled={busy} library={threadLibrary} onSelectObjects={()=>{setMulti(g.members.filter(o=>o.color.join(',')===color.join(',')).map(o=>o.uid));setSelectedObject(null);setCanvasMode('select')}} onReplace={next=>void edit('recolor_artwork_group',{uids:g.members.map(o=>o.uid),previous:color,color:next})}/>)}</details></div>)}</>}<details className="studio-inspector-section" open={selectionIds.length>1||snap}><summary>Alignment & snapping</summary><label><input type="checkbox" checked={snap} onChange={e=>setSnap(e.target.checked)}/> Snap to grid, hoop and design edges</label><small>Shift-click objects or layers to select multiple.</small>{selectionIds.length>0&&<><strong>{selectionIds.length} selected</strong><div className="alignment-pair">{[{mode:'center_x',label:'Align X'},{mode:'center_y',label:'Align Y'},{mode:'distribute_x',label:'Distribute X'},{mode:'distribute_y',label:'Distribute Y'}].map(a=><button key={a.mode} disabled={busy||selectionIds.length<(a.mode.startsWith('distribute')?3:2)} onClick={()=>void edit('align_artwork_objects',{uids:selectionIds,mode:a.mode})}>{a.label}</button>)}</div><button disabled={busy||selectionIds.length<2} onClick={()=>{void edit('set_artwork_group',{uids:selectionIds,group:true});setActiveGroup(null);setCanvasMode('design');setMulti([])}}>Group selected objects</button><button onClick={()=>setMulti([])}>Clear selection</button></>}</details></section>}

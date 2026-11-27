@@ -242,3 +242,14 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .canvas-type-form { display: grid; gap: 7px; width: min(288px, calc(100% - 16px)); padding: 10px; box-sizing: border-box; }
 .canvas-type-form label { font-weight: 650; }
 .canvas-type-form > div { display: flex; justify-content: flex-end; gap: 6px; }
+
+.lettering-review { background: var(--lav-bg, #f7f4fc); }
+.lettering-review .inspector-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.density-review, .density-focus, .density-comparison { display: grid; gap: 8px; }
+.density-hotspots { display: flex; flex-wrap: wrap; gap: 5px; }
+.density-hotspots button { display: inline-flex; align-items: center; gap: 4px; }
+.density-hotspots button[aria-pressed="true"] { background: var(--lav-bg, #eee6fb); border-color: #8251b1; }
+.density-focus { padding: 8px; border: 1px solid var(--border, #ded3ed); border-radius: 8px; }
+.density-focus small { max-height: 4em; overflow: auto; }
+.density-comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.density-repair-crop { width: 100%; display: block; background: #faf7f0; border-radius: 8px; }

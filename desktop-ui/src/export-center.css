@@ -84,3 +84,8 @@
 .package-proof-scroll:focus-visible{outline:2px solid var(--brand-accent,#9368cf);outline-offset:2px}
 .package-sequence .export-thread-cards li div{min-width:0;overflow-wrap:anywhere}
 @media(max-height:750px){.export-review-header,.export-review-footer{padding:9px 14px}.package-left>section,.package-sheet{padding:10px}.package-sequence .export-thread-cards{max-height:155px}}
+
+.production-checks dl { display: grid; gap: 7px; margin: 10px 0; }
+.production-checks dl > div { padding-left: 9px; border-left: 2px solid var(--border, #ded3ed); }
+.production-checks dt { font-weight: 650; }
+.production-checks dd { margin: 2px 0 0; }

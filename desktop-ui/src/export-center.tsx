@@ -1,4 +1,4 @@
-import {Download, FileText, TriangleAlert, X, Image, FolderOpen, Settings} from 'lucide-react';
+import {Download, FileText, TriangleAlert, X, Image, FolderOpen, Settings, ClipboardCheck} from 'lucide-react';
 import {useEffect,useMemo,useRef,useState} from 'react';
 
 import type {ThreadAssignments} from './thread-order';
@@ -9,6 +9,13 @@ type Plan={name:string;stitches:number;trims:number;blocks:{color:number[];runs:
 type Props={assignments:ThreadAssignments;plan:Plan;width:number;height:number;format:string;setFormat:(s:string)=>void;machine:string;blocked:boolean;busy:boolean;onExport:(companions:boolean,images?:{sheet?:number[];preview?:number[]})=>Promise<void>;onClose:()=>void};
 const formats=['dst','pes','jef','exp','vp3','pec'];
 const hex=(color:number[])=>'#'+color.map(value=>value.toString(16).padStart(2,'0')).join('').toUpperCase();
+
+const sewOutChecks=[
+  ['Thread mapping','Match each numbered block to the physical spool or needle on the machine. Check repeated colors in sequence.'],
+  ['Placement','Run the machine’s positioning check on the intended hoop and a scrap of the production fabric.'],
+  ['Puffy lettering','Use a small foam sample. Check sealing stitches, exposed foam at the ends, and even coverage across letters.'],
+  ['Appliqué','Verify the placement stitch and the pause before tack-down. Confirm the machine pauses where you can place or trim fabric.'],
+] as const;
 
 function designSize(plan:Plan) {
   let left=Infinity, top=Infinity, right=-Infinity, bottom=-Infinity;
@@ -67,6 +74,8 @@ export function ExportCenter({assignments,plan,width,height,format,setFormat,mac
   const sequence=useMemo(()=>plan.blocks.map(block=>({
     color:hex(block.color),points:block.runs.reduce((count,run)=>count+run.length,0)
   })),[plan]);
+  const poolin=/poolin/i.test(machine);
+  const missingAssignments=sequence.filter((_,index)=>!assignments[index]?.trim()).length;
   const minutes=Math.ceil(plan.stitches/Math.min(1500,Math.max(100,Number(speed)||600)));
 
   function worksheet() {
@@ -76,11 +85,14 @@ export function ExportCenter({assignments,plan,width,height,format,setFormat,mac
       <body><h1>${escapeHtml(plan.name)}</h1><h2>Embroidery worksheet</h2><p>${escapeHtml(machine||'Manual setup')} · ${escapeHtml(format.toUpperCase())}</p>
       <p>Design ${dimensions} · Hoop ${width} × ${height} mm</p><p>${plan.stitches} planned stitches · ${plan.trims} trims · About ${minutes} min needle time</p>
       <img src="${image}" alt="Design stitch preview" style="max-width:320px"/><table><thead><tr><th>Sequence</th><th>Approximate color</th><th>Needle / spool</th><th>Planned points</th></tr></thead><tbody>${rows}</tbody></table>
-      <p>${format==='dst'?'DST stores color-change positions only. Assign the listed spools on your machine. ':''}Verify physical spool labels and test sew before production.</p></body></html>`;
+      <p>${format==='dst'?'DST stores color-change positions only. Assign the listed spools on your machine. ':''}Verify physical spool labels and test sew before production.</p>
+      <h2>${poolin?'Poolin EOM ':''}Test sew</h2><ol>${sewOutChecks.map(([label,detail])=>`<li><strong>${label}</strong> — ${detail}</li>`).join('')}</ol>
+      <p>Machine / firmware: ____________________ &nbsp; Fabric / stabilizer: ____________________</p>
+      <p>Actual stops, thread mapping and sample notes: _______________________________________</p></body></html>`;
     const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
     const anchor=document.createElement('a');
     anchor.href=url;
-    anchor.download='embroidery-worksheet.html';
+    anchor.download=poolin?'poolin-sew-out-worksheet.html':'embroidery-worksheet.html';
     anchor.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
@@ -116,6 +128,12 @@ export function ExportCenter({assignments,plan,width,height,format,setFormat,mac
         {plan.trims>50&&<p className="export-alert"><TriangleAlert size={16}/> Review the high trim count before sewing.</p>}
         <MachineCommandPreview format={format} width={width} height={height} disabled={busy||blocked}/></details>
       </section>
+      <details className="package-settings production-checks" open={poolin||undefined}>
+        <summary><ClipboardCheck size={16}/> {poolin?'Poolin sew-out checks':'Sew-out checks'}</summary>
+        {missingAssignments>0&&<p className="package-notice">{missingAssignments} of {sequence.length} blocks have no spool or needle assignment.</p>}
+        <dl>{sewOutChecks.map(([label,detail])=><div key={label}><dt>{label}</dt><dd>{detail}</dd></div>)}</dl>
+        <button type="button" onClick={worksheet}><FileText size={15}/> Save sew-out checklist</button>
+      </details>
       <section className="export-review-threads" aria-label="Thread sequence">
         <div className="export-thread-heading"><h3>Thread sequence</h3><small>{sequence.length} color blocks</small></div>
         {format==='dst'&&<p className="muted">Match the numbered swatches on your machine. DST stores color changes without exact thread colors.</p>}

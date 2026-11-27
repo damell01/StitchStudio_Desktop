@@ -33,8 +33,8 @@ function IssueList({width,height,onLocate,revision,scan}:{width:number;height:nu
 }
 
 type RepairPlan={stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
-type RepairReview={before:RepairPlan;after:RepairPlan;warnings_before:number;warnings_after:number;lettering_before:number;lettering_after:number};
-export function QualityInspector({width,height,revision,onLocate,onRepair,disabled}:{width:number;height:number;revision:unknown;onLocate:(uid:number)=>void;onRepair:()=>void;disabled:boolean}){
+type RepairReview={id:number;before:RepairPlan;after:RepairPlan;warnings_before:number;warnings_after:number;lettering_before:number;lettering_after:number};
+export function QualityInspector({width,height,revision,onLocate,onRepair,onApply,disabled}:{width:number;height:number;revision:unknown;onLocate:(uid:number)=>void;onRepair:()=>void;onApply:(id:number)=>Promise<string|null>;disabled:boolean}){
   const [scan,setScan]=useState(0);
   const [review,setReview]=useState<{revision:unknown;result:RepairReview}|null>(null);
   const [working,setWorking]=useState(false);
@@ -53,15 +53,23 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,disabl
   const changeRaw=Number(localStorage.getItem('studio-change-seconds')??8);
   const estimate=(p:RepairPlan)=>p.stitches/speed+p.trims*(Number.isFinite(trimRaw)?Math.max(0,trimRaw):3)/60+Math.max(0,p.blocks.length-1)*(Number.isFinite(changeRaw)?Math.max(0,changeRaw):8)/60;
 
-  async function inspectRepair(){
+  async function inspectRepair(letteringOnly:boolean){
     setWorking(true);setMessage('');setReview(null);
-    try{const result=await invoke<RepairReview>('preview_coverage_repair');setReview({revision,result});}
+    try{const result=await invoke<RepairReview>('preview_coverage_repair',{letteringOnly});setReview({revision,result});}
     catch(e){setMessage(String(e));}finally{setWorking(false);}
+  }
+  async function applyPreview(){
+    if(!current)return;
+    setWorking(true);
+    try{
+      const error=await onApply(current.id);
+      if(error)setMessage(error);else{setReview(null);setMessage('Previewed repair applied.');}
+    }finally{setWorking(false)}
   }
   return <section className="workspace-inspector-group quality-inspector">
     <h3>Quality Inspector</h3>
     <small>Coverage, density, stitch lengths and hoop safety. Test sew before production.</small>
-    <div className="inspector-actions"><button disabled={disabled||working} onClick={()=>setScan(n=>n+1)}>Refresh inspection</button><button disabled={disabled||working} onClick={()=>void inspectRepair()}>{working?'Checking repairs…':'Preview quality fix'}</button></div>
+    <div className="inspector-actions"><button disabled={disabled||working} onClick={()=>setScan(n=>n+1)}>Refresh inspection</button><button disabled={disabled||working} onClick={()=>void inspectRepair(false)}>{working?'Checking repairs…':'Preview coverage repair'}</button><button disabled={disabled||working} onClick={()=>void inspectRepair(true)}>Preview lettering balance</button></div>
     {message&&<p role="status">{message}</p>}
     {current&&<div className="workspace-stack">
       <strong>Proposed quality repair</strong>
@@ -76,8 +84,8 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,disabl
       <small>Lettering consistency warnings: {current.lettering_before} → {current.lettering_after}</small>
       <small>Estimated sewing time: {estimate(current.before).toFixed(1)} → {estimate(current.after).toFixed(1)} min</small>
       <small>Stitch change: {((current.after.stitches-current.before.stitches)/Math.max(1,current.before.stitches)*100).toFixed(1)}% · {speed} points/min</small>
-      <button disabled={disabled||working} onClick={()=>{setReview(null);onRepair()}}>Apply quality repair</button><button onClick={()=>setReview(null)}>Keep original</button>
-      <small>Apply recalculates the repair for the current design. Undo is available.</small>
+      <button disabled={disabled||working} onClick={()=>void applyPreview()}>Apply quality repair</button><button onClick={()=>setReview(null)}>Keep original</button>
+      <small>Applies the shown stitch plan. Undo is available.</small>
     </div>}
     <button disabled={disabled||working} onClick={onRepair}>Try general repair</button>
     <IssueList width={width} height={height} onLocate={onLocate} revision={revision} scan={scan}/>

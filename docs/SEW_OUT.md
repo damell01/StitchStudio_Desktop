@@ -29,3 +29,17 @@ Use the machine manual and the dimensions confirmed on the machine to fill in th
 | Actual time and observed dimensions | |
 | Change for the next sample | |
 | Accepted for this fabric and machine setup | |
+
+## Export review checks
+
+Open **Sew-out checks** in Export Design Package and save the printable sheet.
+For a Poolin profile the section opens automatically and the worksheet includes
+the design preview and numbered spool assignments. Check the physical spool on
+every block, including blocks that reuse a color. In DST, verify how the machine
+handles a color-change record at an intended pause.
+
+Use a short row of puffy lettering to compare adjacent letters for foam exposure,
+sealing and even coverage. Use a single appliqué piece to record where the
+machine pauses before tack-down and before any manual trimming. In Studio,
+**Inspector → Quality** shows suspected coverage gaps and dense needle cells.
+Review a repair against the original before exporting the sew-out sample.
