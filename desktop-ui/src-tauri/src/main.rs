@@ -3196,7 +3196,7 @@ async fn recognize_selected_lettering(uids:Vec<usize>,app:tauri::AppHandle)->Res
 }
 
 #[tauri::command]
-async fn convert_selected_lettering(uids:Vec<usize>,text:String,font:String,app:tauri::AppHandle)->Result<Preview,String>{
+async fn convert_selected_lettering(uids:Vec<usize>,text:String,font:String,replacement:Option<String>,app:tauri::AppHandle)->Result<Preview,String>{
  use tauri::Manager;
  tauri::async_runtime::spawn_blocking(move || {
   let state=app.state::<Mutex<Workspace>>();
@@ -3215,7 +3215,15 @@ async fn convert_selected_lettering(uids:Vec<usize>,text:String,font:String,app:
    if !b.is_empty() && b.min.x>=bounds.min.x-pad && b.max.x<=bounds.max.x+pad && b.min.y>=bounds.min.y-pad && b.max.y<=bounds.max.y+pad{return Err("Select all artwork within the word region before converting".into())}
   }
   let line=zigzag::ocr::RecognizedLine{text,font,confidence:-1.0,enabled:true,rect:[bounds.min.x+doc.offset.x,bounds.min.y+doc.offset.y,bounds.max.x+doc.offset.x,bounds.max.y+doc.offset.y]};
+  let old_uids:Vec<_>=doc.shapes.iter().map(|s|s.uid).collect();
   zigzag::ocr::replace_lettering(&mut doc,&[line],0.1).map_err(|e|e.to_string())?;
+  if let Some(replacement)=replacement {
+   if replacement.trim().is_empty()||replacement.chars().count()>120{return Err("Enter 1–120 characters".into())}
+   let index=doc.shapes.iter().enumerate().find(|(i,s)|!old_uids.contains(&s.uid)&&doc.lettering(*i).is_some()).map(|(i,_)|i).ok_or("Reconstructed text not found")?;
+   let mut spec=doc.lettering(index).ok_or("Text settings unavailable")?;
+   spec.text=replacement;
+   doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+  }
   let design=doc.plan();
   if design.blocks.is_empty(){return Err("No stitches generated".into())}
   let p=preview(&design);w.checkpoint_named("Convert traced lettering");w.current=Some(design);w.source=Some(doc);Ok(p)
