@@ -1378,7 +1378,14 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
    let theta=0.5*(2.0*xy).atan2(xx-yy);let (sn,cs)=theta.sin_cos();
    let mut b=Bounds::empty();for p in ring{b.add(P::new((p.x-mx)*cs+(p.y-my)*sn,-(p.x-mx)*sn+(p.y-my)*cs));}
    let short=b.width().min(b.height());let long=b.width().max(b.height());
-   if short>=6.0 && short<=45.0 && long>=short*2.0 {
+   // Curved glyphs can have a nearly square bounding box despite forming
+   // a narrow column. Use area/perimeter as a second, conservative gate.
+   let perimeter: f64 = ring.iter().zip(ring.iter().cycle().skip(1)).map(|(a,b)|a.dist(*b)).sum();
+   let area = ring.iter().zip(ring.iter().cycle().skip(1)).map(|(a,b)|a.x*b.y-a.y*b.x).sum::<f64>().abs()*0.5;
+   let effective_width = if perimeter>1e-9 {2.0*area/perimeter} else {0.0};
+   let elongated = short>=6.0 && short<=45.0 && long>=short*2.0;
+   let curved_candidate = short>=6.0 && long<=180.0 && (4.0..=30.0).contains(&effective_width) && area < short*long*0.65;
+   if elongated || curved_candidate {
     // Validate the actual column rather than trusting a bounding box alone.
     let components=satin::components(rings,*rule);
     if components.len()==1 {
