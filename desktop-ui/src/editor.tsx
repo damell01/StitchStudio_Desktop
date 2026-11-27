@@ -826,7 +826,12 @@ const renderedRuns=useMemo(()=>{
     return count===run.length?fullRenderedRuns[i][j]:run.slice(0,count).map(p=>p.join(',')).join(' ');
   }));
 },[plan,stitchIndex,points.length,fullRenderedRuns]);
-const stitchedArtwork=useMemo(()=>plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} fill="none" strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((_r,j)=>{const visible=renderedRuns[i]?.[j];if(!visible)return null;const color='rgb('+b.color.join(',')+')';return realistic?<g key={j} pointerEvents="none"><polyline points={visible} stroke={color} strokeWidth=".46"/><polyline points={visible} stroke="#ffffff" opacity=".17" strokeWidth=".12" transform="translate(-.06 -.07)"/></g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}</g>),[plan,hidden,realistic,renderedRuns]);
+const [threadDiameter,setThreadDiameter]=useState(.40);
+const stitchedArtwork=useMemo(()=>plan?.blocks.map((b,i)=><g key={i} opacity={hidden.includes(i)?0:1} fill="none" strokeLinecap={realistic?"round":"butt"} strokeLinejoin="round">{b.runs.map((_r,j)=>{const visible=renderedRuns[i]?.[j];if(!visible)return null;const color='rgb('+b.color.join(',')+')';return realistic?<g key={j} pointerEvents="none">
+<polyline points={visible} stroke="#211b17" opacity=".28" strokeWidth={threadDiameter*1.18} transform="translate(.045 .065)"/>
+<polyline points={visible} stroke={color} strokeWidth={threadDiameter}/>
+<polyline points={visible} stroke="#ffffff" opacity=".24" strokeWidth={threadDiameter*.27} transform={`translate(${-threadDiameter*.18} ${-threadDiameter*.18})`}/>
+</g>:<polyline key={j} points={visible} stroke={color} vectorEffect="non-scaling-stroke" strokeWidth="1"/>})}</g>),[plan,hidden,realistic,renderedRuns,threadDiameter]);
 useEffect(()=>{
   if(!playing)return;
   const interval=window.setInterval(()=>{
@@ -1411,7 +1416,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button title="Fit artwork" aria-label="Fit artwork" disabled={!points.length} onClick={fitArtwork}><Maximize size={16}/><span className="camera-label">Fit</span></button>
   <button title="Fit hoop view" aria-label="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}><SquareDashed size={16}/><span className="camera-label">Hoop</span></button>
   <button className="studio-tool-icon" title="Hoop grid" aria-label="Hoop grid" aria-pressed={grid} onClick={()=>setGrid(value=>!value)}><Grid size={16}/></button>
-  <button title="Thread view" aria-label="Thread view" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}><Eye size={16}/><span className="camera-label">Thread</span></button>
+  <button title="Realistic sew-out preview" aria-label="Realistic sew-out preview" aria-pressed={realistic} onClick={()=>setRealistic(value=>!value)}><Eye size={16}/><span className="camera-label">Sew-out</span></button>
 <button title="Show sampled stitch directions" aria-label="Show stitch directions" aria-pressed={showDirections} onClick={()=>setShowDirections(v=>!v)}><Waypoints size={16}/><span className="camera-label">Direction</span></button>
 </div>
 {canvasMode==='solid'&&<div className="studio-soft-area-tools" role="group" aria-label="Solid area shape">
@@ -1510,6 +1515,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </div>
   {plan&&<div className="inspector-metrics"><div><small>Stitches</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div><div><small>Est. time</small><strong>{Math.ceil(plan.stitches/sewingSpm+plan.trims*trimSeconds/60+Math.max(0,plan.blocks.length-1)*changeSeconds/60)} min</strong></div></div>}
   {inspectorTab==='quality'&&plan&&<div className="workspace-inspector-group"><div className="inspector-actions"><button aria-pressed={qualityOverlay==='coverage'} onClick={()=>setQualityOverlay('coverage')}>Coverage objects</button><button aria-pressed={qualityOverlay==='density'} onClick={()=>setQualityOverlay('density')}>Density map</button></div><small>{qualityOverlay==='coverage'?'Red outlines mark objects with possible missing coverage, not exact gaps.':'Orange/red cells mark 24+ planned needle points per square millimeter.'}</small></div>}
+  {inspectorTab==='quality'&&plan&&<section className="workspace-inspector-group"><h3>Thread simulation</h3><button aria-pressed={realistic} onClick={()=>setRealistic(v=>!v)}>{realistic?'Show stitch paths':'Show realistic sew-out'}</button><label>Visual thread width · {threadDiameter.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={threadDiameter} onChange={e=>{setThreadDiameter(Number(e.target.value));setRealistic(true)}}/></label><small>Preview only — does not alter stitch density or export. Zoom in to inspect letter edges and gaps.</small></section>}
   {inspectorTab==='quality'&&plan&&<QualityInspector width={width} height={height} revision={plan} disabled={busy} onLocate={locateIssue} onRepair={async()=>{if(await confirmAction("Try conservative repair? You can undo the change."))void edit("repair_stitches",{})}}/>}
   {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
     <strong title={selected?.label}>{selected?.label||`${movementIds.length} selected`}</strong>
