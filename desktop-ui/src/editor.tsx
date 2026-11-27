@@ -954,7 +954,7 @@ const [detectedText,setDetectedText]=useState<{uids:number[];text:string}[]>([])
 const [autoTextStatus,setAutoTextStatus]=useState('');
 const [detectedTextOpen,setDetectedTextOpen]=useState(false);
 useEffect(()=>{
-  const selector='details.workspace-options,details.studio-selection-more,details.studio-detected-text';
+  const selector='details.workspace-options,details.studio-selection-more,details.studio-detected-text,details.studio-zoom-menu';
   const close=(except?:Element|null)=>document.querySelectorAll<HTMLDetailsElement>(selector+'').forEach(menu=>{if(menu.open&&menu!==except)menu.open=false});
   const pointer=(event:PointerEvent)=>{
     const target=event.target instanceof Element?event.target:null;
@@ -1714,7 +1714,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </button>
   <button className="studio-tool-icon" title="Pan canvas" aria-label="Pan canvas" aria-pressed={canvasMode==='pan'} onClick={()=>{drawing.pick(null);setCanvasMode('pan')}}><Hand size={17}/></button>
   <button className="studio-tool-icon" title="Zoom out" aria-label="Zoom out" disabled={zoom<=25} onClick={()=>setZoom(value=>Math.max(25,value-25))}><ZoomOut size={17}/></button>
-  <button className="camera-zoom-value" title="Reset zoom to 100%" aria-label="Reset zoom to 100%" onClick={()=>{setZoom(100);setPan([0,0])}}>{Math.round(zoom)}%</button>
+  <details className="studio-zoom-menu"><summary className="camera-zoom-value" aria-label="Zoom options" title="Zoom options">{Math.round(zoom)}% <span aria-hidden="true">▾</span></summary><div className="studio-zoom-options"><label>Zoom <input aria-label="Canvas zoom" type="range" min="25" max="400" step="5" value={zoom} onChange={e=>setZoom(Number(e.target.value))}/></label>{[25,50,75,100,150,200,300,400].map(value=><button key={value} aria-pressed={Math.round(zoom)===value} onClick={()=>setZoom(value)}>{value}%</button>)}<button onClick={()=>{setZoom(100);setPan([0,0])}}>Fit hoop</button><button disabled={!points.length} onClick={fitArtwork}>Fit artwork</button></div></details>
   <button className="studio-tool-icon" title="Zoom in" aria-label="Zoom in" disabled={zoom>=400} onClick={()=>setZoom(value=>Math.min(400,value+25))}><ZoomIn size={17}/></button>
   <button title="Fit artwork" aria-label="Fit artwork" disabled={!points.length} onClick={fitArtwork}><Maximize size={16}/><span className="camera-label">Fit</span></button>
   <button title="Fit hoop view" aria-label="Fit hoop view" onClick={()=>{setZoom(100);setPan([0,0])}}><SquareDashed size={16}/><span className="camera-label">Hoop</span></button>
