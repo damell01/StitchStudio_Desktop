@@ -1977,6 +1977,21 @@ fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)-
         }
     None
 }
+// Use the same repair sequence for preview, application and initial digitizing.
+fn repair_artwork_quality(source:&zigzag::document::Document,original:&Design)->Option<(zigzag::document::Document,Design)>{
+    let coverage=repair_artwork_coverage(source,original);
+    if let Some((doc,plan))=coverage{
+        if let Some((balanced,next))=balance_lettering_density(&doc,&plan){
+            if next.stitch_count()<=original.stitch_count().saturating_mul(125)/100
+                &&production_not_worse(original,&next)
+                &&local_coverage_preserved(&plan,&next){
+                return Some((balanced,next));
+            }
+        }
+        return Some((doc,plan));
+    }
+    balance_lettering_density(source,original)
+}
 #[derive(serde::Serialize)]
 struct CoverageRepairPreview {
     before: Preview,
@@ -1995,7 +2010,7 @@ async fn preview_coverage_repair(app:tauri::AppHandle)->Result<CoverageRepairPre
             let w=state.lock().map_err(|e|e.to_string())?;
             (w.source.clone().ok_or("Coverage repair requires editable artwork.")?,w.current.clone().ok_or("Open artwork first")?)
         };
-        let (next,plan)=repair_artwork_coverage(&source,&original).or_else(||balance_lettering_density(&source,&original)).ok_or("No safe coverage or lettering improvement found.")?;
+        let (next,plan)=repair_artwork_quality(&source,&original).ok_or("No safe coverage or lettering improvement found.")?;
         validate_resized_design(&plan)?;
         let count=|doc:&zigzag::document::Document,p:&Design|zigzag::checks::check(&doc.shapes,p,&doc.plan_options(),None).iter().filter(|i|i.message.starts_with("Possible underfilled artwork:")).count();
         let lettering=|doc:&zigzag::document::Document,p:&Design|zigzag::checks::check(&doc.shapes,p,&doc.plan_options(),None).iter().filter(|i|i.message.starts_with("Possible inconsistent lettering density:")).count();
@@ -2008,8 +2023,7 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
  // Repair editable artwork through its source, never by flattening the plan.
  if let Some(source)=w.source.clone(){
    let original=w.current.as_ref().ok_or("Open artwork first")?;
-   let (doc,design)=repair_artwork_coverage(&source,original)
-     .or_else(||balance_lettering_density(&source,original))
+   let (doc,design)=repair_artwork_quality(&source,original)
      .or_else(||optimized_density(&source,original))
      .or_else(|| {
        let mut regenerated=source.clone();
@@ -3753,7 +3767,7 @@ async fn digitize_artwork(
                 document=next;design=plan;
             }
         }
-        if let Some((next,p))=repair_artwork_coverage(&document,&design){document=next;design=p;}
+        if let Some((next,p))=repair_artwork_quality(&document,&design){document=next;design=p;}
         let count = design.stitch_count();
         if count == 0 { return Err("No stitchable artwork found".into()); }
         if count > 2_000_000 { return Err("Design exceeds the two million stitch limit".into()); }
