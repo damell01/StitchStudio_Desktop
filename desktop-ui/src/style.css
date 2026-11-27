@@ -1974,3 +1974,29 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
   min-height: 0;
   box-sizing: border-box;
 }
+
+/* Compact studio controls: keep the inspector inside its own column. */
+.editor-workspace .studio-canvas-layout > .studio-inspector-dock {
+  overflow-x: hidden; min-width: 0; padding: 8px; gap: 6px;
+}
+.editor-workspace .studio-inspector-dock :is(fieldset,section,details,label,button,input,select,textarea) {
+  min-width: 0; max-width: 100%; box-sizing: border-box;
+}
+.editor-workspace .studio-inspector-dock :is(input:not([type=checkbox]):not([type=radio]),select) {
+  min-height: 30px; padding: 4px 7px; font-size: 12px;
+}
+.editor-workspace .studio-inspector-dock button { min-height: 28px; padding: 4px 7px; font-size: 12px; }
+.editor-workspace .studio-inspector-dock :is(.workspace-helper,.inspector-label) {
+  font-size: 11px; line-height: 1.4; letter-spacing: normal; font-weight: 400;
+}
+.editor-workspace .studio-inspector-dock .inline-lettering { gap: 6px; }
+.editor-workspace .studio-inspector-dock .inline-text-sample { height: 58px; min-height: 0; padding: 4px; }
+.editor-workspace .studio-inspector-dock .inline-text-sample svg { max-height: 50px; }
+.editor-workspace .studio-inspector-dock .live-text-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.inline-font-control { display: grid; gap: 4px; font-size: 12px; }
+.font-picker-trigger { width: 100%; justify-content: flex-start; text-align: left; overflow: hidden; }
+.font-picker.studio-modal { width: min(520px, calc(100vw - 32px)); max-height: min(560px, 80vh); overflow: auto; }
+.font-picker .font-picker-results { grid-template-columns: repeat(2,minmax(0,1fr)); max-height: 330px; overflow-y: auto; }
+.font-picker .font-picker-results button { min-height: 38px; font-size: 12px; }
+.editor-workspace .studio-edit-bar { gap: 4px; padding-inline: 8px; overflow-x: auto; scrollbar-width: thin; }
+.editor-workspace .studio-edit-bar .studio-command-group { gap: 3px; padding-inline: 4px; }
