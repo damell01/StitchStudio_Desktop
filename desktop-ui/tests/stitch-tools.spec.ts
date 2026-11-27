@@ -9,6 +9,7 @@ test('locate an issue, export a separate swatch sheet, and call a shared path to
     Object.assign(window,{toolCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>) {
       if(command==='current_preview')return plan;
       if(command==='editable_objects')return ids;
+      if(command==='coverage_gap_preview')return [];
       if(command==='design_issues')return [{uid:12,label:'Badge fill',severity:'warning',message:'Inspect this dense fill.'}];
       if(command==='preview_test_swatches'){
         calls.push({command,args});return {revision:'22',width:35,height:20,plan,values:[.32,.4,.48]};
@@ -21,7 +22,9 @@ test('locate an issue, export a separate swatch sheet, and call a shared path to
   await page.goto('/');
   await page.getByRole('button',{name:/Blank design/}).last().click();
   const inspector=page.locator('.workspace-inspector');
-  await inspector.getByRole('button',{name:'Stitches',exact:true}).click();
+  const stitchSettings=inspector.getByRole('button',{name:'Stitches',exact:true});
+  if(!await inspector.isVisible())await page.getByRole('button',{name:'Inspector',exact:true}).click();
+  await stitchSettings.click();
   await inspector.getByRole('button',{name:'Design issues',exact:true}).click();
   const issues=page.getByRole('dialog',{name:'Design issues'});
   await expect(issues.getByText('Inspect this dense fill.')).toBeVisible();
@@ -29,6 +32,7 @@ test('locate an issue, export a separate swatch sheet, and call a shared path to
   await expect(issues).toBeHidden();
   await expect(inspector.locator('.inspector-context')).toContainText('Badge fill');
 
+  await stitchSettings.click();
   await inspector.getByRole('button',{name:'Test swatches'}).click();
   const swatches=page.getByRole('dialog',{name:'Test swatches'});
   await swatches.getByRole('button',{name:'Preview swatches'}).click();

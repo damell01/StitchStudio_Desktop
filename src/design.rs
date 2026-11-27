@@ -2693,8 +2693,18 @@ mod tests {
 
     #[test]
     fn trim_stop_and_connect_between_objects() {
-        let a = shape(fill(sq(0.0, 0.0, 100.0)), Kind::Fill, [0; 3]);
-        let b = shape(fill(sq(130.0, 0.0, 100.0)), Kind::Fill, [0; 3]);
+        // Use single running paths so the exact needle travel is predictable
+        // and the test isolates commands between objects from fill routing.
+        let running = |x: f64| shape(
+            Geometry::Stroke {
+                lines: vec![(vec![P::new(x, 0.0), P::new(x + 100.0, 0.0)], false)],
+                width: 1.0,
+            },
+            Kind::Run,
+            [0; 3],
+        );
+        let a = running(0.0);
+        let b = running(130.0);
         // 3 mm apart: cut by default.
         let d = plan("p", &[a.clone(), b.clone()], &PlanOptions::default());
         assert_eq!(d.blocks.len(), 1);

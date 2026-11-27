@@ -198,7 +198,7 @@ test('a changed stitch-count goal searches the main modes and can apply a smalle
   await page.getByRole('button',{name:'Simplify',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Simplify design'});
   await expect(dialog.getByText(/changed too much of the visible stitch footprint/)).toBeVisible();
-  await dialog.getByRole('combobox',{name:'Focus'}).selectOption('stitches');
+  await dialog.getByRole('group',{name:'Optimization focus'}).getByRole('button',{name:'Stitches',exact:true}).click();
   await dialog.getByRole('button',{name:'Optimize for this goal'}).click();
   await expect(dialog.getByText('19,200 stitches')).toBeVisible();
   await expect(dialog.getByText('5,071 stitches above goal')).toBeVisible();
