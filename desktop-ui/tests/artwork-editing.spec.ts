@@ -206,3 +206,32 @@ test('a changed stitch-count goal searches the main modes and can apply a smalle
   await expect(dialog).toBeHidden();
   await expect(page.getByText('19,200 points',{exact:true})).toBeVisible();
 });
+test('smoothing texture previews a cheaper plan for explicit review', async ({page}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('studio-tour-seen','1');
+    const plan={name:'Distressed ribbon',stitches:21251,trims:304,blocks:[{color:[30,26,34],runs:[[[0,0],[80,65]]]}]};
+    Object.assign(window,{__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>){
+      if(command==='current_preview')return plan;
+      if(command==='editable_objects')return [];
+      if(command==='preview_simplification') {
+        const options=args.options as {textureReduction:boolean};
+        if(options.textureReduction&&args.previousId===17)
+          return {id:17,variants:[{strength:6,plan:{...plan,stitches:13400,trims:96},quality:{coverage:79,density_peak:9}}]};
+        return {id:17,variants:[{strength:3,plan:{...plan,stitches:21214},quality:{coverage:99,density_peak:12}}]};
+      }
+      if(command==='apply_simplification'&&args.id===17&&args.strength===6)return {...plan,stitches:13400,trims:96};
+      return null;
+    }}});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await page.getByRole('button',{name:'Simplify',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Simplify design'});
+  await expect(dialog.getByText(/37 fewer stitches/)).toBeVisible();
+  await dialog.getByRole('button',{name:'Aggressive texture reduction'}).click();
+  await expect(dialog.getByText('13,400 stitches')).toBeVisible();
+  await expect(dialog.getByRole('img',{name:'Aggressive texture reduction stitch preview'})).toBeVisible();
+  await dialog.getByRole('button',{name:'Apply selected design'}).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('13,400 points',{exact:true})).toBeVisible();
+});

@@ -1,6 +1,6 @@
 import {expect,test} from '@playwright/test';
 
-test('Home links open a file or blank workspace and launch the offline assistant', async ({page})=>{
+test('Home opens files and blank workspaces without an assistant shortcut', async ({page})=>{
   await page.setViewportSize({width:1440,height:900});
   await page.addInitScript(()=>{
     localStorage.setItem('studio-tour-seen','1');
@@ -40,6 +40,5 @@ test('Home links open a file or blank workspace and launch the offline assistant
   await page.getByRole('button',{name:'Blank design',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Your hoop is ready'})).toBeVisible();
   await page.getByRole('button',{name:'Home',exact:true}).click();
-  await page.getByRole('button',{name:/Design with the assistant/}).click();
-  await expect(page.getByRole('dialog',{name:'Design assistant'})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Design with the assistant/})).toHaveCount(0);
 });

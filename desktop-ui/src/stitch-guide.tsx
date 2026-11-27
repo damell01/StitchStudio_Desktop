@@ -96,7 +96,8 @@ const lessons: Lesson[] = [
     steps: [
       'Open Simplify in the studio toolbar. To target part of the design, select the objects first and choose Selected objects under Adjust optimization options.',
       'Generate previews and compare stitch counts, trims, estimated sewing time, and visible details with the original.',
-      'Choose Apply selected design when the preview looks right, or Keep original to leave the design as it is.',
+      'Try Aggressive texture reduction when traced shading is still expensive. Compare the artwork around the lettering and openings before applying.',
+      'Choose Apply selected design when the preview looks right, or Keep original.',
     ],
   },
   {
