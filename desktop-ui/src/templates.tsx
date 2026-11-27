@@ -157,7 +157,7 @@ function TemplatePreview({ template, widthMm, insert, onCancel, onChoose }: {
   }, [template, widthMm]);
   return <dialog ref={dialog} className="studio-modal template-preview-dialog" aria-label={template.name} onClose={onCancel}>
     <header className="studio-modal-heading">
-      <div><small>{template.category}</small><h2>{template.name}</h2></div>
+      <div><small>{template.category}{isPremium(template)?' · Curated draft':''}</small><h2>{template.name}</h2></div>
       <button title="Close preview" aria-label="Close preview" onClick={onCancel}><X size={18} /></button>
     </header>
     <div className="template-preview-grid">
@@ -193,12 +193,15 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   const [recent, setRecent] = useState(() => readIds('studio-design-recent'));
   useEffect(()=>{const refresh=()=>setRecent(readIds('studio-design-recent'));window.addEventListener('studio-template-used',refresh);return()=>window.removeEventListener('studio-template-used',refresh)},[]);
   const [selected, setSelected] = useState<Template | null>(null);
+  const isPremium = (template: Template) => template.id.startsWith('curated-');
+  const premiumCount = templates.filter(isPremium).length;
   const results = templates.filter(template => (
     category === 'All' || category === template.category
+    || (category === 'Premium artwork' && isPremium(template))
     || (category === 'Favorites' && favorites.includes(template.id))
     || (category === 'Recent' && recent.includes(template.id))
   ) && matchesName([template.name, template.category, ...(template.tags ?? [])].join(' '), query))
-    .sort((a,b)=>category==='Recent'?recent.indexOf(a.id)-recent.indexOf(b.id):compareNames(a.name,b.name));
+    .sort((a,b)=>category==='Recent'?recent.indexOf(a.id)-recent.indexOf(b.id):(category==='All' ? Number(isPremium(b))-Number(isPremium(a)) : 0)||compareNames(a.name,b.name));
   const page=usePagedList(results,JSON.stringify([query,category]));
   const [limit,setLimit]=useState(36);
   const shown = onPreview ? results.slice(0,limit) : page.items;
@@ -216,11 +219,11 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   }
 
   return <>
-    {!insert&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All','Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>{setCategory(item);setLimit(36)}}>{item}</button>)}</div>}
+    {!insert&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All',...(premiumCount?['Premium artwork']:[]),'Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>{setCategory(item);setLimit(36)}}>{item}</button>)}</div>}
     <div className="library-filters">
       <label className="library-search"><Search size={16} /><input aria-label="Search templates" placeholder="Search templates" value={query} onChange={event => {setQuery(event.target.value);setLimit(36);}} /></label>
       <label>Category <select value={category} onChange={event => {setCategory(event.target.value);setLimit(36);}}>
-        {['All', 'Favorites', 'Recent', ...new Set(templates.map(template => template.category))].map(item => <option key={item}>{item}</option>)}
+        {['All', ...(premiumCount?['Premium artwork']:[]), 'Favorites', 'Recent', ...new Set(templates.map(template => template.category))].map(item => <option key={item}>{item}</option>)}
       </select></label>
       <small>{results.length} {results.length === 1 ? 'design' : 'designs'}</small>
     </div>
