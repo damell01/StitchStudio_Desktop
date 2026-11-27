@@ -160,6 +160,8 @@ const [convertText,setConvertText]=useState(false);const recognitionCache=useRef
 const [canvasTyping,setCanvasTyping]=useState(false);
 const [canvasText,setCanvasText]=useState<{point:[number,number];left:number;top:number}|null>(null);
 const [canvasTextValue,setCanvasTextValue]=useState('');
+const [canvasLetterHeight,setCanvasLetterHeight]=useState(12);
+const [canvasLetterColor,setCanvasLetterColor]=useState('#6945a2');
 const [canvasTextError,setCanvasTextError]=useState('');
 const canvasTextInput=useRef<HTMLInputElement>(null);
 const canvasTextSaving=useRef(false);
@@ -199,6 +201,7 @@ function toggleCanvasTyping(){
 }
 async function addCanvasText(){
   if(!canvasText||!canvasTextValue.trim()||busy||canvasTextSaving.current)return;
+  if(!Number.isFinite(canvasLetterHeight)||canvasLetterHeight<.5||canvasLetterHeight>80){setCanvasTextError('Choose a lettering height from 0.5 to 80 mm.');return;}
   const placement=canvasText.point;
   canvasTextSaving.current=true;
   setBusy(true);setInlineWork('Generating lettering…');setPlaying(false);setCanvasTextError('');
@@ -207,7 +210,7 @@ async function addCanvasText(){
     const font=['Arial','Helvetica','DejaVu Sans'].find(name=>fonts.includes(name))??fonts[0];
     if(!font)throw new Error('Install a font in the Font Library to add lettering.');
     const next=await invoke<Plan>('insert_lettering_settings',{placement,settings:{
-      text:canvasTextValue.trim(),font,size:12,spacing:.4,arc:0,bold:true,italic:false,color:[105,69,162],align:'center',
+      text:canvasTextValue.trim(),font,size:canvasLetterHeight,spacing:.4,arc:0,bold:true,italic:false,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:'center',
     }});
     if(next.blocks.length!==plan?.blocks.length||next.blocks.some((block,index)=>block.color.join(',')!==plan?.blocks[index]?.color.join(',')))setThreadAssignments({});
     setPlan(next);setPlayhead(null);setMessage('Lettering added. Double-click it to edit.');
@@ -1712,6 +1715,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <label htmlFor="canvas-lettering-text">Canvas lettering</label>
   <input id="canvas-lettering-text" ref={canvasTextInput} value={canvasTextValue} maxLength={120}
     disabled={busy} placeholder="Type your text" onChange={event=>setCanvasTextValue(event.target.value)}/>
+  <div className="canvas-lettering-quick"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.5" value={canvasLetterHeight} disabled={busy} onChange={e=>setCanvasLetterHeight(Number(e.target.value))}/></label><label>Thread color<input type="color" value={canvasLetterColor} disabled={busy} onChange={e=>setCanvasLetterColor(e.target.value)}/></label></div>
   {canvasTextError&&<small role="alert">{canvasTextError}</small>}
   <div><button type="button" disabled={busy} onClick={toggleCanvasTyping}>Cancel</button>
     <button type="submit" className="primary" disabled={busy||!canvasTextValue.trim()}>{busy?'Adding…':'Add'}</button></div>
