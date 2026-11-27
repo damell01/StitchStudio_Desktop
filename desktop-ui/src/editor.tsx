@@ -1480,16 +1480,17 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
 </section>}</div>
 
-</article><article ref={inspectorScroll} className="workspace-sidebar workspace-inspector studio-inspector-dock">{selected&&<div className="inspector-context"><strong>{selected.label||'Selected object'}</strong><small>{selected.kind} {selected.bounds? ' · '+selected.bounds[2].toFixed(1)+' × '+selected.bounds[3].toFixed(1)+' mm':''}</small><div className="inspector-context-actions"><button onClick={()=>setInspectorTab('transform')}>Transform</button><button onClick={()=>setInspectorTab('stitches')}>Stitch settings</button><button onClick={()=>{const uid=selected.uid;void invoke<unknown>('lettering_settings',{uid}).then(value=>{if(value)openText(uid);else setMessage('This object is not editable lettering.')}).catch(e=>setMessage(String(e)))}}>Edit text</button></div></div>}
-  <div className="layers-dock-title"><h2>Inspector</h2>
+</article><article ref={inspectorScroll} className="workspace-sidebar workspace-inspector studio-inspector-dock"><div className="inspector-sticky-header"><div className="layers-dock-title"><h2>Inspector</h2>
     <button className="studio-tool-icon" title="Close inspector" aria-label="Close inspector" onClick={()=>setRight(false)}><X size={15}/></button>
   </div>
   <div className="workspace-segments" role="group" aria-label="Inspector">
-    <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}><SquareDashed size={19}/>Hoop</button>
-    <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={19}/>Sequence</button>
-    <button aria-pressed={inspectorTab==='threads'} onClick={()=>setInspectorTab('threads')}><Palette size={19}/>Threads</button>
-    <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={19}/>Text</button><button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={19}/>Edit</button><button aria-pressed={inspectorTab==='stitches'} onClick={()=>setInspectorTab('stitches')}><Scissors size={19}/>Stitches</button>
+    <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}><SquareDashed size={15}/>Hoop</button>
+    <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={15}/>Sequence</button>
+    <button aria-pressed={inspectorTab==='threads'} onClick={()=>setInspectorTab('threads')}><Palette size={15}/>Threads</button>
+    <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={15}/>Text</button><button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={15}/>Edit</button><button aria-pressed={inspectorTab==='stitches'} onClick={()=>setInspectorTab('stitches')}><Scissors size={15}/>Stitches</button>
   </div>
+</div>
+  {plan&&<div className="inspector-metrics"><div><small>Stitches</small><strong>{plan.stitches.toLocaleString()}</strong></div><div><small>Trims</small><strong>{plan.trims}</strong></div><div><small>Est. time</small><strong>{Math.ceil(plan.stitches/sewingSpm+plan.trims*trimSeconds/60+Math.max(0,plan.blocks.length-1)*changeSeconds/60)} min</strong></div></div>}
   {movementIds.length>0&&inspectorTab!=='text'&&<div className="inspector-context">
     <strong title={selected?.label}>{selected?.label||`${movementIds.length} selected`}</strong>
     {movementBounds&&<small>{(movementBounds[2]/25.4).toFixed(2)} × {(movementBounds[3]/25.4).toFixed(2)} in</small>}
