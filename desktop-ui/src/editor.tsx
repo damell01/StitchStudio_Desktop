@@ -1607,7 +1607,11 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 <div className="workspace-canvas" ref={canvasSurface}>
 {plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar">{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
   title="Preview the selected artwork as a solid fill">Make selection solid</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" role="group" aria-label="Selected object actions">
-  <span style={{fontSize:12,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selected.label||'Object '+selected.uid}</span>
+  <span className="studio-selection-name" title={selected.label||'Object '+selected.uid}>{selected.label||'Object '+selected.uid}</span>
+  {selected.bounds&&<span className="studio-selection-size" title="Selected object dimensions">{(selected.bounds[2]/25.4).toFixed(2)} × {(selected.bounds[3]/25.4).toFixed(2)} in</span>}
+  {stitchGuides.data?.textForm==='text'&&<button disabled={busy||lockedObjects.includes(selected.uid)} onClick={()=>openText(selected.uid)} title="Edit font, lettering, spacing and effects"><Type size={16}/> Edit text</button>}
+  <button onClick={()=>{showInspector(true);setInspectorTab('threads')}} title="Change thread colors"><Palette size={16}/> Colors</button>
+  <button onClick={()=>{showInspector(true);setInspectorTab('transform')}} title="Dimensions and alignment"><Move size={16}/> Position</button>
   <button className="studio-tool-icon" title="Edit the selected object" aria-label="Open object editing tools"
     onClick={()=>{showInspector(true);setInspectorTab('transform')}}><MousePointer2 size={16}/></button>
   <button className="studio-tool-icon" title="Adjust stitches on the selected object" aria-label="Open object stitch settings"
