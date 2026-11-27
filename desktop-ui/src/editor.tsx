@@ -59,12 +59,13 @@ const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
 const dockBreakpoint=1100;
-const [left,setLeft]=useState(false),[right,setRight]=useState(false),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",216,180,320)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,220,360));
+const [left,setLeft]=useState(()=>localStorage.getItem('studio-layers-open')==='1'),[right,setRight]=useState(()=>localStorage.getItem('studio-inspector-open')==='1'),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",216,180,320)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,220,360));
 function showLayers(open:boolean){
   if(open&&focusCanvas)changeFocus(false);
   if(open&&window.innerWidth<dockBreakpoint)setRight(false);
   setLeft(open);
 }
+useEffect(()=>{localStorage.setItem('studio-layers-open',left?'1':'0');localStorage.setItem('studio-inspector-open',right?'1':'0')},[left,right]);
 function showInspector(open:boolean){
   if(open&&focusCanvas)changeFocus(false);
   if(open&&window.innerWidth<dockBreakpoint)setLeft(false);
@@ -1517,7 +1518,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   ]}/>
   <details className="workspace-options">
     <summary title="Workspace options" aria-label="Workspace options"><Menu size={18}/></summary>
-    <div className="workspace-options-panel"><details className="studio-inspector-section"><summary>Editing history</summary><small>Undo · latest first</small>{historyLabels[0].length?<ol>{[...historyLabels[0]].reverse().map((label,i)=><li key={i}>{label}</li>)}</ol>:<p>No undo actions</p>}<small>Redo · latest first</small>{historyLabels[1].length?<ol>{[...historyLabels[1]].reverse().map((label,i)=><li key={i}>{label}</li>)}</ol>:<p>No redo actions</p>}</details>
+    <div className="workspace-options-panel"><button onClick={()=>{setLeft(false);setRight(false);setLeftWidth(216);setRightWidth(260);setZoom(100);setPan([0,0]);}}>Reset workspace layout</button><details className="studio-inspector-section"><summary>Editing history</summary><small>Undo · latest first</small>{historyLabels[0].length?<ol>{[...historyLabels[0]].reverse().map((label,i)=><li key={i}>{label}</li>)}</ol>:<p>No undo actions</p>}<small>Redo · latest first</small>{historyLabels[1].length?<ol>{[...historyLabels[1]].reverse().map((label,i)=><li key={i}>{label}</li>)}</ol>:<p>No redo actions</p>}</details>
       <button disabled={busy} onClick={projectOpen}>Open project</button>
       <button disabled={busy} onClick={recover}>Recover last design</button>
       <label><span>Layers panel width</span><input aria-label="Left panel width" type="range" min="180" max="320" value={leftWidth} onChange={e=>setLeftWidth(Number(e.target.value))}/></label>
