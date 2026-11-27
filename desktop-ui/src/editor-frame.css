@@ -253,3 +253,46 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .density-focus small { max-height: 4em; overflow: auto; }
 .density-comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .density-repair-crop { width: 100%; display: block; background: #faf7f0; border-radius: 8px; }
+
+
+/* Creation-first workspace: keep all native commands and maximize the hoop. */
+@media (min-width:1100px) {
+  .editor-workspace .editor-grid.studio-canvas-layout {
+    grid-template-columns: 64px var(--left-dock) minmax(0, 1fr) var(--right-dock);
+    gap: 4px;
+    padding: 4px;
+  }
+  .editor-workspace .editor-grid.studio-canvas-layout > .editor-toolrail {
+    padding: 4px 3px;
+    gap: 3px;
+    overflow-y: auto;
+    min-height: 0;
+    scrollbar-width: thin;
+    background: var(--panel);
+    border-radius: 10px;
+  }
+  .editor-workspace .editor-grid.studio-canvas-layout > .editor-toolrail button {
+    flex: 0 0 46px;
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 8px;
+    font-size: 10px;
+  }
+  .editor-workspace .editor-toolrail button small { font-size: 10px; line-height: 1.15; }
+  .editor-workspace .editor-toolrail button[aria-pressed="true"] {
+    background: var(--brand-soft, #eee6fb);
+    color: var(--brand, #6945a2);
+  }
+  .editor-workspace .editor-toolrail button:focus-visible {
+    outline: 2px solid var(--brand, #6945a2);
+    outline-offset: -2px;
+  }
+}
+.editor-workspace .studio-edit-bar { gap: 4px; }
+.editor-workspace .studio-edit-bar .studio-command-group { gap: 3px; }
+.editor-workspace .studio-camera.studio-camera-docked { gap: 4px; }
