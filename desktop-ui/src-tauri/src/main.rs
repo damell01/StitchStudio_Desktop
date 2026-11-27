@@ -2758,17 +2758,19 @@ fn insert_template(id:String,art:String,width_mm:f64,x_mm:f64,y_mm:f64,state:tau
 #[tauri::command]
 async fn apply_artwork_density_preset(uids:Vec<usize>,style:String,app:tauri::AppHandle)->Result<Preview,String>{
  use tauri::Manager;
- let (spacing,length)=match style.as_str(){"lightweight"=>(0.55,3.5),"standard"=>(0.40,3.0),"detailed"=>(0.35,2.5),_=>return Err("Unknown density preset".into())};
+ use zigzag::params::Kind;
+ let (spacing,length,kind)=match style.as_str(){"lightweight"=>(0.55,3.5,Kind::Fill),"standard"=>(0.40,3.0,Kind::Fill),"detailed"=>(0.35,2.5,Kind::Fill),"sketch"=>(1.4,2.5,Kind::Ripple),"vintage"=>(0.4,2.0,Kind::Run),"applique"=>(0.4,2.5,Kind::Applique),_=>return Err("Unknown artwork stitch style".into())};
+ if kind==Kind::Applique && uids.len()!=1{return Err("Select one fabric region for appliqué".into())}
  tauri::async_runtime::spawn_blocking(move||{
  let state=app.state::<Mutex<Workspace>>();
  let mut w=state.lock().map_err(|e|e.to_string())?;
  let mut doc=w.source.clone().ok_or("Open editable artwork first")?;
- let eligible:std::collections::HashSet<_>=doc.shapes.iter().enumerate().filter(|(i,s)| (uids.is_empty()||uids.contains(&s.uid)) && !doc.records_text(*i) && !s.groups.iter().any(|g|g.starts_with("tl-lettering-")) && !doc.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden) && s.params.kind.unwrap_or(zigzag::params::Kind::Fill)==zigzag::params::Kind::Fill && matches!(&s.geometry,zigzag::svg::Geometry::Fill{..})).map(|(_,s)|s.uid).collect();
+ let eligible:std::collections::HashSet<_>=doc.shapes.iter().enumerate().filter(|(i,s)| (uids.is_empty()||uids.contains(&s.uid)) && !doc.records_text(*i) && !s.groups.iter().any(|g|g.starts_with("tl-lettering-")||g=="tl-small-ink-detail") && !doc.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden) && s.params.stop!=Some(true) && s.params.trim!=Some(true) && s.params.colors.is_none() && (s.params.kind.unwrap_or(Kind::Fill)==Kind::Fill || (uids.contains(&s.uid) && matches!(s.params.kind,Some(Kind::Ripple|Kind::Run|Kind::Applique)) && kind==Kind::Fill)) && matches!(&s.geometry,zigzag::svg::Geometry::Fill{..})).map(|(_,s)|s.uid).collect();
  if eligible.is_empty(){return Err("No eligible editable fill regions selected".into())}
- for shape in &mut doc.shapes{if eligible.contains(&shape.uid){shape.params.spacing=Some(spacing);shape.params.len=Some(length);}}
+ for shape in &mut doc.shapes{if eligible.contains(&shape.uid){shape.params.spacing=Some(spacing);shape.params.len=Some(length);shape.params.kind=Some(kind);match kind{Kind::Ripple=>{shape.params.spiral=Some(false);},Kind::Run=>{shape.params.border=Some(true);shape.params.repeats=Some(3);},Kind::Applique=>{shape.params.width=Some(2.5);},_=>{}}}}
  doc.sync().map_err(|e|e.to_string())?;
  let design=doc.plan();validate_resized_design(&design)?;
- let result=preview(&design);w.checkpoint_named("Change artwork density preset");w.source=Some(doc);w.current=Some(design);Ok(result)
+ let result=preview(&design);w.checkpoint_named("Change artwork stitch style");w.source=Some(doc);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
