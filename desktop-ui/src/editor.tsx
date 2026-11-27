@@ -843,7 +843,7 @@ function selectObject(object:EditableObject|null) {
   setMulti([]);setContext(null);
   const request=++selectionRequest.current;
   setSelectedObject(object?.uid??null);
-  if(object){setLayerTab('objects');setObjectKind(object.kind);if(inspectorTab!=='stitches'&&inspectorTab!=='transform')setInspectorTab('transform');void request;}
+  if(object){setLayerTab('objects');setObjectKind(object.kind);if(inspectorTab!=='stitches'&&inspectorTab!=='transform')setInspectorTab('transform');void invoke<unknown>('lettering_settings',{uid:object.uid}).then(settings=>{if(settings&&selectionRequest.current===request){openText(object.uid)}}).catch(()=>{});}
 }
 
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
