@@ -22,7 +22,7 @@ import './editor-frame.css';
 import {ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {CommandPalette,type Command} from './command-palette';
 import {InsertDesignDialog} from './insert-design-dialog';
-import {templates} from './templates';
+import {templates,rememberTemplate} from './templates';
 import {EditorDigitizer} from './editor-digitizer';
 import {confirmAction,toast} from './dialogs';
 import {ExportCenter} from './export-center';
@@ -1718,7 +1718,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
       if(Math.abs(point.x)>width/2||Math.abs(point.y)>height/2){setMessage('Drop the element inside the hoop.');return;}
       void edit('insert_template',{id:template.id,art:template.art,widthMm,xMm:point.x,yMm:point.y}).then(result=>{
         if(!result.plan)return;
-        setHidden([]);setCanvasMode('select');
+        rememberTemplate(template.id);setHidden([]);setCanvasMode('select');
         insertDialog.current?.close();
       });
       return;
@@ -1883,7 +1883,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button disabled={busy} onClick={openInsertDialog}><FilePlus size={17}/> Browse templates & designs</button>
   </div>
   <div className="studio-start-templates" aria-label="Quick start templates">
-    {templates.filter(t=>['heart','bow','football','wildflower'].includes(t.id)).map(t=><button key={t.id} disabled={busy} title={'Insert '+t.name} onClick={()=>void edit('insert_template',{id:t.id,art:t.art,widthMm:Math.min(50.8,width*.5,height*.5),xMm:0,yMm:0}).then(result=>{if(result.plan){setCanvasMode('select');setRealistic(false);}})}><svg viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{__html:t.art}}/><span>{t.name}</span></button>)}
+    {templates.filter(t=>['heart','bow','football','wildflower'].includes(t.id)).map(t=><button key={t.id} disabled={busy} title={'Insert '+t.name} onClick={()=>void edit('insert_template',{id:t.id,art:t.art,widthMm:Math.min(50.8,width*.5,height*.5),xMm:0,yMm:0}).then(result=>{if(result.plan){rememberTemplate(t.id);setCanvasMode('select');setRealistic(false);}})}><svg viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{__html:t.art}}/><span>{t.name}</span></button>)}
   </div>
   <div className="canvas-start-secondary">
     <button onClick={toggleCanvasTyping}><Type size={16}/> Place lettering</button>
