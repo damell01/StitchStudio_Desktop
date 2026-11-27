@@ -3652,7 +3652,7 @@ async fn digitize_artwork(
             if !flagged.is_empty(){
                 let baseline=measure_stitches(&design);
                 let mut best=None;
-                for factor in [0.90,0.80] {
+                for (factor,angle_offset) in [(0.90,0.0),(0.80,0.0),(1.0,45.0),(1.0,90.0),(0.90,45.0)] {
                     let mut trial=document.clone();
                     let fabric=trial.plan_options().fabric;
                     for &i in &flagged {
@@ -3663,7 +3663,8 @@ async fn digitize_artwork(
                                 Kind::Satin=>s.params.satin_spacing(&fabric),
                                 _=>continue,
                             };
-                            s.params.spacing=Some((spacing*factor).max(0.30).min(spacing));
+                            if factor<1.0{s.params.spacing=Some((spacing*factor).max(0.30).min(spacing));}
+                            if angle_offset!=0.0&&s.params.kind.unwrap_or(Kind::Fill)==Kind::Fill&&s.params.angle.is_none(){s.params.angle=Some((s.params.fill_angle()+angle_offset).rem_euclid(180.0));}
                         }
                     }
                     if trial.sync().is_err(){continue}
@@ -3674,7 +3675,7 @@ async fn digitize_artwork(
                         &&p.stitch_count()<=design.stitch_count().saturating_mul(125)/100
                         &&audit.long<=baseline.long&&audit.zero<=baseline.zero
                         &&production_hotspots(&p).1<=production_hotspots(&design).1
-                        &&best.as_ref().is_none_or(|(_,_,n)|remaining.len()<*n){
+                        &&best.as_ref().is_none_or(|(_,old,n):&(zigzag::document::Document,Design,usize)|remaining.len()<*n||(remaining.len()==*n&&p.stitch_count()<old.stitch_count())){
                         best=Some((trial,p,remaining.len()));
                     }
                 }
