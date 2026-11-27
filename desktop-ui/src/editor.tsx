@@ -160,6 +160,7 @@ const [convertText,setConvertText]=useState(false);const recognitionCache=useRef
 const [canvasTyping,setCanvasTyping]=useState(false);
 const [canvasText,setCanvasText]=useState<{point:[number,number];left:number;top:number}|null>(null);
 const [canvasTextValue,setCanvasTextValue]=useState('');
+const [canvasEditTarget,setCanvasEditTarget]=useState<{uid:number;settings:Record<string,unknown>}|null>(null);
 const [canvasLetterHeight,setCanvasLetterHeight]=useState(12);
 const [canvasLetterFonts,setCanvasLetterFonts]=useState<string[]>([]);
 const [canvasLetterFont,setCanvasLetterFont]=useState('');
@@ -196,6 +197,7 @@ useEffect(()=>{
   }
 },[drawing.tool,canvasMode,baselinePicking,canvasTyping]);
 function toggleCanvasTyping(){
+  setCanvasEditTarget(null);
   setCanvasText(null);
   setCanvasTyping(!canvasTyping);
   if(!canvasTyping){
@@ -216,11 +218,12 @@ async function addCanvasText(){
     const fonts=await invoke<string[]>('lettering_fonts');
     const font=fonts.includes(canvasLetterFont)?canvasLetterFont:['Arial','Helvetica','DejaVu Sans'].find(name=>fonts.includes(name))??fonts[0];
     if(!font)throw new Error('Install a font in the Font Library to add lettering.');
-    const next=await invoke<Plan>('insert_lettering_settings',{placement,settings:{
-      text:canvasTextValue.trim(),font,size:canvasLetterHeight,spacing:canvasLetterSpacing,arc:0,bold:canvasLetterBold,italic:canvasLetterItalic,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:'center',
-    }});
+    const settings={...canvasEditTarget?.settings,
+      text:canvasTextValue.trim(),font,size:canvasLetterHeight,spacing:canvasLetterSpacing,arc:canvasEditTarget?.settings.arc??0,bold:canvasLetterBold,italic:canvasLetterItalic,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:canvasEditTarget?.settings.align??'center',
+    };
+    const next=canvasEditTarget?await invoke<Plan>('update_lettering',{uid:canvasEditTarget.uid,settings}):await invoke<Plan>('insert_lettering_settings',{placement,settings});
     if(next.blocks.length!==plan?.blocks.length||next.blocks.some((block,index)=>block.color.join(',')!==plan?.blocks[index]?.color.join(',')))setThreadAssignments({});
-    setPlan(next);setPlayhead(null);setMessage('Lettering added. Double-click it to edit.');
+    setPlan(next);setPlayhead(null);setMessage(canvasEditTarget?'Lettering updated.':'Lettering added. Double-click it to edit.');setCanvasEditTarget(null);
     setCanvasText(null);setCanvasTyping(false);
   }catch(error){setCanvasTextError(error instanceof Error?error.message:String(error));}
   finally{canvasTextSaving.current=false;setBusy(false);setInlineWork('');}
@@ -1035,6 +1038,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   if(canvasTyping&&event.button===0){
     const surface=canvasSurface.current?.getBoundingClientRect();
     if(!position||!surface)return;
+    setCanvasEditTarget(null);
     setCanvasText({
       point:[position.x,position.y],
       left:Math.max(8,Math.min(event.clientX-surface.left,surface.width-300)),
@@ -1684,7 +1688,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 {snap&&<g pointerEvents="none" stroke="#a84bc5" strokeDasharray="4 3" strokeWidth="1" vectorEffect="non-scaling-stroke">{guides.x!==null&&<line x1={guides.x} x2={guides.x} y1={-height/2} y2={height/2} vectorEffect="non-scaling-stroke"/>}{guides.y!==null&&<line x1={-width/2} x2={width/2} y1={guides.y} y2={guides.y} vectorEffect="non-scaling-stroke"/>}</g>}
 {canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
  {objects.filter(object=>object.path&&!lockedObjects.includes(object.uid)).map(object=><path key={object.uid} d={object.path}
-   data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();void invoke<unknown>('lettering_settings',{uid:object.uid}).then(s=>{if(s){setSelectedObject(object.uid);openText(object.uid)}}).catch(()=>{})}} fill={object.fill_rule?'transparent':'none'}
+   data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();if(busy||lockedObjects.includes(object.uid))return;const surface=canvasSurface.current?.getBoundingClientRect();if(!surface)return;const left=Math.max(8,Math.min(e.clientX-surface.left,surface.width-300)),top=Math.max(8,Math.min(e.clientY-surface.top,surface.height-260));void invoke<Record<string,unknown>|null>('lettering_settings',{uid:object.uid}).then(settings=>{if(!settings)return;setSelectedObject(object.uid);setCanvasEditTarget({uid:object.uid,settings});setCanvasTextValue(String(settings.text??''));setCanvasLetterFont(String(settings.font??''));setCanvasLetterHeight(Number(settings.size??12));setCanvasLetterSpacing(Number(settings.spacing??.4));setCanvasLetterBold(Boolean(settings.bold));setCanvasLetterItalic(Boolean(settings.italic));if(Array.isArray(settings.color))setCanvasLetterColor('#'+settings.color.map(v=>Number(v).toString(16).padStart(2,'0')).join(''));setCanvasTextError('');setCanvasTyping(false);setCanvasText({point:[0,0],left,top});}).catch(error=>setMessage(String(error)))}} fill={object.fill_rule?'transparent':'none'}
    fillRule={object.fill_rule} stroke={object.fill_rule?'none':'transparent'}
    strokeWidth={object.stroke_width} pointerEvents={object.fill_rule?'fill':'stroke'}/>)}
  {objects.filter(o=>o.path&&o.bounds&&!lockedObjects.includes(o.uid)&&Math.min(o.bounds[2],o.bounds[3])<2).map(o=><path key={'wide-hit-'+o.uid} d={o.path} data-artwork-uid={o.uid} fill="none" stroke="transparent" strokeWidth="12" vectorEffect="non-scaling-stroke" pointerEvents="stroke" style={{cursor:'move'}}/>)}
@@ -1718,15 +1722,15 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 {canvasTyping&&!canvasText&&<div className="canvas-type-hint" role="status">Click where you want the lettering. <button type="button" onClick={toggleCanvasTyping}>Cancel</button></div>}
 {canvasText&&<form className="canvas-type-form" aria-label="Canvas lettering" style={{left:canvasText.left,top:canvasText.top}}
   onSubmit={event=>{event.preventDefault();void addCanvasText()}}
-  onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'&&!canvasTextSaving.current){event.preventDefault();toggleCanvasTyping()}}}>
+  onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'&&!canvasTextSaving.current){event.preventDefault();setCanvasText(null);setCanvasEditTarget(null);setCanvasTyping(false)}}}>
   <label htmlFor="canvas-lettering-text">Canvas lettering</label>
   <input id="canvas-lettering-text" ref={canvasTextInput} value={canvasTextValue} maxLength={120}
     style={{fontFamily:canvasLetterFont||undefined,color:canvasLetterColor,fontWeight:canvasLetterBold?'bold':'normal',fontStyle:canvasLetterItalic?'italic':'normal'}} disabled={busy} placeholder="Type your text" onChange={event=>setCanvasTextValue(event.target.value)}/>
   <label>Font<select value={canvasLetterFont} disabled={busy||!canvasLetterFonts.length} onChange={e=>setCanvasLetterFont(e.target.value)}>{canvasLetterFonts.map(font=><option key={font} value={font}>{font}</option>)}</select></label><div className="canvas-lettering-quick"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.5" value={canvasLetterHeight} disabled={busy} onChange={e=>setCanvasLetterHeight(Number(e.target.value))}/></label><label>Thread color<input type="color" value={canvasLetterColor} disabled={busy} onChange={e=>setCanvasLetterColor(e.target.value)}/></label></div>
   <div className="canvas-lettering-quick" role="group" aria-label="Lettering style"><button type="button" disabled={busy} aria-label="Bold" aria-pressed={canvasLetterBold} onClick={()=>setCanvasLetterBold(v=>!v)}><b>B</b></button><button type="button" disabled={busy} aria-label="Italic" aria-pressed={canvasLetterItalic} onClick={()=>setCanvasLetterItalic(v=>!v)}><i>I</i></button><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={canvasLetterSpacing} disabled={busy} onChange={e=>setCanvasLetterSpacing(Number(e.target.value))}/></label></div>
   {canvasTextError&&<small role="alert">{canvasTextError}</small>}
-  <div><button type="button" disabled={busy} onClick={toggleCanvasTyping}>Cancel</button>
-    <button type="submit" className="primary" disabled={busy||!canvasTextValue.trim()}>{busy?'Adding…':'Add'}</button></div>
+  <div><button type="button" disabled={busy} onClick={()=>{setCanvasText(null);setCanvasEditTarget(null);setCanvasTyping(false)}}>Cancel</button>
+    <button type="submit" className="primary" disabled={busy||!canvasTextValue.trim()}>{busy?'Updating…':canvasEditTarget?'Apply':'Add'}</button></div>
 </form>}
 {!plan?.stitches&&!drawing.tool&&!canvasTyping&&!canvasText&&<section className="workspace-empty studio-canvas-start" aria-labelledby="canvas-start-title">
   <span className="canvas-start-icon"><SquareDashed size={24}/></span>
