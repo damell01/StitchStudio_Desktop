@@ -1589,6 +1589,7 @@ fn effective_geometry_cached(
             // change from solid fill to sparse fill must restore the base.
             format!("{:?}", s.params).hash(&mut h);
             s.params.fill_spacing(&opt.fabric).to_bits().hash(&mut h);
+            s.params.satin_spacing(&opt.fabric).to_bits().hash(&mut h);
             h.finish()
         })
         .collect();
@@ -1773,7 +1774,10 @@ pub fn plan_cached(
             format!("{kind:?}").hash(&mut h);
             match kind {
                 Kind::Fill => (s.params.fill_spacing(&opt.fabric) > 0.65).hash(&mut h),
-                Kind::Satin => format!("{:?}", s.params).hash(&mut h),
+                Kind::Satin => {
+                    format!("{:?}", s.params).hash(&mut h);
+                    s.params.satin_spacing(&opt.fabric).to_bits().hash(&mut h);
+                }
                 _ => {}
             }
         }
