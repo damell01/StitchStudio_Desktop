@@ -22,7 +22,7 @@ import './editor-frame.css';
 import {ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {CommandPalette,type Command} from './command-palette';
 import {InsertDesignDialog} from './insert-design-dialog';
-import {templates,rememberTemplate} from './templates';
+import {templates,rememberTemplate,TemplateLibrary} from './templates';
 import {EditorDigitizer} from './editor-digitizer';
 import {confirmAction,toast} from './dialogs';
 import {ExportCenter} from './export-center';
@@ -76,7 +76,7 @@ useEffect(()=>{
   function onNarrow(event:MediaQueryListEvent){if(event.matches)setLeft(false)}
   query.addEventListener('change',onNarrow);
   return()=>query.removeEventListener('change',onNarrow);
-},[]);useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(initialView?.zoom??100),[pan,setPan]=useState(initialView?.pan??[0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadAssignments,setThreadAssignments]=useState<ThreadAssignments>(initialView?.threadAssignments??{});const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'>('objects');
+},[]);useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(initialView?.zoom??100),[pan,setPan]=useState(initialView?.pan??[0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadAssignments,setThreadAssignments]=useState<ThreadAssignments>(initialView?.threadAssignments??{});const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'|'elements'>('objects');
 const resizePanel=useRef<{side:'left'|'right';start:number;width:number;pointer:number}|null>(null);
 function panelResizeHandle(side:'left'|'right'){
  const value=side==='left'?leftWidth:rightWidth;
@@ -1645,9 +1645,9 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button aria-pressed={canvasMode==='select'&&!realistic&&!(right&&['quality','stitches'].includes(inspectorTab))} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setCanvasMode('select');setRealistic(false);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false)}} title="Design workspace"><MousePointer2 size={20}/><small>Design</small></button>
   <button disabled={busy} onClick={()=>{insertDialog.current?.close();uploadInput.current?.click()}} title="Upload an embroidery file, photo or logo"><FolderOpen size={20}/><small>Uploads</small></button>
   <button disabled={busy} aria-pressed={canvasTyping} onClick={()=>{insertDialog.current?.close();toggleCanvasTyping()}} title="Type directly on the hoop"><Type size={20}/><small>Text</small></button>
-  <button disabled={busy} onClick={()=>{const dialog=insertDialog.current;if(!dialog||busy)return;if(dialog.open){dialog.close();return;}showLayers(false);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);drawing.pick(null);dialog.show();}} title="Browse and insert designs"><FilePlus size={20}/><small>Elements</small></button>
+  <button disabled={busy} aria-pressed={left&&layerTab==='elements'} onClick={()=>{insertDialog.current?.close();if(left&&layerTab==='elements'){showLayers(false);return;}setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);drawing.pick(null);setLayerTab('elements');showLayers(true);}} title="Browse and insert designs"><FilePlus size={20}/><small>Elements</small></button>
   <details className="workspace-options studio-shapes-menu"><summary title="Add shapes" aria-label="Add shapes"><SquareDashed size={20}/><small>Shapes</small></summary><div className="workspace-options-panel studio-shapes-panel" role="group" aria-label="Shape tools">{(['rectangle','ellipse','triangle','star','hexagon'] as const).map((tool,index)=><button key={tool} disabled={busy} onClick={()=>{insertDialog.current?.close();setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setRealistic(false);drawing.pick(tool)}}><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">{tool==='rectangle'?<rect x="5" y="7" width="22" height="18" rx="2"/>:tool==='ellipse'?<ellipse cx="16" cy="16" rx="12" ry="10"/>:<polygon points={tool==='triangle'?'16,4 29,27 3,27':tool==='star'?'16,2 20,11 30,12 23,19 25,29 16,24 7,29 9,19 2,12 12,11':'9,4 23,4 30,16 23,28 9,28 2,16'}/>}</svg><span>{['Rectangle','Circle / oval','Triangle','Star','Polygon'][index]}</span></button>)}<small>Choose a shape, then drag on the hoop to draw it.</small></div></details>
-  <button aria-pressed={left} onClick={()=>{insertDialog.current?.close();showLayers(!left)}} title="Manage design layers"><Layers3 size={20}/><small>Layers</small></button>
+  <button aria-pressed={left&&layerTab!=='elements'} onClick={()=>{insertDialog.current?.close();if(left&&layerTab!=='elements'){showLayers(false);return;}setLayerTab('objects');showLayers(true)}} title="Manage design layers"><Layers3 size={20}/><small>Layers</small></button>
   <button disabled={busy||!plan?.stitches} aria-pressed={!realistic&&right&&inspectorTab==='quality'} onClick={()=>openQuality()} title="Inspect coverage and density"><ScanLine size={20}/><small>Quality</small></button>
   <button disabled={!plan?.stitches} aria-pressed={realistic} onClick={()=>{if(right&&inspectorTab==='quality')showInspector(false);setRealistic(v=>!v)}} title="Realistic sew-out preview"><Eye size={20}/><small>Preview</small></button>
   <button onClick={()=>setHoopOpen(true)} title="Hoop and machine settings"><SquareDashed size={20}/><small>Hoop</small></button>
@@ -1657,14 +1657,15 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 </div>
 <article className="workspace-sidebar studio-layers-dock">
   <div className="layers-dock-header">
-    <div className="layers-dock-title"><Layers3 size={17} aria-hidden="true"/><h2>Layers</h2>
+    <div className="layers-dock-title"><Layers3 size={17} aria-hidden="true"/><h2>{layerTab==='elements'?'Elements':'Layers'}</h2>
       <button className="studio-tool-icon" title="Close layers" aria-label="Close layers" onClick={()=>setLeft(false)}><X size={15}/></button>
     </div>
     <div className="workspace-segments" role="group" aria-label="Layers">
       <button aria-pressed={layerTab==='objects'} onClick={()=>setLayerTab('objects')}>Objects <span>{objects.length}</span></button>
-      <button aria-pressed={layerTab==='threads'} onClick={()=>setLayerTab('threads')}>Blocks <span>{plan?.blocks.length??0}</span></button>
+      <button aria-pressed={layerTab==='threads'} onClick={()=>setLayerTab('threads')}>Blocks <span>{plan?.blocks.length??0}</span></button><button aria-pressed={layerTab==='elements'} onClick={()=>setLayerTab('elements')}>Elements</button>
     </div>
   </div>
+  {layerTab==='elements'&&<section className="studio-elements-dock" aria-label="Artwork elements" inert={busy}><small>Click to add at hoop center, or drag onto the hoop.</small><TemplateLibrary quickInsert onPreview={template=>{if(busy||editLock.current)return;const widthMm=Math.min(50.8,width*.5,height*.5);if(widthMm<5){setMessage('Set a larger hoop before inserting artwork.');return;}void edit('insert_template',{id:template.id,art:template.art,widthMm,xMm:0,yMm:0}).then(result=>{if(result.plan){rememberTemplate(template.id);setHidden([]);setCanvasMode('select')}})}}/><button onClick={()=>insertDialog.current?.showModal()}>More designs &amp; placement</button></section>}
   {layerTab==='objects' && (objects.length ? <section className="workspace-object-list">
     <label className="layers-search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Search objects"
       placeholder="Find an object" value={objectQuery} onChange={event=>setObjectQuery(event.target.value)}/></label>
