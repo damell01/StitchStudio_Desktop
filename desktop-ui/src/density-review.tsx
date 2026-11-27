@@ -63,7 +63,7 @@ function RepairComparison({cell,uids,disabled,onApply}:{
     finally{setWorking(false)}
   }
   async function apply(){
-    if(!preview)return;
+    if(!preview||preview.hits_after>=preview.hits_before||working||disabled)return;
     setWorking(true);setMessage('');
     try{
       const error=await onApply(preview.id);
@@ -84,7 +84,9 @@ function RepairComparison({cell,uids,disabled,onApply}:{
           <div><dt>Total stitch points</dt><dd>{plan.stitches.toLocaleString()}</dd></div><div><dt>Trims</dt><dd>{plan.trims}</dd></div></dl>
       </section>)}</div>
       <p>Stitch footprint overlap across the design: {preview.footprint_overlap.toFixed(1)}%.</p>
-      <button className="primary" disabled={disabled||working} onClick={()=>void apply()}>Apply previewed repair</button>
+      <p role="status">{preview.hits_after<preview.hits_before? `Local needle-point reduction: ${((preview.hits_before-preview.hits_after)/Math.max(1,preview.hits_before)*100).toFixed(1)}%. Check the proposed stitch paths for coverage before applying.`:'This candidate does not reduce the selected hotspot. Keep the original stitches.'}</p>
+      <button className="primary" disabled={disabled||working||preview.hits_after>=preview.hits_before} onClick={()=>void apply()}>Apply previewed repair</button>
+      <button disabled={working} onClick={()=>setPreview(null)}>Keep original</button>
     </>}
   </div>;
 }
