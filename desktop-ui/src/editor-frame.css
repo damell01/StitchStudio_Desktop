@@ -379,3 +379,14 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .studio-selection-more-actions { display:inline-flex; gap:3px; align-items:center; }
 .studio-selection-more[open] { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
 .studio-selection-more summary:focus-visible { outline:2px solid var(--brand-accent,var(--brand)); }
+
+/* Compact canvas-first lettering controls. */
+.workspace-canvas .canvas-type-form { width:min(292px,calc(100% - 16px)); max-height:calc(100% - 16px); overflow:auto; box-sizing:border-box; gap:6px; }
+.canvas-type-form .canvas-lettering-quick { display:flex; align-items:end; flex-wrap:wrap; gap:6px; }
+.canvas-lettering-quick label { flex:1; min-width:76px; display:grid; gap:3px; font-size:11px; }
+.canvas-lettering-quick input { min-width:0; width:100%; box-sizing:border-box; }
+.canvas-lettering-quick input[type=color] { min-height:28px; }
+.canvas-lettering-quick button[aria-pressed=true] { background:var(--brand-soft,var(--studio-paper)); color:var(--brand-accent,var(--brand)); }
+.studio-property-context { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 2px; }
+.studio-property-context strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.studio-property-context small { flex-shrink:0; font-size:11px; }
