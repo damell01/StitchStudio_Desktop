@@ -1134,7 +1134,7 @@ fn combined_economy_candidate(source:&zigzag::document::Document,original:&Desig
 // Explicit appearance-changing preview; never used by conservative optimization.
 fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,uids:Option<&[usize]>,options:&SimplifyOptions)->Result<(zigzag::document::Document,Design),String>{
     let mut mode=options.clone();
-    mode.solid=true;mode.merge=true;mode.auto_types=true;
+    mode.solid=true;mode.merge=true;mode.auto_types=true;mode.lighter_underlay=true;
     let speed=mode.speed.unwrap_or(800.).clamp(100.,1500.);
     let trim=mode.trim_seconds.unwrap_or(3.).clamp(0.,30.);
     let audit=measure_stitches(original);
@@ -1146,20 +1146,22 @@ fn choose_texture_reduction(source:&zigzag::document::Document,original:&Design,
         &&optimization_seconds(d,speed,trim)<optimization_seconds(original,speed,trim)
         &&q.long<=audit.long&&q.zero<=audit.zero&&q.short<=audit.short.saturating_add(5)
         &&bounds.min.dist(b.min)<=10.&&bounds.max.dist(b.max)<=10.
-        &&optimization_quality(original,d,speed,trim).coverage>=75.
+        &&optimization_quality(original,d,speed,trim).coverage>=65.
         &&original.blocks.iter().map(|b|b.color).collect::<std::collections::BTreeSet<_>>()
           ==d.blocks.iter().map(|b|b.color).collect::<std::collections::BTreeSet<_>>()
     };
     let mut best=None;
-    for radius in [8.,12.,18.,24.] {
+    for radius in [24.,18.,32.,12.,40.,8.] {
         if mode.exhausted(){break}
         let mut doc=rebuild_solid_artwork(source,uids,radius,&mode).unwrap_or_else(||source.clone());
         if optimize_geometry(&mut doc,&mode,uids,radius).is_err()||mode.exhausted(){continue}
         let plan=doc.plan();
         let mut candidates=vec![(doc.clone(),plan.clone())];
+        if !mode.exhausted(){if let Some(v)=simplify_design_candidate(&doc,&plan,3,uids,true){candidates.push(v);}}
+        if !mode.exhausted(){if let Some(v)=combined_economy_candidate(&doc,&plan,uids,&mode,5){candidates.push(v);}}
         if !mode.exhausted(){if let Some(v)=economical_fill_candidate(&doc,&plan,uids,5,0.){candidates.push(v);}}
         for (doc,plan) in candidates {
-            if eligible(&plan)&&best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|plan.stitch_count()<old.stitch_count()){
+            if eligible(&plan)&&best.as_ref().is_none_or(|(_,old):&(zigzag::document::Document,Design)|(plan.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(&plan,speed,trim)/optimization_seconds(original,speed,trim).max(1.))<(old.stitch_count() as f64/original.stitch_count().max(1) as f64+optimization_seconds(old,speed,trim)/optimization_seconds(original,speed,trim).max(1.))){
                 best=Some((doc,plan));
             }
         }
