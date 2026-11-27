@@ -1893,6 +1893,42 @@ async fn optimize_editable_design(app:tauri::AppHandle)->Result<Preview,String>{
   let result=preview(&design);w.checkpoint_named("Optimize density");w.source=Some(source);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
+// Balance only flagged glyph-like objects, preserving source outlines and explicit settings.
+fn balance_lettering_density(source:&zigzag::document::Document,original:&Design)->Option<(zigzag::document::Document,Design)>{
+    use zigzag::params::Kind;
+    use zigzag::svg::Geometry;
+    if source.shapes.len()>350||original.stitch_count()>100_000{return None}
+    let issues=|d:&zigzag::document::Document,p:&Design|zigzag::checks::check(&d.shapes,p,&d.plan_options(),None);
+    let before=issues(source,original);
+    let flagged:Vec<_>=before.iter().filter(|i|i.message.starts_with("Possible inconsistent lettering density:")).filter_map(|i|i.shape).collect();
+    if flagged.is_empty(){return None}
+    let fabric=source.plan_options().fabric;
+    let bounds=|s:&zigzag::svg::Shape|{let Geometry::Fill{rings,..}=&s.geometry else{return None};let mut b=zigzag::geom::Bounds::empty();for &p in rings.iter().flatten(){b.add(p);}if b.is_empty(){None}else{Some(b)}};
+    let spacing=|s:&zigzag::svg::Shape|if s.params.kind==Some(Kind::Satin){s.params.satin_spacing(&fabric)}else{s.params.fill_spacing(&fabric)};
+    let mut trial=source.clone();
+    for &i in &flagged{
+        let s=source.shapes.get(i)?;
+        if s.params.spacing.is_some()||source.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden){continue}
+        let Some(b)=bounds(s) else{continue};
+        let mut peers=Vec::new();
+        for (j,q) in source.shapes.iter().enumerate(){
+            if i==j||flagged.contains(&j)||q.color!=s.color||q.params.kind.unwrap_or(Kind::Fill)!=s.params.kind.unwrap_or(Kind::Fill){continue}
+            let Some(c)=bounds(q) else{continue};
+            if c.height()>=b.height()*0.8&&c.height()<=b.height()*1.25&&c.width()<=c.height()*1.8&&(c.center().y-b.center().y).abs()<=b.height()*0.2&&(c.center().x-b.center().x).abs()<=b.height()*4.0{peers.push(spacing(q));}
+        }
+        if peers.len()<3{continue}
+        peers.sort_by(|a,b|a.total_cmp(b));
+        let target=peers[peers.len()/2];
+        if target.is_finite()&&(0.30..=0.65).contains(&target){trial.shapes[i].params.spacing=Some(target);}
+    }
+    trial.sync().ok()?;
+    let plan=trial.plan();
+    let after=issues(&trial,&plan);
+    let count=|v:&[zigzag::checks::Issue]|v.iter().filter(|i|i.message.starts_with("Possible inconsistent lettering density:")).count();
+    if count(&after)>=count(&before)||after.iter().any(|i|i.level!=zigzag::checks::Level::Info&&!before.iter().any(|j|j.shape==i.shape&&j.message==i.message))||!production_not_worse(original,&plan)||!local_coverage_preserved(original,&plan)||plan.stitch_count()>original.stitch_count().saturating_mul(125)/100{return None}
+    validate_resized_design(&plan).ok()?;
+    Some((trial,plan))
+}
 fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)->Option<(zigzag::document::Document,Design)>{
         if design.stitch_count()<=100_000 && document.shapes.len()<=350 {
             let gaps=|doc:&zigzag::document::Document,p:&Design|{
@@ -1970,6 +2006,7 @@ fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,Stri
  if let Some(source)=w.source.clone(){
    let original=w.current.as_ref().ok_or("Open artwork first")?;
    let (doc,design)=repair_artwork_coverage(&source,original)
+     .or_else(||balance_lettering_density(&source,original))
      .or_else(||optimized_density(&source,original))
      .or_else(|| {
        let mut regenerated=source.clone();
