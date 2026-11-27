@@ -252,15 +252,19 @@ pub fn check(
     // Sample the interior of intended filled artwork against sewn segments.
     // This is a geometric gap warning, not a physical thread-width simulation.
     if shapes.len() <= 350 && design.stitch_count() <= 100_000 {
-        use std::collections::HashSet;
-        let mut sewn = HashSet::new();
-        for block in &design.blocks {
+        use std::collections::HashMap;
+        let mut sewn:HashMap<([u8;3],i32,i32),Vec<crate::geom::P>>=HashMap::new();
+        let mut sample_budget=1_000_000usize;
+        'sampling: for block in &design.blocks {
             for run in &block.runs {
                 for pair in run.pts.windows(2) {
-                    let n = (pair[0].dist(pair[1])/2.0).ceil().clamp(1.0,100.0) as usize;
+                    let n = (pair[0].dist(pair[1])/1.5).ceil().clamp(1.0,200.0) as usize;
                     for k in 0..=n {
+                        if sample_budget==0{break 'sampling}
+                        sample_budget-=1;
                         let p = pair[0].lerp(pair[1], k as f64/n as f64);
-                        sewn.insert((block.color,(p.x/4.0).floor() as i32,(p.y/4.0).floor() as i32));
+                        let cell=sewn.entry((block.color,(p.x/4.0).floor() as i32,(p.y/4.0).floor() as i32)).or_default();
+                        if cell.len()<32{cell.push(p);}
                     }
                 }
             }
@@ -269,7 +273,7 @@ pub fn check(
         let effective=crate::design::effective_geometry(shapes,&design.sew_order,_opt);
         let mut budget=120_000usize;
         for (i,s) in shapes.iter().enumerate() {
-            if budget==0 {break}
+            if budget==0 || sample_budget==0 {break}
             if design.covered.get(i).copied().unwrap_or(false) || !matches!(s.params.kind.unwrap_or(Kind::Fill),Kind::Fill|Kind::Satin) {continue}
             let kind=s.params.kind.unwrap_or(Kind::Fill);
             if (kind==Kind::Fill&&s.params.fill_spacing(&_opt.fabric)>0.65)
@@ -278,7 +282,7 @@ pub fn check(
             let b=ring_bounds(rings);
             if b.is_empty() || b.width().min(b.height())<12.0 {continue}
             let mut inside=0usize;let mut missing=0usize;
-            let step=4.0_f64.max((b.width()*b.height()/4000.0).sqrt());
+            let step=2.5_f64.max((b.width()*b.height()/4000.0).sqrt());
             let mut y=b.min.y+step/2.0;
             while y<b.max.y && budget>0 {
                 let mut x=b.min.x+step/2.0;
@@ -288,13 +292,13 @@ pub fn check(
                     if crate::geom::point_inside(rings,*rule,p) {
                         inside+=1;
                         let cx=(x/4.0).floor() as i32;let cy=(y/4.0).floor() as i32;
-                        if !(-1..=1).any(|dx|(-1..=1).any(|dy|sewn.contains(&(s.color,cx+dx,cy+dy)))) {missing+=1;}
+                        if !(-1..=1).any(|dx|(-1..=1).any(|dy|sewn.get(&(s.color,cx+dx,cy+dy)).is_some_and(|points|points.iter().any(|q|q.dist(p)<=3.0)))) {missing+=1;}
                     }
                     x+=step;
                 }
                 y+=step;
             }
-            if inside>=12 && missing>=4 && missing*100>inside*12 {
+            if budget>0 && inside>=12 && missing>=4 && missing*100>inside*12 {
                 add(Some(i),Level::Warning,format!("Possible underfilled artwork: {}% of sampled interior locations have no nearby same-color sewn path. Inspect letter strokes, fill spacing and pull compensation; this is a geometric estimate, not a physical sew-out.",missing*100/inside));
             }
         }
