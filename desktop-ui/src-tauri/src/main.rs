@@ -1148,7 +1148,13 @@ fn remove_interior_hatching(source:&zigzag::document::Document,uids:Option<&[usi
   let b=&bounds[i];if b.is_empty()||b.width().max(b.height())<b.width().min(b.height())*3.0{continue}
   let enclosed=source.shapes.iter().enumerate().any(|(j,q)|{
    if i==j||q.color!=s.color||source.records_text(j){return false}
-   let a=&bounds[j];!a.is_empty()&&a.width()>b.width()*1.5&&a.height()>b.height()*1.5&&b.min.x>a.min.x+5.0&&b.max.x<a.max.x-5.0&&b.min.y>a.min.y+5.0&&b.max.y<a.max.y-5.0
+   let a=&bounds[j];
+   if a.is_empty()||a.width()<=b.width()*1.5||a.height()<=b.height()*1.5||b.min.x<=a.min.x+5.0||b.max.x>=a.max.x-5.0||b.min.y<=a.min.y+5.0||b.max.y>=a.max.y-5.0{return false}
+   // Test the actual enclosing silhouette, not merely its bounding rectangle.
+   // The outer ring alone is used so engraved holes do not defeat containment.
+   let Geometry::Fill{rings,..}=&q.geometry else{return false};
+   let samples=[b.min,b.max,zigzag::geom::P::new(b.min.x,b.max.y),zigzag::geom::P::new(b.max.x,b.min.y),zigzag::geom::P::new((b.min.x+b.max.x)*0.5,(b.min.y+b.max.y)*0.5)];
+   rings.iter().any(|ring|samples.iter().all(|&p|zigzag::geom::point_inside(std::slice::from_ref(ring),zigzag::geom::FillRule::EvenOdd,p)))
   });
   if enclosed{
    // Require a repeated local texture, not an isolated stroke or glyph.
