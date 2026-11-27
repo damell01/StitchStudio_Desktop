@@ -2051,3 +2051,11 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .studio-inspector-dock button{min-width:0;white-space:normal;min-height:28px;font-size:12px;padding:5px 8px}
 .studio-inspector-dock .palette-editor>*{min-width:0;max-width:100%}
 .studio-inspector-dock .workspace-helper,.studio-inspector-dock .muted,.studio-inspector-dock small{letter-spacing:normal;line-height:1.35;font-size:11px}
+
+.studio-inspector-dock .inspector-sticky-header{position:sticky;top:0;z-index:8;background:var(--surface,#faf8fd);padding:6px 0;border-bottom:1px solid rgba(105,69,162,.15)}
+.inspector-sticky-header .layers-dock-title{margin:0 0 4px;padding:2px 4px}
+.inspector-sticky-header .workspace-segments{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:3px}
+.inspector-sticky-header .workspace-segments button{display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 3px;min-height:29px;font-size:11px}
+.inspector-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:8px 4px;border-bottom:1px solid rgba(105,69,162,.15)}
+.inspector-metrics>div{display:flex;flex-direction:column;gap:2px;min-width:0;padding:5px 6px;background:rgba(105,69,162,.055);border-radius:5px}
+.inspector-metrics strong{font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
