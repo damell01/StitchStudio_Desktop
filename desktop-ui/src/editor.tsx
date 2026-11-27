@@ -138,7 +138,7 @@ function selectNearbyRegion(){
  for(let pass=0;pass<8;pass++){let added=false;for(const o of candidates){if(!group.has(o.uid)&&candidates.some(q=>group.has(q.uid)&&nearby(o,q))){group.add(o.uid);added=true}}if(!added)break}
  setMulti([...group]);setCanvasMode('select');setSelectedObject(null);setActiveGroup(null);setLayerTab('objects');showLayers(true);
 }
-function toggleMulti(uid:number){dismissWordReview();setCanvasMode('select');setMulti(old=>{const base=old.length?old:selectedObject!==null?[selectedObject]:[];return base.includes(uid)?base.filter(i=>i!==uid):[...base,uid]});setLayerTab('objects')}
+function toggleMulti(uid:number){setCanvasText(null);setCanvasEditTarget(null);dismissWordReview();setCanvasMode('select');setMulti(old=>{const base=old.length?old:selectedObject!==null?[selectedObject]:[];return base.includes(uid)?base.filter(i=>i!==uid):[...base,uid]});setLayerTab('objects')}
 const [guides,setGuides]=useState<{x:number|null;y:number|null}>({x:null,y:null});
 function snapped(dx:number,dy:number,uids?:number[],show=false):[number,number]{
  if(!snap){if(show)setGuides({x:null,y:null});return [dx,dy]}
@@ -1118,7 +1118,7 @@ function startCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   }
   if(canvasMode==='select'&&event.button===0&&object&&position){
     if(event.shiftKey){toggleMulti(object.uid);return;}
-    if(!selectionIds.includes(object.uid))selectObject(object);
+    if(!selectionIds.includes(object.uid))selectObject(object,false);
     objectGesture.current={uid:object.uid,x:position.x,y:position.y,clientX:event.clientX,clientY:event.clientY,pointerId:event.pointerId};
     event.currentTarget.setPointerCapture(event.pointerId);
     return;
@@ -1508,7 +1508,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
               setDragLayer(object.uid);
             }} onDragEnd={()=>{setDragLayer(null);setDropLayer(null)}}><GripVertical size={14} aria-hidden="true"/></span>
           <button disabled={object.locked||object.hidden} aria-pressed={selectionIds.length?selectionIds.includes(object.uid):selectedObject===object.uid}
-            onClick={event=>event.shiftKey?toggleMulti(object.uid):selectObject(object)} className="object-layer-row" title={name}>
+            onClick={event=>event.shiftKey?toggleMulti(object.uid):selectObject(object,false)} className="object-layer-row" title={name}>
             <span className="layers-swatch" style={{backgroundColor:`rgb(${object.color.join(',')})`}}/>
             <span className="layers-row-text"><strong>{name}</strong><small>{object.kind==='manual'?'Fixed stitches':object.kind==='auto'?'Auto':object.kind}</small></span>
           </button>
