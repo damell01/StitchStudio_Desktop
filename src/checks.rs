@@ -77,7 +77,13 @@ pub struct CoverageGap {
     pub points: Vec<[f64;2]>,
 }
 pub fn coverage_gaps(shapes:&[Shape],design:&Design,_opt:&PlanOptions)->Vec<CoverageGap>{
+    coverage_gap_scan(shapes,design,_opt).0
+}
+
+/// Returns gaps and whether the bounded scan completed.
+pub fn coverage_gap_scan(shapes:&[Shape],design:&Design,_opt:&PlanOptions)->(Vec<CoverageGap>,bool){
     let mut out=Vec::new();
+    let mut complete=false;
     // Sample the interior of intended filled artwork against sewn segments.
     // This is a geometric gap warning, not a physical thread-width simulation.
     if shapes.len() <= 350 && design.stitch_count() <= 100_000 {
@@ -133,8 +139,9 @@ pub fn coverage_gaps(shapes:&[Shape],design:&Design,_opt:&PlanOptions)->Vec<Cove
                 out.push(CoverageGap{shape:i,inside,missing,points});
             }
         }
+        complete=budget>0 && sample_budget>0;
     }
-    out
+    (out,complete)
 }
 
 /// Run all checks. `hoop_mm` is the hoop's (width, height). (`_opt`: the
