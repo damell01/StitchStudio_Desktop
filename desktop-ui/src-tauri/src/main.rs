@@ -1118,7 +1118,12 @@ fn local_coverage_preserved(original:&Design,candidate:&Design)->bool{
         entry.0+=1;
         if after.contains(&(color,x,y)){entry.1+=1;}
     }
-    regions.values().all(|&(total,covered)|total<8||covered*100>=total*85)
+    // Tiny neighborhoods can contain punctuation, dots or narrow glyph tips.
+    // Permit a one-cell shift across the sampling grid, but not disappearance.
+    regions.values().all(|&(total,covered)| {
+        if total<8 { covered>0 && covered.saturating_add(1)>=total }
+        else { covered*100>=total*85 }
+    })
 }
 fn production_not_worse(original:&Design,candidate:&Design)->bool{
     let (peak,hot)=production_hotspots(original);
