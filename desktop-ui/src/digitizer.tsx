@@ -301,6 +301,21 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
   }
 
   const plan = activeComparison?.variants.find(variant => variant.strength === chosen)?.plan ?? review?.plan;
+  const selectedAudit=useMemo(()=>{
+    if(!plan)return null;
+    let short=0,long=0,zero=0,sewn_mm=0;
+    const cells=new Map<string,[number,number,number]>();
+    for(const block of plan.blocks)for(const run of block.runs){
+      for(let i=0;i<run.length;i++){
+        const [x,y]=run[i];const cx=Math.floor(x/10),cy=Math.floor(y/10),key=cx+','+cy;
+        const cell=cells.get(key);if(cell)cell[2]++;else cells.set(key,[cx,cy,1]);
+        if(i){const mm=Math.hypot(x-run[i-1][0],y-run[i-1][1])/10;sewn_mm+=mm;if(mm<.05)zero++;else if(mm<.3)short++;if(mm>12)long++;}
+      }
+    }
+    const density=Array.from(cells.values()).sort((a,b)=>b[2]-a[2]);
+    return {short,long,zero,sewn_mm,hotspots:density.filter(c=>c[2]>=24).length,density:density.slice(0,512)};
+  },[plan]);
+
   const previewBox=useMemo(()=>{let l=Infinity,t=Infinity,r=-Infinity,b=-Infinity;for(const block of plan?.blocks??[])for(const run of block.runs)for(const [x,y] of run){l=Math.min(l,x);t=Math.min(t,y);r=Math.max(r,x);b=Math.max(b,y)}if(!Number.isFinite(l))return [-1,-1,2,2];const padding=Math.max(2,Math.max(r-l,b-t)*.06);return [l-padding,t-padding,Math.max(1,r-l)+padding*2,Math.max(1,b-t)+padding*2]},[plan]);
   const colors = new Set(plan?.blocks.map(block => block.color.join(',')));
   const reconstructedUrl=useMemo(()=>review?.artwork_svg?'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(review.artwork_svg):'',[review?.artwork_svg]);
@@ -421,30 +436,30 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
       {review && <>
         <div hidden={inspector!=='quality'} className="digitizer-inspector-content">
         <h3>Stitch quality</h3>
-        <section className="digitizer-quality-summary" aria-label="Stitch efficiency target"><strong>Production stitch target</strong><div><span>Preferred goal</span><b>10,000 or fewer</b></div><div><span>Review threshold</span><b>15,000</b></div><div><span>Current plan</span><b>{review.plan.stitches.toLocaleString()}</b></div><small>{review.plan.stitches<=10000?'Preferred stitch goal reached.':review.plan.stitches<=15000?'Within review threshold; further reduction may be possible.':'Above preferred range. Review alternatives, artwork complexity and physical size before exporting.'}</small><small>Count depends on embroidery dimensions, coverage, fabric and stitch type. The optimizer preserves coverage rather than forcing a fixed cap.</small></section>{review.optimization&&<section className="digitizer-quality-summary" aria-label="Automatic optimization results"><strong>Automatic production optimization applied</strong><div><span>Original plan</span><b>{review.optimization[0].toLocaleString()}</b></div><div><span>Optimized plan</span><b>{review.optimization[1].toLocaleString()}</b></div><div><span>Stitch points saved</span><b>{(review.optimization[0]-review.optimization[1]).toLocaleString()} ({(100*(review.optimization[0]-review.optimization[1])/Math.max(1,review.optimization[0])).toFixed(1)}%)</b></div><small>The alternative passed automated geometry and stitch-count comparisons. Test sew to confirm coverage.</small></section>}
-        {review.estimated_seconds!=null&&review.original_estimated_seconds!=null&&<section className="digitizer-quality-summary" aria-label="Estimated production time"><strong>Production estimate</strong><div><span>Before optimization</span><b>{(review.original_estimated_seconds/60).toFixed(1)} min</b></div><div><span>Current design</span><b>{(review.estimated_seconds/60).toFixed(1)} min</b></div><div><span>Estimated time saved</span><b>{((review.original_estimated_seconds-review.estimated_seconds)/60).toFixed(1)} min</b></div>{review.original_trims!=null&&<div><span>Trims before → after</span><b>{review.original_trims} → {review.plan.trims}</b></div>}<small>Estimated at {settings.productionSpeed} stitches/min and {settings.productionTrimSeconds} seconds per trim; actual machine time varies.</small></section>}
+        <section className="digitizer-quality-summary" aria-label="Stitch efficiency target"><strong>Production stitch target</strong><div><span>Preferred goal</span><b>10,000 or fewer</b></div><div><span>Review threshold</span><b>15,000</b></div><div><span>Current plan</span><b>{(plan??review.plan).stitches.toLocaleString()}</b></div><small>{(plan??review.plan).stitches<=10000?'Preferred stitch goal reached.':(plan??review.plan).stitches<=15000?'Within review threshold; further reduction may be possible.':'Above preferred range. Review alternatives, artwork complexity and physical size before exporting.'}</small><small>Count depends on embroidery dimensions, coverage, fabric and stitch type. The optimizer preserves coverage rather than forcing a fixed cap.</small></section>{review.optimization&&<section className="digitizer-quality-summary" aria-label="Automatic optimization results"><strong>Automatic production optimization applied</strong><div><span>Original plan</span><b>{review.optimization[0].toLocaleString()}</b></div><div><span>Optimized plan</span><b>{review.optimization[1].toLocaleString()}</b></div><div><span>Stitch points saved</span><b>{(review.optimization[0]-review.optimization[1]).toLocaleString()} ({(100*(review.optimization[0]-review.optimization[1])/Math.max(1,review.optimization[0])).toFixed(1)}%)</b></div><small>The alternative passed automated geometry and stitch-count comparisons. Test sew to confirm coverage.</small></section>}
+        {review.estimated_seconds!=null&&review.original_estimated_seconds!=null&&<section className="digitizer-quality-summary" aria-label="Estimated production time"><strong>Production estimate</strong><div><span>Before optimization</span><b>{(review.original_estimated_seconds/60).toFixed(1)} min</b></div><div><span>Current design</span><b>{(review.estimated_seconds/60).toFixed(1)} min</b></div><div><span>Estimated time saved</span><b>{((review.original_estimated_seconds-review.estimated_seconds)/60).toFixed(1)} min</b></div>{review.original_trims!=null&&<div><span>Trims before → after</span><b>{review.original_trims} → {(plan??review.plan).trims}</b></div>}<small>Estimated at {settings.productionSpeed} stitches/min and {settings.productionTrimSeconds} seconds per trim; actual machine time varies.</small></section>}
         <section className="digitizer-quality-summary" aria-label="Design preflight">
-          <strong>{review.warnings.length || review.quality.long || review.quality.zero ? 'Review recommended' : 'No flagged geometry issues'}</strong>
-          <small>Automated geometry checks are not a substitute for a test sew.</small>
-          <div><span>Unique threads</span><b>{new Set(review.plan.blocks.map(b=>b.color.join(','))).size}</b></div>
-          <div><span>Trims per 1,000 points</span><b>{(1000*review.plan.trims/Math.max(1,review.plan.stitches)).toFixed(1)}</b></div>
-          <div><span>Long segments</span><b>{review.quality.long}</b></div>
-          <div><span>Near-zero segments</span><b>{review.quality.zero}</b></div>
+          <strong>{(chosen===0&&review.warnings.length) || (selectedAudit?.hotspots??0) || (selectedAudit??review.quality).long || (selectedAudit??review.quality).zero ? 'Review recommended' : 'No flagged geometry issues'}</strong>
+          <small>Selected stitch plan · automated checks do not replace a test sew.</small><div><span>Dense needle cells (24+ points/mm²)</span><b>{selectedAudit?.hotspots??0}</b></div>
+          <div><span>Unique threads</span><b>{new Set((plan??review.plan).blocks.map(b=>b.color.join(','))).size}</b></div>
+          <div><span>Trims per 1,000 points</span><b>{(1000*(plan??review.plan).trims/Math.max(1,(plan??review.plan).stitches)).toFixed(1)}</b></div>
+          <div><span>Long segments</span><b>{(selectedAudit??review.quality).long}</b></div>
+          <div><span>Near-zero segments</span><b>{(selectedAudit??review.quality).zero}</b></div>
           <button type="button" onClick={()=>setMode('density')}>Inspect needle density</button>
         </section>
         <div className="digitize-metrics">
-          <div><strong>{review.plan.stitches.toLocaleString()}</strong><small>Stitch points</small></div>
-          <div><strong>{review.plan.blocks.length}</strong><small>Color blocks</small></div>
-          <div><strong>{review.plan.trims}</strong><small>Planned trims</small></div>
+          <div><strong>{(plan??review.plan).stitches.toLocaleString()}</strong><small>Stitch points</small></div>
+          <div><strong>{(plan??review.plan).blocks.length}</strong><small>Color blocks</small></div>
+          <div><strong>{(plan??review.plan).trims}</strong><small>Planned trims</small></div>
         </div>
-        <p>{(review.quality.sewn_mm / 1000).toFixed(2)} m of sewn path</p>
-        <p>DST preview · {review.jumps} jumps · {review.color_changes} color changes</p>
+        <p>{((selectedAudit??review.quality).sewn_mm / 1000).toFixed(2)} m of sewn path</p>
+        <p>Original DST preview · {review.jumps} jumps · {review.color_changes} color changes</p>
 
-        <p>About {(review.dst_stitches / 600).toFixed(1)} minutes of needle time at 600 stitches/min,
+        <p>Original DST: about {(review.dst_stitches / 600).toFixed(1)} minutes of needle time at 600 stitches/min,
           excluding travel and stops.</p>
-        {(review.quality.short > 0 || review.quality.long > 0 || review.quality.zero > 0) &&
-          <p>{review.quality.short} short, {review.quality.long} long, and {review.quality.zero} near-zero segments.</p>}
-        {review.warnings.length > 0 && <ul>{review.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
+        {((selectedAudit??review.quality).short > 0 || (selectedAudit??review.quality).long > 0 || (selectedAudit??review.quality).zero > 0) &&
+          <p>{(selectedAudit??review.quality).short} short, {(selectedAudit??review.quality).long} long, and {(selectedAudit??review.quality).zero} near-zero segments.</p>}
+        {chosen!==0&&<small>Original digitizing warnings are not a fresh audit of this alternative. Inspect the selected plan before export.</small>}{review.warnings.length > 0 && <ul>{review.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}
         <div className="review-palette" aria-label="Generated thread colors">
           {Array.from(colors, rgb => <span key={rgb} title={`RGB ${rgb}`} style={{ background: `rgb(${rgb})` }} />)}
         </div>
@@ -514,11 +529,11 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
         </div>
       </>}
       {!processing && plan && <>
-        <h3 className="stitch-heading">{mode === 'density' ? 'Densest 1 mm² cells · DST preview' : 'Generated stitch paths'}</h3>
+        <h3 className="stitch-heading">{mode === 'density' ? 'Densest 1 mm² cells · selected stitch plan' : 'Generated stitch paths'}</h3>
         <svg aria-label="Generated stitches" viewBox={previewBox.join(' ')} className={`digitizer-stitch-image ${mode === 'thread' ? 'digitizer-thread-view' : ''}`}>
-          {mode === 'density' && review ? review.density.map(([x, y, count]) =>
+          {mode === 'density' && review ? (selectedAudit?.density??review.density).map(([x, y, count]) =>
             <rect key={x + ',' + y} x={x} y={y} width="1" height="1" fill="#6945A2"
-              opacity={0.15 + 0.85 * count / (review.density[0]?.[2] || 1)}>
+              opacity={0.15 + 0.85 * count / ((selectedAudit?.density??review.density)[0]?.[2] || 1)}>
               <title>{count} needle penetrations in this square millimeter</title>
             </rect>) : plan.blocks.map((block, index) => <g key={index} fill="none" stroke={`rgb(${block.color.join(',')})`} strokeWidth={mode==="thread"?".43":".3"} strokeLinecap="round" strokeLinejoin="round">
             {block.runs.map((_, i) => <polyline key={i} points={stitchPaths[index]?.[i]} />)}
