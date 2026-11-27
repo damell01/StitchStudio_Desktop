@@ -1903,7 +1903,7 @@ fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)-
             if !flagged.is_empty(){
                 let baseline=measure_stitches(&design);
                 let mut best=None;
-                for (factor,angle_offset) in [(0.90,0.0),(0.80,0.0),(1.0,45.0),(1.0,90.0),(0.90,45.0)] {
+                for (factor,angle_offset,pull_extra,foundation) in [(0.90,0.0,0.0,false),(0.80,0.0,0.0,false),(1.0,45.0,0.0,false),(1.0,90.0,0.0,false),(0.90,45.0,0.0,false),(1.0,0.0,0.05,false),(1.0,0.0,0.10,false),(1.0,0.0,0.0,true),(0.90,0.0,0.05,true)] {
                     let mut trial=(*document).clone();
                     let fabric=trial.plan_options().fabric;
                     for &i in &flagged {
@@ -1915,6 +1915,11 @@ fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)-
                                 Kind::Satin=>s.params.satin_spacing(&fabric),
                                 _=>continue,
                             };
+                            if pull_extra>0.0&&s.params.pull.is_none(){
+                                let base=if s.params.kind==Some(Kind::Satin){s.params.satin_pull(&fabric)}else{s.params.fill_pull(&fabric)};
+                                s.params.pull=Some((base+pull_extra).min(base.max(0.45)));
+                            }
+                            if foundation&&s.params.underlay.is_none(){s.params.underlay=Some(true);}
                             if factor<1.0{s.params.spacing=Some((spacing*factor).max(0.30).min(spacing));}
                             if angle_offset!=0.0&&s.params.kind.unwrap_or(Kind::Fill)==Kind::Fill&&s.params.angle.is_none(){s.params.angle=Some((s.params.fill_angle()+angle_offset).rem_euclid(180.0));}
                         }
