@@ -362,6 +362,22 @@ impl Document {
             .collect()
     }
 
+    /// Desktop selection metadata: wrapper ancestry is intentionally separate
+    /// from the user-created SVG groups used by the core editor.
+    pub fn artwork_wrapper_groups(&self) -> HashMap<String, String> {
+        let mut result = HashMap::new();
+        let Ok(doc) = roxmltree::Document::parse(&self.xml) else { return result; };
+        for node in doc.descendants().filter(|n| n.is_element()) {
+            let Some(id) = node.attribute("id") else { continue; };
+            let lettering = node.ancestors().filter_map(|n| n.attribute("id"))
+                .find(|g| g.starts_with("tl-lettering-"));
+            let wrapper = lettering.or_else(|| node.ancestors().filter_map(|n| n.attribute("id"))
+                .filter(|g| g.starts_with("tl-added-") || g.starts_with("tl-paste-")).last());
+            if let Some(group) = wrapper { result.insert(id.to_owned(), group.to_owned()); }
+        }
+        result
+    }
+
     /// Write current settings into the XML and re-import from it.
     pub fn sync(&mut self) -> Result<()> {
         let (xml, renames) = self.render_xml()?;
@@ -1066,6 +1082,18 @@ mod tests {
         let saved = d.to_svg().unwrap();
         let again = Document::from_svg(&saved, "t", None).unwrap();
         assert_eq!(again.shapes.len(), 3, "after a save: {saved}");
+    }
+
+    #[test]
+    fn desktop_wrapper_metadata_distinguishes_repeated_ungrouped_insertions() {
+        let art = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect width="10" height="10"/><rect x="20" width="10" height="10"/></svg>"#;
+        let mut d = Document::empty();
+        let a = d.add_svg(art, Placement::default()).unwrap();
+        let b = d.add_svg(art, Placement::default()).unwrap();
+        let groups = d.artwork_wrapper_groups();
+        assert_eq!(groups[&d.shapes[a[0]].id], groups[&d.shapes[a[1]].id]);
+        assert_eq!(groups[&d.shapes[b[0]].id], groups[&d.shapes[b[1]].id]);
+        assert_ne!(groups[&d.shapes[a[0]].id], groups[&d.shapes[b[0]].id]);
     }
 
     #[test]
