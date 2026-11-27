@@ -152,11 +152,22 @@ pub(crate) async fn update_lettering(uid:usize,settings:LetteringSettings,app:ta
  let mut doc=w.source.clone().ok_or("No editable design")?;
  let index=super::editor_parity::editable_index(&doc,uid)?;
  let mut spec=doc.lettering(index).ok_or("Selected object is not editable text")?;
+ let original_bounds=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+ let wording_only=spec.text!=next.text && spec.font==next.font && (spec.size_mm-next.size_mm).abs()<0.001 && (spec.spacing_mm-next.spacing_mm).abs()<0.001 && (spec.arc_mm-next.arc_mm).abs()<0.001 && (!scale_x||(spec.h_scale-next.h_scale).abs()<0.001) && (!scale_y||(spec.v_scale-next.v_scale).abs()<0.001);
  spec.text=next.text;spec.font=next.font;spec.size_mm=next.size_mm;spec.spacing_mm=next.spacing_mm;spec.arc_mm=next.arc_mm;spec.bold=next.bold;spec.italic=next.italic;spec.color=next.color;spec.align=next.align;if has_kind{spec.kind=next.kind;spec.bean=next.bean;spec.puff=next.puff;spec.effect=next.effect}
  if effect_color_present{spec.effect_color=next.effect_color}if inner_color_present{spec.inner_color=next.inner_color}
  if outer_present{spec.outer_width=next.outer_width}if inner_present{spec.inner_width=next.inner_width}
  if shadow_x_present{spec.shadow_x=next.shadow_x}if shadow_y_present{spec.shadow_y=next.shadow_y}if has_leading{spec.leading=next.leading}if scale_x{spec.h_scale=next.h_scale}if scale_y{spec.v_scale=next.v_scale}if has_kern{spec.kern=next.kern}if has_path{spec.path=next.path}if has_offset{spec.path_offset=next.path_offset}if has_flip{spec.path_flip=next.path_flip}
  doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+ if wording_only && !original_bounds.is_empty(){
+  let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+  if fitted.width()>original_bounds.width() && original_bounds.width()>0.0 {
+   spec.h_scale=(spec.h_scale*original_bounds.width()/fitted.width()).clamp(25.0,250.0);
+   doc.set_lettering(index,&spec).map_err(|e|e.to_string())?;
+   let fitted=zigzag::svg::shapes_bounds(std::slice::from_ref(&doc.shapes[index]));
+   if fitted.width()>original_bounds.width()*1.05{return Err("Text is too long for its current area. Adjust size or width explicitly.".into())}
+  }
+ }
  doc.sync().map_err(|e|e.to_string())?;
  let design=doc.plan_cached(&mut w.plan_cache);
  super::validate_resized_design(&design)?;
