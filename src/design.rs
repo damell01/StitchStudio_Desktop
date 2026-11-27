@@ -1533,7 +1533,7 @@ fn occlusion_coverage(shape: &Shape, opt: &PlanOptions) -> Option<(Vec<Polyline>
     match kind {
         Kind::Fill => {
             // Very open fills intentionally expose the underlying material.
-            if shape.params.fill_spacing(&opt.fabric) > 0.65 { return None; }
+            if shape.params.fill_spacing(&opt.fabric) > 0.65 || shape.params.border == Some(true) { return None; }
         }
         Kind::Contour => {
             // Keep underlying coverage for decorative contour patterns.
@@ -1773,7 +1773,10 @@ pub fn plan_cached(
             let kind = s.params.kind.unwrap_or(Kind::Fill);
             format!("{kind:?}").hash(&mut h);
             match kind {
-                Kind::Fill => (s.params.fill_spacing(&opt.fabric) > 0.65).hash(&mut h),
+                Kind::Fill => {
+                    (s.params.fill_spacing(&opt.fabric) > 0.65).hash(&mut h);
+                    s.params.border.hash(&mut h);
+                }
                 Kind::Satin => {
                     format!("{:?}", s.params).hash(&mut h);
                     s.params.satin_spacing(&opt.fabric).to_bits().hash(&mut h);
