@@ -2630,8 +2630,21 @@ async fn import_personal_designs(folder:bool,app:tauri::AppHandle)->Result<usize
  }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
-async fn insert_embroidery(x_mm:f64,y_mm:f64,file:Option<String>,app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>)->Result<Option<Preview>,String>{
+async fn insert_embroidery(x_mm:f64,y_mm:f64,file:Option<String>,bytes:Option<Vec<u8>>,name:Option<String>,app:tauri::AppHandle,state:tauri::State<'_,Mutex<Workspace>>)->Result<Option<Preview>,String>{
  if ![x_mm,y_mm].iter().all(|v|v.is_finite()&&v.abs()<=500.0){return Err("Invalid placement".into())}
+ if let Some(bytes)=bytes {
+     if bytes.len()>20_000_000 {return Err("Design exceeds 20 MB".into());}
+     let name=name.ok_or("Missing design filename")?;
+     let (label,svg)=tauri::async_runtime::spawn_blocking(move || -> Result<_,String>{
+         let path=std::path::Path::new(&name);
+         let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
+         let design=formats::read::read_stitch_file(&bytes,&ext).map_err(|e|e.to_string())?;
+         if design.blocks.is_empty(){return Err("No stitches found".into());}
+         Ok((path.file_stem().and_then(|s|s.to_str()).unwrap_or("Imported design").to_owned(),formats::read::to_svg(&design)))
+     }).await.map_err(|e|e.to_string())??;
+     let mut workspace=state.lock().map_err(|e|e.to_string())?;
+     return insert_editable_artwork(&mut workspace,&svg,&label,x_mm,y_mm,false).map(Some);
+ }
  let from_library = file.is_some();
  let path=if let Some(name)=file{let p=std::path::Path::new(&name);if p.components().count()!=1||!matches!(p.components().next(),Some(std::path::Component::Normal(_))){return Err("Invalid design filename".into())}personal_design_dir(&app)?.join(p)}else{let Some(path)=rfd::AsyncFileDialog::new().add_filter("Embroidery designs",&formats::READABLE_FORMATS).pick_file().await else{return Ok(None)};path.path().to_owned()};
  let (name, svg) = tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
