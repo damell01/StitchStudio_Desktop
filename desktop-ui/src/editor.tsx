@@ -1713,9 +1713,18 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     setArtworkDrag(false);
     if(event.defaultPrevented)return;
     event.preventDefault();
-    if(!busy&&event.dataTransfer.files[0])setArtworkImport({file:event.dataTransfer.files[0]});
+    const file=event.dataTransfer.files[0];
+    if(busy||editLock.current||!file)return;
+    if(/\.(dst|pes|jef|exp|vp3|hus|xxx|pec|sew|tap|u01)$/i.test(file.name)){
+      if(file.size>20_000_000){setMessage('Embroidery file exceeds 20 MB.');return;}
+      const matrix=canvasSurface.current?.querySelector<SVGSVGElement>('svg.design-canvas')?.getScreenCTM();
+      const point=matrix?new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()):null;
+      const inside=point&&Math.abs(point.x)<=width/2&&Math.abs(point.y)<=height/2;
+      void file.arrayBuffer().then(buffer=>edit('insert_embroidery',{bytes:Array.from(new Uint8Array(buffer)),name:file.name,xMm:inside?point!.x:0,yMm:inside?point!.y:0})).then(result=>{if(result.plan){setHidden([]);setCanvasMode('select');setRealistic(false);}}).catch(()=>setMessage('Could not read the embroidery file.'));
+    }else if(/\.(png|jpe?g|webp|bmp|svg)$/i.test(file.name)){setArtworkImport({file});}
+    else setMessage('Choose an embroidery design or a PNG, JPG, WebP, BMP or SVG image.');
   }}>
-{artworkDrag&&<div className="canvas-artwork-drop" role="status">Drop artwork or an element onto the hoop</div>}
+{artworkDrag&&<div className="canvas-artwork-drop" role="status">Drop an embroidery file, image or element onto the hoop</div>}
 <div className={`studio-camera studio-camera-docked ${cameraTop?'studio-camera-top':'studio-camera-bottom'}`} role="group" aria-label="Canvas view">
   <button className="studio-tool-icon camera-dock-grip" title="Move camera controls to the top or bottom"
     aria-label={cameraTop?'Move camera controls to bottom':'Move camera controls to top'}
