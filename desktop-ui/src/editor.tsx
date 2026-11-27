@@ -102,7 +102,7 @@ const [showDirections,setShowDirections]=useState(false);
 
 function rotationAt(position:DOMPoint,shift:boolean){const g=rotationGesture.current;if(!g)return 0;let degrees=(Math.atan2(position.y-g.cy,position.x-g.cx)-g.start)*180/Math.PI;degrees=((degrees+540)%360)-180;return shift?Math.round(degrees/15)*15:degrees}
 
-function groupScaleAt(position:DOMPoint,shift:boolean):[number,number]{const g=groupResizeGesture.current;if(!g)return [1,1];const x=g.x-g.cx,y=g.y-g.cy;const clamp=(n:number)=>Math.max(.1,Math.min(10,n));if(shift){const s=clamp(((position.x-g.cx)*x+(position.y-g.cy)*y)/Math.max(.0001,x*x+y*y));return [s,s]}return [Math.abs(x)>.001?clamp((position.x-g.cx)/x):1,Math.abs(y)>.001?clamp((position.y-g.cy)/y):1]}
+function groupScaleAt(position:DOMPoint,shift:boolean):[number,number]{const g=groupResizeGesture.current;if(!g)return [1,1];const x=g.x-g.cx,y=g.y-g.cy;const clamp=(n:number)=>Math.max(.1,Math.min(10,n));if(!shift){const s=clamp(((position.x-g.cx)*x+(position.y-g.cy)*y)/Math.max(.0001,x*x+y*y));return [s,s]}return [Math.abs(x)>.001?clamp((position.x-g.cx)/x):1,Math.abs(y)>.001?clamp((position.y-g.cy)/y):1]}
 const [groupWidth,setGroupWidth]=useState(''),[groupRotation,setGroupRotation]=useState('0');
 useEffect(()=>{setGroupWidth('');setGroupRotation('0')},[activeGroup]);
 const designGroups=useMemo(()=>{const map=new Map<string,EditableObject[]>();for(const o of objects){const key=o.groups?.find(g=>g.startsWith('tl-custom-group-')||g.startsWith('tl-independent-'))||o.groups?.find(g=>g.startsWith('tl-added-'))||o.groups?.find(g=>g.startsWith('tl-lettering-'))||'original';const list=map.get(key)||[];list.push(o);map.set(key,list)}return Array.from(map,([key,members])=>{const b=members.flatMap(o=>o.bounds?[o.bounds]:[]);if(!b.length)return {key,members,bounds:null};const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return {key,members,bounds:[x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]}})},[objects]);
@@ -1106,7 +1106,7 @@ function resizeAt(position:DOMPoint,shift=false) {
   const {handle,anchorX:x,anchorY:y}=gesture;
   let sx=handle.dx?(position.x-x)/(handle.x-x):1;
   let sy=handle.dy?(position.y-y)/(handle.y-y):1;
-  if(shift&&handle.dx&&handle.dy){
+  if(!shift&&handle.dx&&handle.dy){
     const width=handle.x-x,height=handle.y-y;
     sx=((position.x-x)*width+(position.y-y)*height)/(width*width+height*height);
     sy=sx;
@@ -1214,7 +1214,7 @@ function moveCanvasGesture(event:ReactPointerEvent<SVGSVGElement>) {
   if(stitchGuides.move(event,[position.x,position.y]))return;
   const box=marqueeGesture.current;
   if(box?.pointer===event.pointerId){setMarquee({x:Math.min(box.x,position.x),y:Math.min(box.y,position.y),w:Math.abs(position.x-box.x),h:Math.abs(position.y-box.y)});return;}
-  if(!event.buttons&&canvasMode==='select'){const element=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;setHoverUid(element?Number(element.getAttribute('data-artwork-uid')):null);}
+  if(!event.buttons&&canvasMode==='select'){const element=event.target instanceof Element?event.target.closest('[data-artwork-uid]'):null;const uid=element?Number(element.getAttribute('data-artwork-uid')):null;setHoverUid(uid!==null&&objects.some(o=>o.uid===uid&&!o.hidden&&!o.locked&&!lockedObjects.includes(uid))?uid:null);}
   if(rotationGesture.current?.pointer===event.pointerId){setRotationPreview(rotationAt(position,event.shiftKey));return}
   if(groupResizeGesture.current?.pointer===event.pointerId){setGroupScalePreview(groupScaleAt(position,event.shiftKey));return}
   if(designGesture.current?.pointer===event.pointerId){
@@ -1814,7 +1814,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
  {objects.filter(o=>o.path&&o.bounds&&!lockedObjects.includes(o.uid)&&Math.min(o.bounds[2],o.bounds[3])<2).map(o=><path key={'wide-hit-'+o.uid} d={o.path} data-artwork-uid={o.uid} fill="none" stroke="transparent" strokeWidth="12" vectorEffect="non-scaling-stroke" pointerEvents="stroke" style={{cursor:'move'}}/>)}
 </g>}
 {canvasMode==='select'&&hoverUid!==null&&hoverUid!==selectedObject&&!selectionIds.includes(hoverUid)&&!marquee&&objects.filter(o=>o.uid===hoverUid&&o.path).map(o=><path key={'hover-'+o.uid} d={o.path} fill="none" stroke="#a76bce" strokeWidth="2" vectorEffect="non-scaling-stroke" pointerEvents="none"/>)}
-{marquee&&<g fill="#9165bf" fillOpacity=".12" stroke="#754bb0" strokeDasharray="4 3" pointerEvents="none">
+{marquee&&<g fill="#9165bf" fillOpacity=".12" stroke="#754bb0" strokeDasharray={canvasMode==='select'&&marqueeGesture.current&&marquee.x<marqueeGesture.current.x?'2 2':'4 3'} pointerEvents="none">
   {canvasMode==='solid'&&solidAreaShape==='oval'
     ? <ellipse cx={marquee.x+marquee.w/2} cy={marquee.y+marquee.h/2} rx={marquee.w/2} ry={marquee.h/2} vectorEffect="non-scaling-stroke"/>
     : <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} vectorEffect="non-scaling-stroke"/>}
