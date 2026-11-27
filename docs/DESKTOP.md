@@ -141,13 +141,12 @@ Press **Ctrl+K** or **Cmd+K** to search pages and available editing actions. Typ
 
 ## Design assistant
 
-Windows x64 and macOS installers package a CPU-based Qwen 0.5B model and its llama.cpp runtime. The assistant uses built-in commands for familiar phrases and runs the bundled model automatically for unfamiliar wording. The model translates the request into a supported editor command on the computer. Design changes still go through the existing review and apply flow. Use **Settings → Design assistant** to turn off model interpretation.
+The Windows and macOS installers include the rule-based offline assistant. It handles supported design commands and previews changes before applying them. You can connect your own local MCP client from **Settings → Design assistant**.
 
 To decorate an existing design, select an object and try “Add lavender bows on both sides of the selection” or “Add a 1-inch heart below the design as appliqué.” For a blank hoop, try “Add a small bow at the hoop center.” The proposal compares the original and generated stitch plans. Apply the change to keep each motif editable, or undo the insertion in one step. Imported character artwork can be added by its library name after importing it in **Design Library → Artwork**. Appliqué uses the largest closed area as the fabric piece and keeps the other details as embroidery. Test sew and verify machine pauses before production.
 
 To create a complete design in Studio, open the sparkles menu and try “Create a 4-inch patch with "Little Seed", a lavender bow above it, and a scalloped border.” Use quotation marks for the lettering and name the motifs and border in the same request. The assistant builds editable lettering, library motifs, basic shapes, and stitched frames offline. Review the proposed stitches before applying. When there is an existing design, Stitch Studio looks for clear space beside it. If there is no room, use a smaller width or start with an empty workspace.
 
-Native packaging downloads and verifies the pinned runtime and model once. The model file adds about 470 MiB before installer compression. Set `STITCH_ASSISTANT_CACHE` to a directory containing the same verified files to build from a local cache. Development builds can use the editor's built-in commands without downloading the model.
 
 To use Codex CLI or Claude Code, choose **Settings → Design assistant → Start agent connection**, select the client, and copy its setup command. Run that command on the computer running Stitch Studio. The optional connection is available over MCP on loopback and shares a limited design summary. An external agent can queue one edit, which appears under **Review agent edit** in the Studio assistant. The connection address changes after the app or connection restarts. Remove a stale client entry before registering the new address if your client requires it.
 

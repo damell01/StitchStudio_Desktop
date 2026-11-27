@@ -28,10 +28,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop-ui/src-tauri -> target
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/stitch-studio-model
-          key: stitch-model-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/prepare-local-assistant.mjs') }}
       - run: npm ci
       - name: Build the Windows installer
         run: npm run tauri build -- --bundles nsis -- --locked

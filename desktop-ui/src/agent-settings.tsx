@@ -1,22 +1,13 @@
 import {useEffect,useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 
-const localModelOff='studio-disable-local-model';
-
-export function localModelEnabled() {
-  return localStorage.getItem(localModelOff)!=='1';
-}
-
 export function AgentSettings() {
-  const [enabled,setEnabled]=useState(localModelEnabled);
-  const [ready,setReady]=useState<boolean|null>(null);
   const [endpoint,setEndpoint]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
   const [client,setClient]=useState<'codex'|'claude'>('codex');
 
   useEffect(()=>{
-    void invoke<boolean>('bundled_assistant_ready').then(setReady).catch(()=>setReady(false));
     void invoke<string|null>('agent_bridge_endpoint').then(setEndpoint).catch(()=>{});
   },[]);
   const command=endpoint&&(client==='codex'
@@ -37,15 +28,7 @@ export function AgentSettings() {
 
   return <article className="preferences" id="assistant-settings">
     <h2>Design assistant</h2>
-    <label className="settings-option"><span><strong>Use bundled local model</strong>
-      <small>Interpret unfamiliar requests on this computer.</small></span>
-      <input type="checkbox" checked={enabled} onChange={event=>{
-        const value=event.target.checked;
-        setEnabled(value);
-        localStorage.setItem(localModelOff,value?'0':'1');
-      }}/>
-    </label>
-    {ready!==null&&<p>{ready?'Bundled model ready.':'The built-in editor commands are available in this build. The optional model files are missing.'}</p>}
+    <p>The studio assistant handles supported design commands offline.</p>
     <h3>Connect your own coding agent</h3>
     <p>Share the active design summary and review proposed changes from a local MCP client.</p>
     <button disabled={busy} onClick={()=>void changeConnection()}>{endpoint?'Stop agent connection':'Start agent connection'}</button>

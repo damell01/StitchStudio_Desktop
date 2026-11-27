@@ -100,17 +100,16 @@ test('the offline assistant previews requests and runs only the confirmed change
   expect(await mutations()).toHaveLength(2);
 });
 
-test('bundled model and MCP advice still need approval before editing', async ({page})=>{
+test('offline commands and MCP advice still need approval before editing', async ({page})=>{
   await page.addInitScript(()=>{
     localStorage.setItem('studio-tour-seen','1');
     const calls:string[]=[];
     let incoming:string|null='Center design';
     const plan={name:'Badge',stitches:400,trims:1,blocks:[{color:[88,52,108],runs:[[[0,0],[8,8]]]}]};
-    Object.assign(window,{assistantModelCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>) {
+    Object.assign(window,{assistantCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>) {
       calls.push(command);
       if(command==='current_preview'||command==='center_design')return plan;
       if(command==='editable_objects')return [];
-      if(command==='interpret_with_local_model')return 'Center design';
       if(command==='agent_bridge_edit'){
         const result=incoming;
         if(args.consume)incoming=null;
@@ -124,12 +123,11 @@ test('bundled model and MCP advice still need approval before editing', async ({
   await page.getByRole('button',{name:'Offline design assistant'}).click();
   const dialog=page.getByRole('dialog',{name:'Design assistant'});
   const prompt=dialog.getByRole('textbox',{name:'Ask the design assistant'});
-  await prompt.fill('The badge needs to sit right in the middle of the frame');
+  await prompt.fill('Center design');
   await prompt.press('Enter');
   const proposal=dialog.getByRole('region',{name:'Proposed change'});
   await expect(proposal).toContainText('center of the current hoop');
-  const calls=()=>page.evaluate(()=>(window as unknown as {assistantModelCalls:string[]}).assistantModelCalls);
-  expect(await calls()).toContain('interpret_with_local_model');
+  const calls=()=>page.evaluate(()=>(window as unknown as {assistantCalls:string[]}).assistantCalls);
   expect(await calls()).not.toContain('center_design');
   await dialog.getByRole('button',{name:'Skip',exact:true}).click();
 

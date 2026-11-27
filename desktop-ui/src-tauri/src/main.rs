@@ -10,7 +10,6 @@ mod fabric_profiles;
 mod specialty;
 mod thread_recolor;
 mod stitch_tools;
-mod local_assistant;
 mod agent_bridge;
 mod assistant_motif;
 mod assistant_composition;
@@ -744,6 +743,7 @@ struct SimplifyOptions {
     solid:bool, merge:bool, auto_types:bool, lighter_underlay:bool,
     target_minutes:Option<f64>, target_stitches:Option<usize>, speed:Option<f64>, trim_seconds:Option<f64>, quick:bool,
     solid_only: bool,
+    goal_search: bool,
     solid_color: Option<[u8; 3]>,
     #[serde(skip)]
     budget: Option<SimplifyBudget>,
@@ -1024,6 +1024,46 @@ fn economical_fill_candidate(source:&zigzag::document::Document,base:&Design,uid
     doc.sync().ok()?;let plan=doc.plan();
     Some((doc,plan))
 }
+// Keep the existing fill rows and outlines. Length-only replanning offers a
+// fallback for narrower traced strips and for fills with good existing coverage.
+fn length_only_candidate(source: &zigzag::document::Document, base: &Design, uids: Option<&[usize]>, level: u8) -> Option<(zigzag::document::Document, Design)> {
+    use zigzag::{params::Kind, svg::Geometry};
+    let mut doc = source.clone();
+    let fabric = doc.plan_options().fabric;
+    let mut changed = false;
+    for i in 0..doc.shapes.len() {
+        let shape = &doc.shapes[i];
+        if !uids.is_none_or(|ids| ids.contains(&shape.uid))
+            || doc.records_text(i)
+            || doc.layer_properties(&shape.id).is_some_and(|layer| layer.hidden || layer.locked)
+            || shape.groups.iter().any(|g| g.starts_with("tl-lettering-") || g == "tl-small-ink-detail")
+            || shape.params.kind.unwrap_or(Kind::Fill) != Kind::Fill
+            || !matches!(shape.geometry, Geometry::Fill { .. })
+            || shape.params.stop == Some(true) || shape.params.trim == Some(true)
+            || base.per_shape.get(i).copied().unwrap_or(0) < 24
+        {
+            continue;
+        }
+        let bounds = zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
+        if bounds.width().min(bounds.height()) < 15.0 { continue; }
+        let length = shape.params.fill_len(&fabric);
+        let target = if level >= 3 { (length * 1.5).min(4.5) } else { (length * 1.25).min(3.8) };
+        if target > length + 0.05 {
+            doc.shapes[i].params.len = Some(target);
+            changed = true;
+        }
+    }
+    if !changed { return None; }
+    doc.sync().ok()?;
+    let plan = doc.plan();
+    if base.per_shape.len() != plan.per_shape.len()
+        || base.per_shape.iter().zip(&plan.per_shape).any(|(before, after)| *before > 0 && *after == 0)
+    {
+        return None;
+    }
+    Some((doc, plan))
+}
+
 // An explicitly visual alternative: restore solid ink even when it costs
 // more stitches. Keep counters and meaningful holes, and never replace
 // specialty stitches, recorded lettering or unselected shapes.
@@ -1390,14 +1430,41 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
         let stitch_goal=options.target_stitches.or_else(||(original.stitch_count()>15_000).then_some(10_000));
         let before=measure_stitches(original);let a=original.bounds();let baseline_seconds=seconds(original);
-        let eligible=|d:&Design|{let b=d.bounds();let after=measure_stitches(d);
-            d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&seconds(d)<baseline_seconds
-            &&d.trim_count()<=original.trim_count()&&after.long<=before.long&&after.zero<=before.zero&&after.short<=before.short.saturating_add(5)
-            &&a.min.dist(b.min)<=5.0&&a.max.dist(b.max)<=5.0
-            &&optimization_quality(original,d,speed,trim).coverage>=if strength==1{95.}else if strength==2{90.}else{85.}
-            &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
+        let nearest_rejection = std::cell::Cell::new((usize::MAX, "No cheaper stitch plan was found for the eligible artwork."));
+        let reject = |d: &Design, reason: &'static str| {
+            if d.stitch_count() < nearest_rejection.get().0 {
+                nearest_rejection.set((d.stitch_count(), reason));
+            }
+            false
+        };
+        let eligible = |d: &Design| {
+            if d.stitch_count() == 0 { return false; }
+            if d.stitch_count() > original.stitch_count() || seconds(d) >= baseline_seconds {
+                return reject(d, "The available preview did not improve stitch count and estimated sewing time.");
+            }
+            if d.trim_count() > original.trim_count() || !original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color)) {
+                return reject(d, "A cheaper plan changed the thread order or added trims.");
+            }
+            let after = measure_stitches(d);
+            if after.long > before.long || after.zero > before.zero || after.short > before.short.saturating_add(5) {
+                return reject(d, "A cheaper plan increased short, long, or repeated needle penetrations.");
+            }
+            let b = d.bounds();
+            if a.min.dist(b.min) > 5.0 || a.max.dist(b.max) > 5.0 {
+                return reject(d, "A cheaper plan moved the design edges by more than 0.5 mm.");
+            }
+            let threshold = if strength == 1 { 95. } else if strength == 2 { 90. } else { 85. };
+            if optimization_quality(original,d,speed,trim).coverage < threshold {
+                return reject(d, "A cheaper plan changed too much of the visible stitch footprint.");
+            }
+            true
         };
         let mut candidates=Vec::new();
+        if !options.exhausted() {
+            if let Some(candidate) = length_only_candidate(source,original,uids,strength) {
+                candidates.push(candidate);
+            }
+        }
         if options.quick {
             if strength==3 {
                 if let Some(goal)=stitch_goal.filter(|goal|*goal<original.stitch_count()) {
@@ -1476,6 +1543,13 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             }
         }
         }
+        if options.quick && candidates.is_empty() && !options.exhausted()
+            && source.shapes.iter().any(|s| s.params.kind == Some(zigzag::params::Kind::Manual))
+        {
+            if let Some(candidate) = simplify_design_candidate(source, original, strength, uids, false) {
+                candidates.push(candidate);
+            }
+        }
         candidates.retain(|(_,d)|eligible(d));
         candidates.sort_by(|(_,a),(_,b)|{
             let rank=|d:&Design|{
@@ -1485,7 +1559,11 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             };
             let a=rank(a);let b=rank(b);a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1))
         });
-        let (mut doc,mut design)=candidates.into_iter().next().ok_or("No eligible improvement passed the checks. Original retained.")?;
+        let (mut doc,mut design)=candidates.into_iter().next().ok_or_else(|| {
+            if options.exhausted() && nearest_rejection.get().0 == usize::MAX {
+                "The search reached its time limit before it found an eligible plan."
+            } else { nearest_rejection.get().1 }
+        })?;
         if strength==3 {
             // Refine the winning plan, not the original. Each accepted step
             // must independently pass the original-design quality guard.
@@ -1561,7 +1639,11 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
         let mut options=options.unwrap_or_default();
         options.budget = Some(budget.clone());
         let mut variants=Vec::new();let mut stored=Vec::new();
-        let strengths: &[u8] = if options.solid_only { &[4] } else if options.quick && original.stitch_count()>15_000 { &[3,2] } else if options.quick { &[2,3] } else if previous_id.is_some() { &[5,4] } else { &[2,3,5,4,1] };
+        let strengths: &[u8] = if options.solid_only { &[4] }
+            else if options.goal_search { &[3, 2, 5, 4] }
+            else if options.quick { &[2, 3] }
+            else if previous_id.is_some() { &[5, 4] }
+            else { &[2, 3, 5, 4, 1] };
         for &strength in strengths{
             if options.exhausted(){break}
             if strength>=4{
@@ -1572,6 +1654,12 @@ async fn preview_simplification(uids:Option<Vec<usize>>,remove_detail:Option<boo
                 continue
             }
             let mut mode=options.clone();
+            if (options.quick && strength == 2) || (options.goal_search && strength <= 3) {
+                mode.budget = Some(SimplifyBudget {
+                    deadline: budget.deadline.min(std::time::Instant::now() + std::time::Duration::from_secs(if strength == 2 { 2 } else { 4 })),
+                    cancelled: budget.cancelled.clone(),
+                });
+            }
             if strength==1{mode.solid=false;mode.lighter_underlay=false;mode.merge=false;mode.auto_types=false;}
             if strength==2{mode.lighter_underlay=false;}
             if strength==3{mode.solid=true;mode.merge=true;mode.auto_types=true;}
@@ -3935,7 +4023,7 @@ async fn open_prepared_bundled_design(id:String,app:tauri::AppHandle)->Result<Op
         project.restore(&state)
     }).await.map_err(|e|e.to_string())?
 }
-fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,local_assistant::bundled_assistant_ready,local_assistant::interpret_with_local_model,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_multiple_formats, export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,get_routing_settings, set_routing_settings, get_specialty_settings, set_specialty_settings, copy_stitch_properties, set_sewing_commands, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,import_dropped_font,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,insert_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
+fn main(){desktop_updates::configure(tauri::Builder::default()).manage(Mutex::new(Workspace::default())).manage(agent_bridge::AgentBridge::default()).manage(editor_parity::StitchSettingsClipboard::default()).manage(Mutex::new(workspace_tabs::WorkspaceTabs::default())).invoke_handler(tauri::generate_handler![lettering_edit::lettering_baseline,advanced_stitches::advanced_stitch_settings,advanced_stitches::set_advanced_stitches,workspace_tabs::workspace_tabs,workspace_tabs::change_workspace_tab,workspace_tabs::recoverable_workspace_tabs,workspace_tabs::restore_workspace_tab,desktop_home::workspace_overview,desktop_home::new_blank_design,editor_parity::copy_object_stitch_settings,editor_parity::paste_object_stitch_settings,editor_parity::edit_object_stitch_controls,editor_parity::object_stitch_guides,canvas_drawing::draw_canvas_shape,assistant_composition::assistant_compose,assistant_motif::compose_assistant_design,assistant_motif::preview_assistant_motif,assistant_motif::insert_assistant_motif,assistant_motif::trace_assistant_motif,prepared_bundled_designs,open_prepared_bundled_design,insert_svg_artwork,specialty::preview_applique_letters,specialty::insert_applique_letters,insert_approved_design,stage_batch_draft,approve_batch_draft,discard_batch_draft,approved_batch_projects,path_edit::artwork_path,path_edit::update_artwork_path,history_labels,agent_bridge::start_agent_bridge,agent_bridge::agent_bridge_endpoint,agent_bridge::stop_agent_bridge,agent_bridge::agent_bridge_edit,stitch_tools::design_issues,stitch_tools::apply_path_tool,stitch_tools::preview_test_swatches,stitch_tools::export_test_swatches,preview_simplification,cancel_simplification,apply_simplification,simplify_current_design,maximize_in_hoop,smart_resize_design,resize_artwork_selection,optimize_editable_design,delete_artwork_objects,desktop_updates::check_update,desktop_updates::save_update_access_key,desktop_updates::install_update,recolor_artwork_group,set_artwork_group,transform_artwork_group,apply_reference_colors,move_artwork_objects,align_artwork_objects,lettering_edit::insert_lettering_settings,replace_design_color,center_design_axis,lettering_edit::lettering_settings,lettering_edit::update_lettering,import_project_files,import_artwork_files,saved_templates::insert_saved_template,saved_templates::import_template_archive,saved_templates::saved_templates,saved_templates::open_saved_template,saved_templates::preview_saved_template,fabric_profiles::fabric_catalog,fabric_profiles::current_fabric,fabric_profiles::apply_fabric_profile,machine_preview::preview_machine_commands,specialty::export_applique_cut_svg,set_canvas_fullscreen,insert_character,character_list,character_image,open_svg,export_multiple_formats, export_design,transform_design,mirror_design,center_design,audit_stitches,repair_stitches,recolor_block,history_step,current_preview,save_project,open_project,load_template,preview_template,insert_template,insert_embroidery,personal_designs,library_thumbnail,import_personal_designs,import_design_archive,get_routing_settings, set_routing_settings, get_specialty_settings, set_specialty_settings, copy_stitch_properties, set_sewing_commands, apply_stitch_properties,editable_objects,set_artwork_layer,reorder_artwork_object,edit_artwork_object,set_object_kind,create_specialty,preview_specialty,recovery_save,recovery_open,lettering_fonts,create_lettering,lettering_edit::preview_lettering,font_assets,import_fonts,import_dropped_font,remove_font_asset,choose_artwork,preview_cleanup,recognize_artwork_lettering,digitize_artwork,compare_digitizer_draft,export_digitizer_variant,apply_digitizer_draft,insert_digitizer_draft,scan_projects,project_thumbnail,library_open]).run(tauri::generate_context!()).expect("Stitch Studio failed to launch");}
 
 #[cfg(test)]
 mod fixed_resize_tests {
@@ -3965,6 +4053,31 @@ mod fixed_resize_tests {
         assert_eq!(document.shapes[1].params, source.shapes[1].params);
         assert!(original.blocks.iter().map(|block|block.color).eq(candidate.blocks.iter().map(|block|block.color)));
         assert!(document.shapes[0].params.fill_spacing(&document.plan_options().fabric) <= 0.55);
+    }
+
+    #[test]
+    fn longer_fill_stitches_reduce_textured_strips_without_changing_fill_density() {
+        let strips: String = (0..14).map(|row| format!(
+            r#"<rect x="4" y="{}" width="48" height="2" fill="black"/>"#, 4 + row * 3
+        )).collect::<Vec<_>>().join("");
+        let svg = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="55mm" viewBox="0 0 60 55">{strips}</svg>"#
+        );
+        let mut source = zigzag::document::Document::from_svg(&svg, "Textured ribbon", None).unwrap();
+        for shape in &mut source.shapes {
+            shape.params.kind = Some(zigzag::params::Kind::Fill);
+            shape.params.angle = Some(0.0);
+            shape.params.spacing = Some(0.28);
+            shape.params.len = Some(1.5);
+        }
+        source.sync().unwrap();
+        let original = source.plan();
+        let (doc, plan) = super::length_only_candidate(&source, &original, None, 3).unwrap();
+        assert!(plan.stitch_count() * 10 < original.stitch_count() * 9);
+        assert!(plan.trim_count() <= original.trim_count());
+        assert!(super::optimization_quality(&original, &plan, 800., 3.).coverage >= 85.0);
+        assert!(doc.shapes.iter().zip(&source.shapes).all(|(next, prior)|
+            next.params.spacing == prior.params.spacing && next.params.angle == prior.params.angle));
     }
 
     #[test]

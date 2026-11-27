@@ -63,9 +63,5 @@ lipo "$app/Contents/MacOS/$binary" -verify_arch "$expected_arch"
 # checks ad-hoc signatures too; notarization is a separate release requirement.
 plutil -lint "$plist"
 codesign --verify --deep --strict --verbose=2 "$app"
-assistant="$app/Contents/Resources/local-assistant"
-model="$assistant/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-[[ $(stat -f %z "$model") -eq 491400032 ]]
-lipo "$assistant/runtime/llama-cli" -verify_arch "$expected_arch"
-"$assistant/runtime/llama-cli" --version
+test ! -e "$app/Contents/Resources/local-assistant"
 echo 'macOS disk image mount and application copy passed.'

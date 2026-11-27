@@ -8,8 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "tauri": "tauri",
     "test": "playwright test",
-    "package:update": "node ../.github/scripts/package-desktop-update.mjs",
-    "assistant:prepare": "node ../.github/scripts/prepare-local-assistant.mjs"
+    "package:update": "node ../.github/scripts/package-desktop-update.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

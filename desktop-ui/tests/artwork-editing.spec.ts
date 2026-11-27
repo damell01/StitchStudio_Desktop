@@ -175,3 +175,34 @@ test('stopping deep optimization keeps quick previews and ignores a late result'
   await dialog.getByRole('button',{name:'Apply selected design'}).click();
   await expect.poll(async ()=>(await calls()).at(-1)).toEqual({command:'apply_simplification',args:{id:17,strength:2}});
 });
+
+test('a changed stitch-count goal searches the main modes and can apply a smaller preview', async ({page}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('studio-tour-seen','1');
+    const plan={name:'Textured ribbon',stitches:28259,trims:304,blocks:[{color:[30,26,34],runs:[[[0,0],[80,65]]]}]};
+    Object.assign(window,{__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>){
+      if(command==='current_preview')return plan;
+      if(command==='editable_objects')return [];
+      if(command==='preview_simplification'){
+        const options=args.options as {goalSearch:boolean; targetStitches:number};
+        if(options.goalSearch&&options.targetStitches===14129&&args.previousId===17)
+          return {id:17,variants:[{strength:3,plan:{...plan,stitches:19200,trims:240},quality:{coverage:93,density_peak:9}}]};
+        return {id:17,variants:[{strength:2,plan:null,reason:'A cheaper plan changed too much of the visible stitch footprint.'}]};
+      }
+      if(command==='apply_simplification'&&args.id===17&&args.strength===3)return {...plan,stitches:19200,trims:240};
+      return null;
+    }}});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:/Blank design/}).last().click();
+  await page.getByRole('button',{name:'Simplify',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Simplify design'});
+  await expect(dialog.getByText(/changed too much of the visible stitch footprint/)).toBeVisible();
+  await dialog.getByRole('combobox',{name:'Focus'}).selectOption('stitches');
+  await dialog.getByRole('button',{name:'Optimize for this goal'}).click();
+  await expect(dialog.getByText('19,200 stitches')).toBeVisible();
+  await expect(dialog.getByText('5,071 stitches above goal')).toBeVisible();
+  await dialog.getByRole('button',{name:'Apply selected design'}).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('19,200 points',{exact:true})).toBeVisible();
+});

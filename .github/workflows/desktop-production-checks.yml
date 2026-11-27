@@ -69,11 +69,6 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
-      - if: runner.os == 'macOS' || runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/stitch-studio-model
-          key: stitch-model-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/prepare-local-assistant.mjs') }}
       - run: npm ci
       - run: npm run build
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml

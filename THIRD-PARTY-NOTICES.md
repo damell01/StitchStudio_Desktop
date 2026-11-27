@@ -6300,8 +6300,3 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ```
-
-## Bundled desktop assistant
-
-- **Qwen2.5-0.5B-Instruct-GGUF**, Apache License 2.0. Stitch Studio packages the upstream Q4_K_M artifact from model revision `9217f5db79a29953eb74d5343926648285ec7e67`. The model is redistributed unchanged. [Source and license](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/tree/9217f5db79a29953eb74d5343926648285ec7e67)
-- **llama.cpp**, MIT License. The native runtime and accompanying libraries come from the upstream `b7993` release. [Source and license](https://github.com/ggml-org/llama.cpp/tree/b7993)
