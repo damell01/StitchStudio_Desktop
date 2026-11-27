@@ -120,21 +120,26 @@ const uploadInput=useRef<HTMLInputElement>(null);
 const [recentStarterIds,setRecentStarterIds]=useState<string[]>(()=>{try{const ids=JSON.parse(localStorage.getItem('studio-design-recent')||'[]');return Array.isArray(ids)?ids.filter((id:unknown)=>typeof id==='string'):[]}catch{return []}});
 useEffect(()=>{const refresh=()=>{try{const ids=JSON.parse(localStorage.getItem('studio-design-recent')||'[]');if(Array.isArray(ids))setRecentStarterIds(ids.filter((id:unknown)=>typeof id==='string'))}catch{}};window.addEventListener('studio-template-used',refresh);return()=>window.removeEventListener('studio-template-used',refresh)},[]);
 const batchImportLock=useRef(false);
+const batchImportCancel=useRef(false);
+const [batchProgress,setBatchProgress]=useState<{current:number;total:number;name:string}|null>(null);
 async function importCanvasFiles(files:File[],xMm=0,yMm=0){
   if(busy||editLock.current||batchImportLock.current||!files.length)return;
   if(files.length===1){await importCanvasFile(files[0],xMm,yMm);return;}
   if(files.some(file=>! /\.(dst|pes|jef|exp|vp3|hus|xxx|pec|sew|tap|u01)$/i.test(file.name))){
     setMessage('Import multiple embroidery files together, or digitize images one at a time.');return;
   }
-  batchImportLock.current=true;
+  batchImportLock.current=true;batchImportCancel.current=false;
   let imported=0;
+  const failures:string[]=[];
   try{
     for(const [index,file] of files.entries()){
+      if(batchImportCancel.current)break;
+      setBatchProgress({current:index+1,total:files.length,name:file.name});
       const offset=Math.min(index*5,Math.min(width,height)*.2);
-      if(await importCanvasFile(file,Math.max(-width/2,Math.min(width/2,xMm+offset)),Math.max(-height/2,Math.min(height/2,yMm+offset))))imported++;
+      if(await importCanvasFile(file,Math.max(-width/2,Math.min(width/2,xMm+offset)),Math.max(-height/2,Math.min(height/2,yMm+offset))))imported++;else failures.push(file.name);
     }
-    setMessage(imported+' of '+files.length+' embroidery files imported. Check placement and hoop fit.');
-  }finally{batchImportLock.current=false;}
+    setMessage((batchImportCancel.current?'Import stopped. ':'')+imported+' of '+files.length+' embroidery files imported. '+(failures.length?'Failed: '+failures.join(', ')+'. ':'')+'Check placement and hoop fit.');
+  }finally{batchImportLock.current=false;setBatchProgress(null);}
 }
 async function importCanvasFile(file:File,xMm=0,yMm=0){
   if(busy||editLock.current)return;
@@ -2127,7 +2132,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <option value={1}>1×</option><option value={4}>4×</option><option value={16}>16×</option><option value={64}>64×</option>
   </select>
   <span className="stitch-playhead">{stitchIndex.toLocaleString()} / {points.length.toLocaleString()}</span>
-</div><footer className="workspace-status">{inlineWork&&<span className="inline-work-status" role="status"><span className="inline-work-spinner"/>{inlineWork}</span>}
+</div><footer className="workspace-status">{batchProgress&&<span className="inline-work-status" role="status">Importing {batchProgress.current}/{batchProgress.total}: {batchProgress.name} <button onClick={()=>{batchImportCancel.current=true}}>Stop after current</button></span>}{!batchProgress&&inlineWork&&<span className="inline-work-status" role="status"><span className="inline-work-spinner"/>{inlineWork}</span>}
   <button title="Open hoop settings" onClick={()=>setHoopOpen(true)}><SquareDashed size={16}/>{width>0&&height>0?`Hoop ${(width/25.4).toFixed(2)} × ${(height/25.4).toFixed(2)} in`:'Set a hoop size'}</button>
   {plan&&<div className="status-metrics">{sizePreview&&<span title={`${Math.round(sizePreview.w)} × ${Math.round(sizePreview.h)} mm`}>{sizePreview.active?'Resizing · ':''}{(sizePreview.w/25.4).toFixed(2)} × {(sizePreview.h/25.4).toFixed(2)} in</span>}<span><Waypoints size={16}/>{plan.stitches.toLocaleString()} points</span><span><Layers3 size={16}/>{plan.blocks.length} color blocks</span><span title="Unique RGB thread colors">{uniqueColors} colors</span><span><Scissors size={16}/>{plan.trims} trims</span><button className="sewing-estimate" title={'Estimated machine time at '+sewingSpm+' stitches/min, '+trimSeconds+' seconds per trim and '+changeSeconds+' seconds per block transition. Excludes hooping, setup and interruptions.'} onClick={()=>{showInspector(true);setInspectorTab('hoop')}}><Clock3 size={15}/> Est. {sewingDuration}</button></div>}
   <span className="workspace-fit-status" data-outside={outside}>{outside?'Outside hoop':plan?'Fits hoop · '+recoveryStatus:recoveryStatus}</span>
