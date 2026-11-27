@@ -116,3 +116,10 @@ dialog.studio-insert[open]:not(:modal) .studio-insert-footer { padding: 9px 10px
 dialog.studio-insert[open]:not(:modal) .studio-insert-header h2 { font-size: 16px; }
 dialog.studio-insert[open]:not(:modal) .studio-insert-header p { font-size: 12px; }
 dialog.studio-insert[open]:not(:modal) .template-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+
+.studio-insert .template-category-strip { display:flex; gap:5px; overflow-x:auto; flex-wrap:nowrap; padding:4px 0; scrollbar-width:thin; }
+.studio-insert .template-category-strip button { flex:none; white-space:nowrap; font-size:11px; padding:5px 9px; border-radius:14px; }
+.studio-insert .template-grid article.template-selected { outline:2px solid var(--brand-accent,var(--brand)); outline-offset:-2px; }
+.studio-insert .template-grid .template-art-select { display:block; width:100%; padding:4px; border:0; background:transparent; cursor:pointer; }
+.studio-insert .template-grid .template-art-select svg { width:100%; height:auto; max-height:110px; }
+.studio-insert .template-grid .template-art-select:focus-visible { outline:2px solid var(--brand-accent,var(--brand)); }
