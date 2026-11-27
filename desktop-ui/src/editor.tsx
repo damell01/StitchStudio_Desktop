@@ -165,6 +165,9 @@ const [canvasLetterFonts,setCanvasLetterFonts]=useState<string[]>([]);
 const [canvasLetterFont,setCanvasLetterFont]=useState('');
 useEffect(()=>{if(!canvasText)return;let active=true;void invoke<string[]>('lettering_fonts').then(fonts=>{if(active){setCanvasLetterFonts(fonts);setCanvasLetterFont(old=>fonts.includes(old)?old: ['Arial','Helvetica','DejaVu Sans'].find(name=>fonts.includes(name))??fonts[0]??'')}}).catch(error=>{if(active)setCanvasTextError(String(error))});return()=>{active=false}},[canvasText]);
 const [canvasLetterColor,setCanvasLetterColor]=useState('#6945a2');
+const [canvasLetterBold,setCanvasLetterBold]=useState(true);
+const [canvasLetterItalic,setCanvasLetterItalic]=useState(false);
+const [canvasLetterSpacing,setCanvasLetterSpacing]=useState(.4);
 const [canvasTextError,setCanvasTextError]=useState('');
 const canvasTextInput=useRef<HTMLInputElement>(null);
 const canvasTextSaving=useRef(false);
@@ -205,6 +208,7 @@ function toggleCanvasTyping(){
 async function addCanvasText(){
   if(!canvasText||!canvasTextValue.trim()||busy||canvasTextSaving.current)return;
   if(!Number.isFinite(canvasLetterHeight)||canvasLetterHeight<.5||canvasLetterHeight>80){setCanvasTextError('Choose a lettering height from 0.5 to 80 mm.');return;}
+  if(!Number.isFinite(canvasLetterSpacing)||canvasLetterSpacing<0||canvasLetterSpacing>5){setCanvasTextError('Choose spacing from 0 to 5 mm.');return;}
   const placement=canvasText.point;
   canvasTextSaving.current=true;
   setBusy(true);setInlineWork('Generating lettering…');setPlaying(false);setCanvasTextError('');
@@ -213,7 +217,7 @@ async function addCanvasText(){
     const font=fonts.includes(canvasLetterFont)?canvasLetterFont:['Arial','Helvetica','DejaVu Sans'].find(name=>fonts.includes(name))??fonts[0];
     if(!font)throw new Error('Install a font in the Font Library to add lettering.');
     const next=await invoke<Plan>('insert_lettering_settings',{placement,settings:{
-      text:canvasTextValue.trim(),font,size:canvasLetterHeight,spacing:.4,arc:0,bold:true,italic:false,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:'center',
+      text:canvasTextValue.trim(),font,size:canvasLetterHeight,spacing:canvasLetterSpacing,arc:0,bold:canvasLetterBold,italic:canvasLetterItalic,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:'center',
     }});
     if(next.blocks.length!==plan?.blocks.length||next.blocks.some((block,index)=>block.color.join(',')!==plan?.blocks[index]?.color.join(',')))setThreadAssignments({});
     setPlan(next);setPlayhead(null);setMessage('Lettering added. Double-click it to edit.');
@@ -1717,8 +1721,9 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   onKeyDown={event=>{event.stopPropagation();if(event.key==='Escape'&&!canvasTextSaving.current){event.preventDefault();toggleCanvasTyping()}}}>
   <label htmlFor="canvas-lettering-text">Canvas lettering</label>
   <input id="canvas-lettering-text" ref={canvasTextInput} value={canvasTextValue} maxLength={120}
-    style={{fontFamily:canvasLetterFont||undefined,color:canvasLetterColor}} disabled={busy} placeholder="Type your text" onChange={event=>setCanvasTextValue(event.target.value)}/>
+    style={{fontFamily:canvasLetterFont||undefined,color:canvasLetterColor,fontWeight:canvasLetterBold?'bold':'normal',fontStyle:canvasLetterItalic?'italic':'normal'}} disabled={busy} placeholder="Type your text" onChange={event=>setCanvasTextValue(event.target.value)}/>
   <label>Font<select value={canvasLetterFont} disabled={busy||!canvasLetterFonts.length} onChange={e=>setCanvasLetterFont(e.target.value)}>{canvasLetterFonts.map(font=><option key={font} value={font}>{font}</option>)}</select></label><div className="canvas-lettering-quick"><label>Height (mm)<input type="number" min="0.5" max="80" step="0.5" value={canvasLetterHeight} disabled={busy} onChange={e=>setCanvasLetterHeight(Number(e.target.value))}/></label><label>Thread color<input type="color" value={canvasLetterColor} disabled={busy} onChange={e=>setCanvasLetterColor(e.target.value)}/></label></div>
+  <div className="canvas-lettering-quick" role="group" aria-label="Lettering style"><button type="button" disabled={busy} aria-label="Bold" aria-pressed={canvasLetterBold} onClick={()=>setCanvasLetterBold(v=>!v)}><b>B</b></button><button type="button" disabled={busy} aria-label="Italic" aria-pressed={canvasLetterItalic} onClick={()=>setCanvasLetterItalic(v=>!v)}><i>I</i></button><label>Spacing (mm)<input type="number" min="0" max="5" step=".1" value={canvasLetterSpacing} disabled={busy} onChange={e=>setCanvasLetterSpacing(Number(e.target.value))}/></label></div>
   {canvasTextError&&<small role="alert">{canvasTextError}</small>}
   <div><button type="button" disabled={busy} onClick={toggleCanvasTyping}>Cancel</button>
     <button type="submit" className="primary" disabled={busy||!canvasTextValue.trim()}>{busy?'Adding…':'Add'}</button></div>
