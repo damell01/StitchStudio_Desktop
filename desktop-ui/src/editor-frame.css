@@ -429,3 +429,9 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .studio-zoom-options input { width:100%; }
 .studio-zoom-options button { justify-content:center; white-space:nowrap; }
 .studio-zoom-menu summary:focus-visible { outline:2px solid var(--brand-accent,var(--brand)); }
+
+/* Quick starts use the existing trusted bundled template artwork. */
+.studio-start-templates{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;width:100%;max-width:320px;margin:6px auto;}
+.studio-start-templates button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;padding:6px;border:1px solid var(--lav-border,var(--studio-line));border-radius:8px;background:var(--lav-panel,var(--studio-panel));font-size:10px;line-height:1.2;white-space:normal;}
+.studio-start-templates svg{width:36px;height:36px;flex:none;}
+.studio-start-templates button:hover,.studio-start-templates button:focus-visible{border-color:var(--brand-accent,var(--brand));}
