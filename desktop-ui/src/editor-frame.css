@@ -435,3 +435,12 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .studio-start-templates button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;padding:6px;border:1px solid var(--lav-border,var(--studio-line));border-radius:8px;background:var(--lav-panel,var(--studio-panel));font-size:10px;line-height:1.2;white-space:normal;}
 .studio-start-templates svg{width:36px;height:36px;flex:none;}
 .studio-start-templates button:hover,.studio-start-templates button:focus-visible{border-color:var(--brand-accent,var(--brand));}
+
+.editor-toolrail .studio-shapes-menu{position:static;width:100%;}
+.editor-toolrail .studio-shapes-menu>summary{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:46px;cursor:pointer;border-radius:7px;list-style:none;}
+.editor-toolrail .studio-shapes-menu>summary::-webkit-details-marker{display:none;}
+.editor-toolrail .studio-shapes-menu[open]>summary{background:var(--brand-soft,var(--studio-paper));}
+.editor-toolrail .studio-shapes-panel{position:fixed;left:72px;top:160px;width:224px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:10px;z-index:35;}
+.editor-toolrail .studio-shapes-panel button{display:flex;flex-direction:column;align-items:center;gap:5px;width:100%;min-height:64px;white-space:normal;}
+.studio-shapes-panel svg{fill:var(--brand-accent,var(--brand));}
+.studio-shapes-panel>small{grid-column:1/-1;line-height:1.4;}
