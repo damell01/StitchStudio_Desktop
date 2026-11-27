@@ -625,6 +625,9 @@ pub fn components(rings: &[Polyline], rule: FillRule) -> Vec<Vec<Polyline>> {
 
 /// Rails for one filled component (outer ring + holes).
 pub fn auto_rails(comp: &[Polyline]) -> Result<Rails, AutoSatinError> {
+    if comp.iter().any(|ring| ring.len()<3 || ring.iter().any(|p| !p.x.is_finite() || !p.y.is_finite())) {
+        return Err(AutoSatinError::TooComplex);
+    }
     let rails = match comp.len() {
         1 => split_at_tips(&comp[0]).ok_or(AutoSatinError::TooComplex)?,
         2 => {
@@ -642,20 +645,24 @@ pub fn auto_rails(comp: &[Polyline]) -> Result<Rails, AutoSatinError> {
         _ => return Err(AutoSatinError::TooManyHoles),
     };
     // Validate: stitches must stay inside the shape and not get too wide.
-    let ps = pairs(&rails, 10.0);
+    let ps = pairs(&rails, 5.0);
+    if ps.is_empty() { return Err(AutoSatinError::TooComplex); }
     let mut bad = 0;
     let mut widest: f64 = 0.0;
     for &(a, b) in &ps {
         let w = a.dist(b);
         widest = widest.max(w);
-        if w > 1.0 && !point_inside(comp, FillRule::EvenOdd, a.lerp(b, 0.5)) {
+        // A midpoint alone misses stitches that cross a small letter
+        // counter or concave edge before returning inside the shape.
+        if w > 1.0 && [0.2, 0.4, 0.6, 0.8].iter().any(|&t|
+            !point_inside(comp, FillRule::EvenOdd, a.lerp(b, t))) {
             bad += 1;
         }
     }
     if widest > AUTO_MAX_WIDTH {
         return Err(AutoSatinError::TooWide(widest));
     }
-    if bad as f64 > ps.len() as f64 * 0.08 {
+    if bad as f64 > ps.len() as f64 * 0.03 {
         return Err(AutoSatinError::TooComplex);
     }
     Ok(rails)
@@ -987,5 +994,15 @@ mod satin_compensation_tip_tests {
         assert!(stitches.len()>2);
         assert!((stitches[0].x+0.8).abs()<1e-9);
         assert!((stitches[1].x-4.8).abs()<1e-9);
+    }
+}
+
+#[cfg(test)]
+mod auto_satin_geometry_guard_tests {
+    use super::*;
+    #[test]
+    fn malformed_hole_is_rejected_without_indexing_empty_ring() {
+        let outer=vec![P::new(0.,0.),P::new(40.,0.),P::new(40.,40.),P::new(0.,40.)];
+        assert!(matches!(auto_rails(&[outer,vec![]]),Err(AutoSatinError::TooComplex)));
     }
 }
