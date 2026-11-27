@@ -512,7 +512,7 @@ impl Params {
         if !self.underlay_on() {
             return 0;
         }
-        self.satin_underlay.unwrap_or(if width_mm < 1.5 {
+        self.satin_underlay.unwrap_or(if !width_mm.is_finite() || width_mm < 1.5 {
             0
         } else if width_mm <= 4.0 {
             underlay::CENTER
@@ -866,6 +866,20 @@ mod tests {
 #[cfg(test)]
 mod adaptive_pull_tests {
     use super::*;
+    #[test]
+    fn narrow_satin_preserves_explicit_foundation_and_compensation() {
+        let mut p=Params::default();
+        assert_eq!(p.satin_underlay_for(f64::NAN),0);
+        for width in [0.5,1.0,1.5,2.0] {
+            assert!(p.satin_pull_for(&KNIT,width)<=width*0.2);
+        }
+        p.satin_underlay=Some(underlay::CENTER);
+        p.pull=Some(0.12);
+        assert_eq!(p.satin_underlay_for(1.0),underlay::CENTER);
+        assert_eq!(p.satin_pull_for(&KNIT,1.0),0.12);
+        p.underlay=Some(false);
+        assert_eq!(p.satin_underlay_for(1.0),0);
+    }
     #[test]
     fn satin_spacing_changes_smoothly_with_width() {
         let mut p = Params::default();
