@@ -1533,7 +1533,7 @@ fn occlusion_coverage(shape: &Shape, opt: &PlanOptions) -> Option<(Vec<Polyline>
         Kind::Satin => {
             // Multicolor satin strips and unusually open satin are not
             // reliable masks for removing the supporting fill underneath.
-            if shape.params.colors.is_some() { return None; }
+            if shape.params.colors.is_some() || shape.params.satin_spacing(&opt.fabric) > 0.65 { return None; }
         }
         Kind::Applique => {} // The placed fabric itself provides coverage.
         _ => return None,
@@ -2902,6 +2902,34 @@ mod tests {
             .filter(|p| p.x > 60.0 && p.x < 140.0 && p.y > 60.0 && p.y < 140.0).count();
         assert_eq!(hidden(&dense), 0);
         assert!(hidden(&sparse) > 30);
+    }
+
+    #[test]
+    fn decorative_styles_do_not_remove_the_supporting_fill() {
+        let base = shape(fill(sq(0.0, 0.0, 200.0)), Kind::Fill, [0, 0, 80]);
+        let opt = PlanOptions::default();
+        let mut cache = PlanCache::default();
+        let mut top = shape(fill(sq(50.0, 50.0, 100.0)), Kind::Fill, [255, 200, 0]);
+        let dense = plan_cached("t", &[base.clone(), top.clone()], &opt, &mut cache);
+        let hidden = |d: &Design| d.blocks[0].runs.iter().flat_map(|r| &r.pts)
+            .filter(|p| p.x > 60.0 && p.x < 140.0 && p.y > 60.0 && p.y < 140.0).count();
+        assert_eq!(hidden(&dense), 0);
+        for kind in [Kind::Ripple, Kind::Run, Kind::Meander] {
+            top.params.kind = Some(kind);
+            top.params.spacing = Some(1.4);
+            top.params.border = Some(true);
+            let updated = plan_cached("t", &[base.clone(), top.clone()], &opt, &mut cache);
+            let fresh = plan("t", &[base.clone(), top.clone()], &opt);
+            assert!(same_stitches(&updated, &fresh));
+            assert!(hidden(&updated) > 30, "supporting fill must survive {:?}", kind);
+        }
+    }
+
+    #[test]
+    fn sparse_satin_is_not_an_opaque_overlap_mask() {
+        let mut top = shape(fill(sq(0.0, 0.0, 100.0)), Kind::Satin, [255, 200, 0]);
+        top.params.spacing = Some(1.2);
+        assert!(occlusion_coverage(&top, &PlanOptions::default()).is_none());
     }
 
     #[test]
