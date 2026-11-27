@@ -843,7 +843,7 @@ function selectObject(object:EditableObject|null) {
   setMulti([]);setContext(null);
   const request=++selectionRequest.current;
   setSelectedObject(object?.uid??null);
-  if(object){setLayerTab('objects');setObjectKind(object.kind);if(inspectorTab==='hoop')setInspectorTab('transform');void request;}
+  if(object){setLayerTab('objects');setObjectKind(object.kind);if(inspectorTab!=='stitches'&&inspectorTab!=='transform')setInspectorTab('transform');void request;}
 }
 
 function editSelection(operation:ObjectOperation,uid=selectedObject) {
@@ -1477,7 +1477,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
 </section>}</div>
 
-</article><article ref={inspectorScroll} className="workspace-sidebar workspace-inspector studio-inspector-dock">
+</article><article ref={inspectorScroll} className="workspace-sidebar workspace-inspector studio-inspector-dock">{selected&&<div className="inspector-context"><strong>{selected.label||'Selected object'}</strong><small>{selected.kind} {selected.bounds? ' · '+selected.bounds[2].toFixed(1)+' × '+selected.bounds[3].toFixed(1)+' mm':''}</small><div className="inspector-context-actions"><button onClick={()=>setInspectorTab('transform')}>Transform</button><button onClick={()=>setInspectorTab('stitches')}>Stitch settings</button><button onClick={()=>{const uid=selected.uid;void invoke<unknown>('lettering_settings',{uid}).then(value=>{if(value)openText(uid);else setMessage('This object is not editable lettering.')}).catch(e=>setMessage(String(e)))}}>Edit text</button></div></div>}
   <div className="layers-dock-title"><h2>Inspector</h2>
     <button className="studio-tool-icon" title="Close inspector" aria-label="Close inspector" onClick={()=>setRight(false)}><X size={15}/></button>
   </div>
