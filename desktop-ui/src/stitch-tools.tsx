@@ -39,7 +39,7 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,disabl
   const [review,setReview]=useState<{revision:unknown;result:RepairReview}|null>(null);
   const [working,setWorking]=useState(false);
   const [message,setMessage]=useState('');
-  const current=review?.revision===revision?review.result:null;
+  const current=review && review.revision===revision ? review.result : null;
   const [sewout,setSewout]=useState(true);
   const [previewWidth,setPreviewWidth]=useState(.40);
   const [detailZoom,setDetailZoom]=useState(1);
