@@ -299,6 +299,34 @@ pub fn check(
             }
         }
     }
+    // Compare nearby similarly sized solid glyph-like objects. This is a
+    // settings consistency advisory, not a font recognition or weight test.
+    if shapes.len()<=350 {
+        for (i,s) in shapes.iter().enumerate(){
+            let Geometry::Fill{rings,..}=&s.geometry else{continue};
+            let b=ring_bounds(rings);
+            if b.is_empty()||b.height()<15.0||b.width()>b.height()*1.8{continue}
+            let kind=s.params.kind.unwrap_or(Kind::Fill);
+            if !matches!(kind,Kind::Fill|Kind::Satin){continue}
+            let spacing=if kind==Kind::Satin{s.params.satin_spacing(&_opt.fabric)}else{s.params.fill_spacing(&_opt.fabric)};
+            let mut peers=Vec::new();
+            for (j,q) in shapes.iter().enumerate(){
+                if i==j||q.color!=s.color{continue}
+                let Geometry::Fill{rings,..}=&q.geometry else{continue};
+                let c=ring_bounds(rings);
+                if c.is_empty()||c.height()<b.height()*0.8||c.height()>b.height()*1.25||c.width()>c.height()*1.8|| (c.center().y-b.center().y).abs()>b.height()*0.2 || (c.center().x-b.center().x).abs()>b.height()*4.0{continue}
+                let k=q.params.kind.unwrap_or(Kind::Fill);
+                if k!=kind{continue}
+                peers.push(if k==Kind::Satin{q.params.satin_spacing(&_opt.fabric)}else{q.params.fill_spacing(&_opt.fabric)});
+            }
+            if peers.len()<3{continue}
+            peers.sort_by(|a,b|a.total_cmp(b));
+            let median=peers[peers.len()/2];
+            if median>0.0&&(spacing/median<0.8||spacing/median>1.25){
+                add(Some(i),Level::Warning,format!("Possible inconsistent lettering density: row spacing {spacing:.2} mm versus nearby similar objects {median:.2} mm. Check intended font weight and stitch coverage before adjusting."));
+            }
+        }
+    }
     // Inspect the actual planned needle movements, not just source geometry.
     // Run boundaries represent travel/trim decisions and are not sewn segments.
     let mut long = 0usize;
