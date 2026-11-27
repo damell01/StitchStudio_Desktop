@@ -445,7 +445,12 @@ export function Digitizer({ onDone, initialArtwork, initialFile, onInsert }: {
           <div><span>Trims per 1,000 points</span><b>{(1000*(plan??review.plan).trims/Math.max(1,(plan??review.plan).stitches)).toFixed(1)}</b></div>
           <div><span>Long segments</span><b>{(selectedAudit??review.quality).long}</b></div>
           <div><span>Near-zero segments</span><b>{(selectedAudit??review.quality).zero}</b></div>
-          <button type="button" onClick={()=>setMode('density')}>Inspect needle density</button>
+          <div className="quality-inspector-actions"><button type="button" onClick={()=>setMode('density')}>Show density heatmap</button><button type="button" onClick={()=>setMode('stitches')}>Inspect stitch paths</button></div>
+          <details open={review.warnings.some(w=>w.includes('Possible underfilled artwork:'))}><summary>Artwork coverage · {review.warnings.filter(w=>w.includes('Possible underfilled artwork:')).length} flagged objects (generated plan)</summary>
+          {review.warnings.filter(w=>w.includes('Possible underfilled artwork:')).map((w,i)=><p key={i}>{w}</p>)}
+          <small>Automatic density and direction repair runs during digitizing. Remaining warnings require review. Alternative plans do not yet have a fresh artwork coverage audit.</small>
+          <button type="button" disabled={busy||processing} onClick={()=>{setChosen(0);setSettings(old=>({...old,artworkSimplification:null,optimizationStrength:0}));setMode('stitches')}}>Regenerate for coverage (no simplification)</button>
+          </details>
         </section>
         <div className="digitize-metrics">
           <div><strong>{(plan??review.plan).stitches.toLocaleString()}</strong><small>Stitch points</small></div>
