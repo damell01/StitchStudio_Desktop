@@ -223,7 +223,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   }
 
   return <>
-    {!insert&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All',...(premiumCount?['Premium artwork']:[]),'Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>{setCategory(item);setLimit(36)}}>{item}</button>)}</div>}
+    {(!insert||onPreview)&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All',...(premiumCount?['Premium artwork']:[]),'Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>{setCategory(item);setLimit(36)}}>{item}</button>)}</div>}
     <div className="library-filters">
       <label className="library-search"><Search size={16} /><input aria-label="Search templates" placeholder="Search templates" value={query} onChange={event => {setQuery(event.target.value);setLimit(36);}} /></label>
       <label>Category <select value={category} onChange={event => {setCategory(event.target.value);setLimit(36);}}>
@@ -232,7 +232,7 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
       <small>{results.length} {results.length === 1 ? 'design' : 'designs'}</small>
     </div>
     {results.length === 0 && <p role="status">No designs match your search.</p>}
-    <section className="template-grid" aria-label="Template results">
+    <section className={onPreview?"template-grid template-elements-grid":"template-grid"} aria-label="Template results">
       {shown.map(template => <article key={template.id} className={onPreview&&selectedId===template.id?'template-selected':undefined} draggable={!!onPreview} onDragStart={event=>{if(!onPreview)return;event.dataTransfer.setData("application/x-stitchstudio-template",template.id);event.dataTransfer.effectAllowed="copy";onPreview(template)}}>
         <button className="design-favorite" title="Toggle favorite"
           aria-label={(favorites.includes(template.id) ? 'Remove favorite ' : 'Favorite ') + template.name}
@@ -241,11 +241,11 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
         </button>
         <button type="button" className="template-art-select" aria-label={'Select '+template.name} aria-pressed={onPreview?selectedId===template.id:undefined} onClick={()=>onPreview?onPreview(template):setSelected(template)}><svg className="template-art" viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{ __html: template.art }} /></button>
         <small>{template.category}</small>
-        <h3>{template.name}</h3>
-        <button onClick={() => onPreview ? onPreview(template) : setSelected(template)} aria-label={`Preview ${template.name}`}
+        <h3 title={template.name}>{template.name}</h3>
+        {!onPreview&&<button onClick={() => onPreview ? onPreview(template) : setSelected(template)} aria-label={`Preview ${template.name}`}
           aria-pressed={onPreview ? selectedId === template.id : undefined}>
-          {onPreview ? 'Select design' : 'Preview design'} <ArrowRight size={15} />
-        </button>
+          Preview design <ArrowRight size={15} />
+        </button>}
       </article>)}
     </section>
     {onPreview ? results.length>limit&&<button onClick={()=>setLimit(previous=>previous+36)}>Show more templates</button> : <ListNavigation {...page}/>}
