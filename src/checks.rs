@@ -310,14 +310,21 @@ pub fn check(
             if !matches!(kind,Kind::Fill|Kind::Satin){continue}
             let spacing=if kind==Kind::Satin{s.params.satin_spacing(&_opt.fabric)}else{s.params.fill_spacing(&_opt.fabric)};
             let mut peers=Vec::new();
+            let mut other_kind=0usize;
+            let mut same_kind=0usize;
             for (j,q) in shapes.iter().enumerate(){
                 if i==j||q.color!=s.color{continue}
                 let Geometry::Fill{rings,..}=&q.geometry else{continue};
                 let c=ring_bounds(rings);
                 if c.is_empty()||c.height()<b.height()*0.8||c.height()>b.height()*1.25||c.width()>c.height()*1.8|| (c.center().y-b.center().y).abs()>b.height()*0.2 || (c.center().x-b.center().x).abs()>b.height()*4.0{continue}
                 let k=q.params.kind.unwrap_or(Kind::Fill);
-                if k!=kind{continue}
+                if !matches!(k,Kind::Fill|Kind::Satin){continue}
+                if k!=kind{other_kind+=1;continue}
+                same_kind+=1;
                 peers.push(if k==Kind::Satin{q.params.satin_spacing(&_opt.fabric)}else{q.params.fill_spacing(&_opt.fabric)});
+            }
+            if other_kind>=3&&other_kind>same_kind*2 {
+                add(Some(i),Level::Info,"Possible mixed lettering stitch types: nearby similar objects predominantly use a different fill or satin technique. Inspect visual weight; narrow and wide glyphs may legitimately need different stitch types.".into());
             }
             if peers.len()<3{continue}
             peers.sort_by(|a,b|a.total_cmp(b));
