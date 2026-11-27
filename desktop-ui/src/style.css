@@ -2000,3 +2000,22 @@ main>p{max-width:85ch;color:var(--studio-muted)}main>button:first-child{font-siz
 .font-picker .font-picker-results button { min-height: 38px; font-size: 12px; }
 .editor-workspace .studio-edit-bar { gap: 4px; padding-inline: 8px; overflow-x: auto; scrollbar-width: thin; }
 .editor-workspace .studio-edit-bar .studio-command-group { gap: 3px; padding-inline: 4px; }
+
+/* Studio workspace: opt-in tour, compact contextual inspector, more canvas. */
+.app > .tour-dock.tour-overlay { position: fixed; inset: auto 16px 48px auto; z-index: 80; width: min(340px,calc(100vw - 32px)); padding: 0; background: transparent; border: 0; }
+.tour-overlay .tour { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 14px; border: 1px solid var(--workspace-border); border-radius: 12px; background: var(--workspace-surface); box-shadow: 0 8px 28px #24173840; }
+.tour-overlay .tour :is(h2,p,progress,footer,small) { grid-column: auto; grid-row: auto; margin: 0; }
+.tour-overlay .tour footer { display: flex; justify-content: flex-end; gap: 6px; }
+.editor-workspace .studio-inspector-dock .placement-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; }
+.editor-workspace .studio-inspector-dock .placement-actions > .alignment-pair { grid-column: 1/-1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; }
+.editor-workspace .studio-inspector-dock .placement-actions > button { justify-content: flex-start; white-space: normal; line-height: 1.25; }
+.editor-workspace .studio-inspector-dock .studio-inspector-section { padding: 6px; margin-block: 3px; }
+.editor-workspace .studio-inspector-dock .studio-inspector-section > summary { font-size: 12px; padding: 4px; }
+.editor-workspace .studio-inspector-dock .studio-inspector-section > small { display: block; font-size: 11px; line-height: 1.4; letter-spacing: normal; font-weight: 400; margin: 4px 0; }
+.editor-workspace .studio-inspector-dock .inline-lettering fieldset { padding: 5px; margin: 0; }
+.editor-workspace .studio-inspector-dock .inline-lettering textarea { min-height: 42px; }
+@media (max-width: 1700px) {
+ .editor-workspace .studio-edit-bar .studio-toolbar-text span,
+ .editor-workspace .studio-edit-bar .studio-insert-action span { display: none; }
+ .editor-workspace .studio-edit-bar .studio-document { min-width: 64px; flex-basis: 85px; }
+}
