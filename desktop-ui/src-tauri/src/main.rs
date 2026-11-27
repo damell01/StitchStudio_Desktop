@@ -1893,13 +1893,57 @@ async fn optimize_editable_design(app:tauri::AppHandle)->Result<Preview,String>{
   let result=preview(&design);w.checkpoint_named("Optimize density");w.source=Some(source);w.current=Some(design);Ok(result)
  }).await.map_err(|e|e.to_string())?
 }
+fn repair_artwork_coverage(document:&zigzag::document::Document,design:&Design)->Option<(zigzag::document::Document,Design)>{
+        if design.stitch_count()<=100_000 && document.shapes.len()<=350 {
+            let gaps=|doc:&zigzag::document::Document,p:&Design|{
+                zigzag::checks::check(&doc.shapes,p,&doc.plan_options(),None).into_iter()
+                    .filter(|i|i.message.starts_with("Possible underfilled artwork:")).filter_map(|i|i.shape).collect::<Vec<_>>()
+            };
+            let flagged=gaps(&document,&design);
+            if !flagged.is_empty(){
+                let baseline=measure_stitches(&design);
+                let mut best=None;
+                for (factor,angle_offset) in [(0.90,0.0),(0.80,0.0),(1.0,45.0),(1.0,90.0),(0.90,45.0)] {
+                    let mut trial=(*document).clone();
+                    let fabric=trial.plan_options().fabric;
+                    for &i in &flagged {
+                        if trial.shapes.get(i).is_some_and(|s|trial.layer_properties(&s.id).is_some_and(|l|l.locked||l.hidden)){continue}
+                        if let Some(s)=trial.shapes.get_mut(i){
+                            use zigzag::params::Kind;
+                            let spacing=match s.params.kind.unwrap_or(Kind::Fill){
+                                Kind::Fill=>s.params.fill_spacing(&fabric),
+                                Kind::Satin=>s.params.satin_spacing(&fabric),
+                                _=>continue,
+                            };
+                            if factor<1.0{s.params.spacing=Some((spacing*factor).max(0.30).min(spacing));}
+                            if angle_offset!=0.0&&s.params.kind.unwrap_or(Kind::Fill)==Kind::Fill&&s.params.angle.is_none(){s.params.angle=Some((s.params.fill_angle()+angle_offset).rem_euclid(180.0));}
+                        }
+                    }
+                    if trial.sync().is_err(){continue}
+                    let p=trial.plan();
+                    let audit=measure_stitches(&p);
+                    let remaining=gaps(&trial,&p);
+                    if remaining.len()<flagged.len()&&remaining.iter().all(|i|flagged.contains(i))
+                        &&p.stitch_count()<=design.stitch_count().saturating_mul(125)/100
+                        &&audit.long<=baseline.long&&audit.zero<=baseline.zero
+                        &&production_hotspots(&p).1<=production_hotspots(&design).1
+                        &&best.as_ref().is_none_or(|(_,old,n):&(zigzag::document::Document,Design,usize)|remaining.len()<*n||(remaining.len()==*n&&p.stitch_count()<old.stitch_count())){
+                        best=Some((trial,p,remaining.len()));
+                    }
+                }
+                if let Some((next,p,_))=best{return Some((next,p));}
+            }
+        }
+    None
+}
 #[tauri::command]
 fn repair_stitches(state:tauri::State<'_,Mutex<Workspace>>)->Result<Preview,String>{
  let mut w=state.lock().map_err(|e|e.to_string())?;
  // Repair editable artwork through its source, never by flattening the plan.
  if let Some(source)=w.source.clone(){
    let original=w.current.as_ref().ok_or("Open artwork first")?;
-   let (doc,design)=optimized_density(&source,original)
+   let (doc,design)=repair_artwork_coverage(&source,original)
+     .or_else(||optimized_density(&source,original))
      .or_else(|| {
        let mut regenerated=source.clone();
        regenerated.sync().ok()?;
@@ -3642,46 +3686,7 @@ async fn digitize_artwork(
                 document=next;design=plan;
             }
         }
-        // Repair only objects flagged by the intended-artwork coverage audit.
-        if design.stitch_count()<=100_000 && document.shapes.len()<=350 {
-            let gaps=|doc:&zigzag::document::Document,p:&Design|{
-                zigzag::checks::check(&doc.shapes,p,&doc.plan_options(),None).into_iter()
-                    .filter(|i|i.message.starts_with("Possible underfilled artwork:")).filter_map(|i|i.shape).collect::<Vec<_>>()
-            };
-            let flagged=gaps(&document,&design);
-            if !flagged.is_empty(){
-                let baseline=measure_stitches(&design);
-                let mut best=None;
-                for (factor,angle_offset) in [(0.90,0.0),(0.80,0.0),(1.0,45.0),(1.0,90.0),(0.90,45.0)] {
-                    let mut trial=document.clone();
-                    let fabric=trial.plan_options().fabric;
-                    for &i in &flagged {
-                        if let Some(s)=trial.shapes.get_mut(i){
-                            use zigzag::params::Kind;
-                            let spacing=match s.params.kind.unwrap_or(Kind::Fill){
-                                Kind::Fill=>s.params.fill_spacing(&fabric),
-                                Kind::Satin=>s.params.satin_spacing(&fabric),
-                                _=>continue,
-                            };
-                            if factor<1.0{s.params.spacing=Some((spacing*factor).max(0.30).min(spacing));}
-                            if angle_offset!=0.0&&s.params.kind.unwrap_or(Kind::Fill)==Kind::Fill&&s.params.angle.is_none(){s.params.angle=Some((s.params.fill_angle()+angle_offset).rem_euclid(180.0));}
-                        }
-                    }
-                    if trial.sync().is_err(){continue}
-                    let p=trial.plan();
-                    let audit=measure_stitches(&p);
-                    let remaining=gaps(&trial,&p);
-                    if remaining.len()<flagged.len()&&remaining.iter().all(|i|flagged.contains(i))
-                        &&p.stitch_count()<=design.stitch_count().saturating_mul(125)/100
-                        &&audit.long<=baseline.long&&audit.zero<=baseline.zero
-                        &&production_hotspots(&p).1<=production_hotspots(&design).1
-                        &&best.as_ref().is_none_or(|(_,old,n):&(zigzag::document::Document,Design,usize)|remaining.len()<*n||(remaining.len()==*n&&p.stitch_count()<old.stitch_count())){
-                        best=Some((trial,p,remaining.len()));
-                    }
-                }
-                if let Some((next,p,_))=best{document=next;design=p;}
-            }
-        }
+        if let Some((next,p))=repair_artwork_coverage(&document,&design){document=next;design=p;}
         let count = design.stitch_count();
         if count == 0 { return Err("No stitchable artwork found".into()); }
         if count > 2_000_000 { return Err("Design exceeds the two million stitch limit".into()); }
