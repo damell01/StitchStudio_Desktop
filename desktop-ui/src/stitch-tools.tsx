@@ -9,6 +9,8 @@ type PathOperation = {kind:'unite'|'minus_front'|'intersect'|'exclude'|'outline_
 
 function IssueList({width,height,onLocate,revision,scan}:{width:number;height:number;onLocate:(uid:number)=>void;revision?:unknown;scan?:number}) {
   const [issues,setIssues]=useState<Issue[]|null>(null);
+  const [severity,setSeverity]=useState<Issue['severity']|'all'>('all');
+  const [page,setPage]=useState(0);
   const [error,setError]=useState('');
   useEffect(()=>{
     let active=true;setIssues(null);setError('');
@@ -20,7 +22,10 @@ function IssueList({width,height,onLocate,revision,scan}:{width:number;height:nu
   if(error)return <p role="alert">{error}</p>;
   if(issues===null)return <p role="status">Checking the current stitch plan…</p>;
   if(!issues.length)return <p role="status">No issues found in this check.</p>;
-  return <ul className="stitch-tools-issues">{issues.map((issue,index)=>
+  const sorted=[...issues].sort((a,b)=>({error:0,warning:1,info:2}[a.severity]-{error:0,warning:1,info:2}[b.severity]));
+  const visible=sorted.filter(i=>severity==='all'||i.severity===severity);
+  const pages=Math.max(1,Math.ceil(visible.length/3)),activePage=Math.min(page,pages-1);
+  return <div className="quality-issue-browser"><div className="quality-counts" role="group" aria-label="Filter inspection results">{(['all','error','warning','info'] as const).map(s=><button key={s} aria-pressed={severity===s} onClick={()=>{setSeverity(s);setPage(0)}}><strong>{s==='all'?issues.length:issues.filter(i=>i.severity===s).length}</strong><small>{s==='all'?'All':s==='error'?'Errors':s==='warning'?'Warnings':'Notes'}</small></button>)}</div><ul className="stitch-tools-issues">{visible.slice(activePage*3,activePage*3+3).map((issue,index)=>
     <li key={index}>
       <strong>{issue.severity==='info'?'Note':issue.severity==='error'?'Error':'Warning'}</strong>
       <span>{issue.message}</span>
@@ -29,7 +34,7 @@ function IssueList({width,height,onLocate,revision,scan}:{width:number;height:nu
         event.currentTarget.closest('dialog')?.close();
       }}>Locate {issue.label||'object'}</button>}
     </li>
-  )}</ul>;
+  )}</ul>{!visible.length&&<small>No issues in this category.</small>}{pages>1&&<div className="quality-pagination"><button disabled={activePage===0} onClick={()=>setPage(activePage-1)}>Previous</button><small>{activePage+1} / {pages}</small><button disabled={activePage>=pages-1} onClick={()=>setPage(activePage+1)}>Next</button></div>}</div>;
 }
 
 type RepairPlan={stitches:number;trims:number;blocks:{color:number[];runs:number[][][]}[]};
@@ -68,8 +73,9 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,onAppl
     }finally{setWorking(false)}
   }
   return <section className="workspace-inspector-group quality-inspector">
-    <h3>Quality Inspector</h3>
-    <small>Coverage, density, stitch lengths and hoop safety. Test sew before production.</small>
+    <h3>Quality review</h3>
+    <small>Check stitch quality before production.</small>
+    <IssueList width={width} height={height} onLocate={onLocate} revision={revision} scan={scan}/>
     <div className="inspector-actions"><button disabled={disabled||working} onClick={()=>setScan(n=>n+1)}>Refresh inspection</button><button disabled={disabled||working} onClick={()=>void inspectRepair(false)}>{working?'Checking repairs…':'Preview coverage repair'}</button><button disabled={disabled||working} onClick={()=>void inspectRepair(true)}>Preview lettering balance</button></div>
     {message&&<p role="status">{message}</p>}
     {current&&<div className="workspace-stack">
@@ -90,7 +96,6 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,onAppl
       <small>Applies the shown stitch plan. Undo is available.</small>
     </div>}
     <button disabled={disabled||working} onClick={onRepair}>Try general repair</button>
-    <IssueList width={width} height={height} onLocate={onLocate} revision={revision} scan={scan}/>
   </section>;
 }
 
