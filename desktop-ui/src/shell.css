@@ -1,0 +1,202 @@
+/* Stitch Studio shell and theme.
+   Layout: a left navigation sidebar (full or icon rail) beside a slim top bar and the page.
+   Colors: one lavender system for light and dark. The older palette variables
+   (--lav-*, --studio-*, --workspace-*, --brand*) are remapped here so every existing
+   component picks the same tokens up. */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/plus-jakarta-sans';
+
+html[data-palette][data-theme]{
+ --font-ui:'Inter Variable','Inter','Segoe UI',system-ui,-apple-system,sans-serif;
+ --font-display:'Plus Jakarta Sans Variable','Plus Jakarta Sans','Segoe UI',system-ui,sans-serif;
+ --r-s:6px;--r-m:9px;--r-l:14px;
+ --side-full:236px;--side-rail:62px;--topbar:52px;
+ --shadow-1:0 1px 2px rgba(36,22,58,.06),0 1px 1px rgba(36,22,58,.04);
+ --shadow-2:0 8px 24px rgba(36,22,58,.10),0 2px 6px rgba(36,22,58,.06);
+ --shadow-3:0 18px 50px rgba(36,22,58,.18),0 4px 12px rgba(36,22,58,.08);
+}
+/* Lavender light */
+html[data-palette=lavender][data-theme=light]{
+ --bg:#f6f4fa;--surface:#ffffff;--surface-2:#f1edf8;--surface-3:#e9e3f3;
+ --line:#e4ddee;--line-strong:#d3c9e2;--text:#231b2f;--muted:#6c6379;--faint:#9a91a8;
+ --brand:#6b45ad;--brand-hover:#5a3796;--brand-soft:#efe8fb;--brand-accent:#7f58c4;--brand-ink:#4d2d86;
+ --sidebar-bg:#fbfafd;--canvas-bg:#ece7f3;
+ --lav-bg:var(--bg);--lav-panel:var(--surface);--lav-text:var(--text);--lav-border:var(--line);--lav-accent:var(--brand);
+ --studio-ink:var(--text);--studio-line:var(--line);--studio-paper:var(--bg);--studio-panel:var(--surface);--studio-muted:var(--muted);
+ --border:var(--line);--panel:var(--surface);--accent:var(--brand);
+ color-scheme:light;
+}
+/* Lavender dark */
+html[data-palette=lavender][data-theme=dark]{
+ --bg:#141118;--surface:#1d1924;--surface-2:#25202e;--surface-3:#2e2839;
+ --line:#332c3e;--line-strong:#443b52;--text:#efe9f6;--muted:#a79db6;--faint:#7c7289;
+ --brand:#8a63cf;--brand-hover:#9c78dc;--brand-soft:#2e2440;--brand-accent:#b394ee;--brand-ink:#d6c4f7;
+ --sidebar-bg:#18141e;--canvas-bg:#100d14;
+ --shadow-1:0 1px 2px rgba(0,0,0,.35);--shadow-2:0 10px 28px rgba(0,0,0,.45);--shadow-3:0 20px 60px rgba(0,0,0,.55);
+ --lav-bg:var(--bg);--lav-panel:var(--surface);--lav-text:var(--text);--lav-border:var(--line);--lav-accent:var(--brand);
+ --studio-ink:var(--text);--studio-line:var(--line);--studio-paper:var(--bg);--studio-panel:var(--surface);--studio-muted:var(--muted);
+ --border:var(--line);--panel:var(--surface);--accent:var(--brand);
+ color-scheme:dark;
+}
+/* Other palettes keep their brand hues on the same neutral system. */
+html[data-palette]:not([data-palette=lavender])[data-theme=light]{--bg:#f5f6f8;--surface:#fff;--surface-2:#f0f2f5;--surface-3:#e7eaef;--line:#e1e5ea;--line-strong:#cfd5dd;--text:#1d232b;--muted:#5f6875;--faint:#949ca8;--brand-ink:var(--brand);--sidebar-bg:#fafbfc;--canvas-bg:#e9ecf1}
+html[data-palette]:not([data-palette=lavender])[data-theme=dark]{--bg:#111418;--surface:#1a1e24;--surface-2:#22272e;--surface-3:#2b313a;--line:#2f353e;--line-strong:#3e4652;--text:#e9edf2;--muted:#9ba5b2;--faint:#6f7884;--brand-ink:var(--brand-accent);--sidebar-bg:#15181d;--canvas-bg:#0d0f12}
+
+html[data-palette][data-theme] body{background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:14px;-webkit-font-smoothing:antialiased;font-feature-settings:'cv11','ss01'}
+html[data-palette][data-theme] :is(button,input,select,textarea){font-family:inherit}
+html[data-palette][data-theme] .studio-shell :is(h1,h2,h3){font-family:var(--font-display);letter-spacing:-.015em;text-wrap:balance}
+html[data-palette][data-theme] .studio-shell small{letter-spacing:normal;font-weight:500}
+
+/* ---------- Shell grid ---------- */
+html[data-palette][data-theme] .app.studio-shell{
+ display:grid!important;height:100vh;overflow:hidden;
+ grid-template-columns:var(--side-full) minmax(0,1fr)!important;
+ grid-template-rows:var(--topbar) minmax(0,1fr)!important;
+ grid-template-areas:"side top" "side main";
+}
+html[data-palette][data-theme][data-sidebar=rail] .app.studio-shell{grid-template-columns:var(--side-rail) minmax(0,1fr)!important}
+html[data-palette][data-theme] .app.studio-shell.tour-active{grid-template-rows:var(--topbar) minmax(0,1fr) auto!important;grid-template-areas:"side top" "side main" "side tour"}
+html[data-palette][data-theme] .app.studio-shell>.tour-dock{grid-area:tour}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace){grid-template-rows:44px minmax(0,1fr)!important}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace).tour-active{grid-template-rows:44px minmax(0,1fr) auto!important}
+html[data-palette][data-theme] .app.studio-shell:has(.studio-focus-active){grid-template-columns:0 minmax(0,1fr)!important;grid-template-rows:0 minmax(0,1fr)!important}
+.app.studio-shell:has(.studio-focus-active)>:is(.studio-sidebar,.studio-topbar){display:none!important}
+html[data-palette][data-theme] .app.studio-shell>main{grid-area:main!important;min-width:0;min-height:0;background:var(--bg)}
+html[data-palette][data-theme] .app.studio-shell>main.page-workspace,html[data-palette][data-theme] .app.studio-shell>main.home-workspace{padding:22px clamp(16px,2.4vw,36px) 32px;overflow:auto}
+
+/* ---------- Sidebar ---------- */
+html[data-palette][data-theme] .app.studio-shell>.studio-sidebar{
+ grid-area:side!important;display:flex!important;flex-direction:column;align-items:stretch;gap:0;min-height:0;
+ padding:0;margin:0;border:0;border-right:1px solid var(--line);border-radius:0;background:var(--sidebar-bg);color:var(--text);
+ overflow:hidden;position:relative;z-index:20;box-shadow:none;
+}
+.studio-sidebar .sidebar-brand{display:flex;align-items:center;gap:10px;height:var(--topbar);padding:0 16px;flex:none;border-bottom:1px solid transparent}
+.studio-sidebar .sidebar-logo{display:grid;place-items:center;width:30px;height:30px;flex:none;border-radius:9px;color:#fff;background:linear-gradient(140deg,var(--brand-accent),var(--brand));box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 2px 6px color-mix(in srgb,var(--brand) 35%,transparent)}
+.studio-sidebar .sidebar-brand-text{display:flex;flex-direction:column;line-height:1.1;min-width:0}
+.studio-sidebar .sidebar-brand-text strong{font-family:var(--font-display);font-size:15px;font-weight:750;letter-spacing:-.02em;white-space:nowrap}
+.studio-sidebar .sidebar-brand-text small{font-size:11px;color:var(--muted);white-space:nowrap}
+.studio-sidebar .sidebar-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px 10px 10px;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
+html[data-palette][data-theme] .studio-sidebar .sidebar-item{
+ display:flex;align-items:center;gap:11px;width:100%;min-height:34px;margin:0;padding:0 10px;border:0;border-radius:8px;
+ background:transparent;color:var(--text);font-size:13.5px;font-weight:520;text-align:left;justify-content:flex-start;box-shadow:none;white-space:nowrap;position:relative;
+}
+html[data-palette][data-theme] .studio-sidebar .sidebar-item svg{flex:none;color:var(--muted);transition:color .12s}
+html[data-palette][data-theme] .studio-sidebar .sidebar-item span{overflow:hidden;text-overflow:ellipsis}
+html[data-palette][data-theme] .studio-sidebar .sidebar-item:hover{background:var(--surface-2)}
+html[data-palette][data-theme] .studio-sidebar .sidebar-item:hover svg{color:var(--text)}
+html[data-palette][data-theme] .studio-sidebar .sidebar-item[aria-current=page]{background:var(--brand-soft);color:var(--brand-ink);font-weight:650}
+html[data-palette][data-theme] .studio-sidebar .sidebar-item[aria-current=page] svg{color:var(--brand)}
+html[data-theme=dark] .studio-sidebar .sidebar-item[aria-current=page] svg{color:var(--brand-accent)!important}
+html[data-palette][data-theme] .studio-sidebar .sidebar-item[aria-current=page]::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--brand)}
+.studio-sidebar .sidebar-group{margin-top:10px}
+html[data-palette][data-theme] .studio-sidebar .sidebar-group>summary{
+ display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer;margin:0;padding:4px 10px;min-height:0;border-radius:6px;
+ font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);background:none!important;
+}
+.studio-sidebar .sidebar-group>summary::-webkit-details-marker{display:none}
+.studio-sidebar .sidebar-group>summary svg{transition:transform .15s;opacity:.7}
+.studio-sidebar .sidebar-group:not([open])>summary svg{transform:rotate(-90deg)}
+html[data-palette][data-theme] .studio-sidebar .sidebar-group>summary:hover{color:var(--muted)}
+/* The old dropdown menus positioned these lists absolutely; the sidebar keeps them in flow. */
+html[data-palette][data-theme] .studio-sidebar .sidebar-group>div{position:static!important;display:flex!important;flex-direction:column;gap:1px;padding:2px 0 0;margin:0;border:0!important;box-shadow:none!important;background:transparent!important;min-width:0!important;width:auto!important;inset:auto!important;transform:none!important}
+html[data-palette][data-theme] .studio-sidebar .sidebar-collapse{
+ display:flex;align-items:center;gap:11px;margin:6px 10px 10px;padding:0 10px;min-height:34px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:13px;justify-content:flex-start;box-shadow:none
+}
+html[data-palette][data-theme] .studio-sidebar .sidebar-collapse:hover{background:var(--surface-2);color:var(--text)}
+
+/* Icon rail */
+.studio-sidebar.is-rail .sidebar-brand{padding:0;justify-content:center}
+.studio-sidebar.is-rail :is(.sidebar-brand-text,.sidebar-item>span,.sidebar-collapse>span){display:none}
+.studio-sidebar.is-rail .sidebar-scroll{padding:6px 8px 10px;align-items:center}
+html[data-palette][data-theme] .studio-sidebar.is-rail .sidebar-item{justify-content:center;padding:0;width:42px;min-height:38px}
+html[data-palette][data-theme] .studio-sidebar.is-rail .sidebar-item[aria-current=page]::before{left:-8px}
+html[data-palette][data-theme] .studio-sidebar.is-rail .sidebar-group{margin-top:6px;padding-top:6px;border-top:1px solid var(--line);width:100%;display:flex;flex-direction:column;align-items:center}
+html[data-palette][data-theme] .studio-sidebar.is-rail .sidebar-group>summary{display:none}
+html[data-palette][data-theme] .studio-sidebar.is-rail .sidebar-group>div{align-items:center}
+html[data-palette][data-theme] .studio-sidebar.is-rail .sidebar-collapse{justify-content:center;padding:0;margin:6px auto 10px;width:42px}
+
+/* ---------- Top bar ---------- */
+html[data-palette][data-theme] .app.studio-shell>.studio-topbar{
+ grid-area:top!important;display:flex!important;align-items:center;gap:10px;min-width:0;height:auto;padding:0 clamp(12px,1.6vw,24px);
+ background:color-mix(in srgb,var(--bg) 82%,var(--surface));color:var(--text);border-bottom:1px solid var(--line);box-shadow:none;position:relative;z-index:15;
+}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace)>.studio-topbar{background:var(--surface);padding:0 10px}
+.studio-topbar .topbar-spacer{flex:1}
+html[data-palette][data-theme] .studio-topbar .command-launch{width:min(40vw,480px);height:34px;margin:0;padding:0 12px;gap:9px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--muted);font-size:13px;box-shadow:var(--shadow-1)}
+html[data-palette][data-theme] .studio-topbar .command-launch:hover{border-color:var(--line-strong);background:var(--surface)}
+html[data-palette][data-theme] .studio-topbar .command-launch kbd{padding:1px 6px;border:1px solid var(--line);border-radius:5px;font-family:var(--font-ui);font-size:11px;background:var(--surface-2);opacity:1;color:var(--muted)}
+html[data-palette][data-theme] .studio-topbar :is(.topbar-tour,.topbar-icon,.topbar-update){height:34px;min-height:0;margin:0;padding:0 12px;gap:7px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--text);font-size:13px;font-weight:560;box-shadow:none}
+html[data-palette][data-theme] .studio-topbar .topbar-icon{width:34px;padding:0;justify-content:center}
+html[data-palette][data-theme] .studio-topbar :is(.topbar-tour,.topbar-icon):hover{background:var(--surface-2)}
+html[data-palette][data-theme] .studio-topbar .topbar-update{background:var(--brand);border-color:var(--brand);color:#fff}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace) .studio-topbar :is(.topbar-tour,.topbar-icon){height:30px}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace) .studio-topbar .topbar-icon{width:30px}
+.studio-topbar #studio-project-tabs{flex:1 1 auto;min-width:0;margin:0}
+html[data-palette][data-theme] .studio-topbar #studio-project-tabs>.project-tab-strip{justify-content:flex-start}
+
+/* ---------- Shared components ---------- */
+html[data-palette][data-theme] .studio-shell main :is(article,.preferences){border-radius:var(--r-l);border-color:var(--line);box-shadow:var(--shadow-1)}
+html[data-palette][data-theme] .studio-shell main button.primary,html[data-palette][data-theme] .studio-shell dialog button.primary{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 1px 2px color-mix(in srgb,var(--brand) 40%,transparent),inset 0 1px 0 rgba(255,255,255,.12)}
+html[data-palette][data-theme] .studio-shell main button.primary:hover:not(:disabled){background:var(--brand-hover);border-color:var(--brand-hover)}
+html[data-palette][data-theme] .studio-shell main :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea){border-radius:8px;border-color:var(--line-strong)}
+html[data-palette][data-theme] .studio-shell main :is(input,select,textarea):focus{border-color:var(--brand-accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-accent) 22%,transparent)}
+html[data-palette][data-theme] .studio-shell dialog{border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-3);background:var(--surface);color:var(--text)}
+html[data-palette][data-theme] .studio-shell dialog::backdrop{background:rgba(20,12,32,.42);backdrop-filter:blur(3px)}
+
+/* Page header */
+html[data-palette][data-theme] .app.studio-shell>main.page-workspace>.workspace-heading{padding:0 0 14px;margin:0 0 18px}
+html[data-palette][data-theme] .app.studio-shell>main.page-workspace>.workspace-heading h1{font-size:24px;font-weight:760;letter-spacing:-.025em}
+
+/* Home */
+.studio-shell .studio-home{--home-ink:var(--text);--home-soft:var(--surface-2);--home-edge:var(--line);--home-panel:var(--surface);--home-muted:var(--muted)}
+html[data-palette][data-theme] .studio-shell .studio-home-hero{border-radius:20px;box-shadow:var(--shadow-1);background:radial-gradient(120% 140% at 0% 0%,var(--surface) 30%,var(--brand-soft) 100%)}
+html[data-palette][data-theme] .studio-shell .studio-home-hero h1{font-weight:800;letter-spacing:-.035em}
+html[data-palette][data-theme] .studio-shell :is(.studio-home-templates,.studio-home-recent,.studio-home-continue,.studio-home-tools>section){border-radius:18px;box-shadow:var(--shadow-1)}
+
+/* Narrow windows: the sidebar becomes a rail. */
+@media(max-width:980px){
+ html[data-palette][data-theme] .app.studio-shell{grid-template-columns:var(--side-rail) minmax(0,1fr)!important}
+ .studio-sidebar:not(.is-drawer) :is(.sidebar-brand-text,.sidebar-item>span,.sidebar-collapse>span){display:none}
+ .studio-sidebar:not(.is-drawer) .sidebar-brand{padding:0;justify-content:center}
+ .studio-sidebar:not(.is-drawer) .sidebar-scroll{padding:6px 8px 10px;align-items:center}
+ html[data-palette][data-theme] .studio-sidebar:not(.is-drawer) .sidebar-item{justify-content:center;padding:0;width:42px;min-height:38px}
+ html[data-palette][data-theme] .studio-sidebar:not(.is-drawer) .sidebar-group>summary,html[data-palette][data-theme] .studio-sidebar:not(.is-drawer) .sidebar-collapse{display:none}
+ html[data-palette][data-theme] .studio-sidebar:not(.is-drawer) .sidebar-group{border-top:1px solid var(--line);padding-top:6px;margin-top:6px;width:100%}
+ html[data-palette][data-theme] .studio-sidebar:not(.is-drawer) .sidebar-group>div{align-items:center}
+ .studio-topbar .topbar-tour{font-size:0!important;width:34px;padding:0!important;justify-content:center}
+}
+@media(prefers-reduced-motion:reduce){.app.studio-shell{transition:none}}
+[data-reduced=true] .app.studio-shell{transition:none}
+
+/* ---------- Editor: sidebar as a drawer ---------- */
+html[data-palette][data-theme][data-sidebar=drawer] .app.studio-shell{grid-template-columns:0 minmax(0,1fr)!important}
+html[data-palette][data-theme] .app.studio-shell>.studio-sidebar.is-drawer{
+ position:fixed;top:0;bottom:0;left:0;width:var(--side-full);z-index:200;visibility:hidden;transform:translateX(-100%);
+ transition:none;box-shadow:var(--shadow-3);border-right:1px solid var(--line);
+}
+html[data-palette][data-theme] .app.studio-shell>.studio-sidebar.is-drawer.is-open{visibility:visible;transform:none;animation:ui-drawer-in .2s ease-out}
+@keyframes ui-drawer-in{from{transform:translateX(-100%)}}
+.sidebar-backdrop{position:fixed;inset:0;z-index:190;background:rgba(20,12,32,.32);backdrop-filter:blur(2px);animation:ui-fade .15s ease-out}
+@keyframes ui-fade{from{opacity:0}}
+.studio-topbar .topbar-editor-nav{display:flex;align-items:center;gap:4px;padding-right:8px;margin-right:4px;border-right:1px solid var(--line)}
+html[data-palette][data-theme] .studio-topbar .topbar-logo{width:34px;height:34px;min-height:0;padding:0;margin:0;border:0;border-radius:9px;background:transparent;display:grid;place-items:center;box-shadow:none}
+html[data-palette][data-theme] .studio-topbar .topbar-logo .sidebar-logo{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;color:#fff;background:linear-gradient(140deg,var(--brand-accent),var(--brand))}
+html[data-palette][data-theme] .studio-topbar .topbar-logo:hover .sidebar-logo{filter:brightness(1.08)}
+@media(prefers-reduced-motion:reduce){html[data-palette][data-theme] .app.studio-shell>.studio-sidebar.is-drawer{transition:none}}
+
+/* Any page-level group made only of toggle buttons reads as segmented tabs. */
+html[data-palette][data-theme] .app.studio-shell>main.page-workspace .studio-tools[role=group]:not(:has(>:not(button[aria-pressed]))){
+ display:inline-flex;width:auto;gap:2px;padding:3px;margin:0 0 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);box-shadow:none;flex-wrap:wrap
+}
+html[data-palette][data-theme] .app.studio-shell>main.page-workspace .studio-tools[role=group]:not(:has(>:not(button[aria-pressed])))>button{min-height:30px;height:30px;padding:0 13px;margin:0;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;font-weight:600;box-shadow:none}
+html[data-palette][data-theme] .app.studio-shell>main.page-workspace .studio-tools[role=group]:not(:has(>:not(button[aria-pressed])))>button:hover{color:var(--text)}
+html[data-palette][data-theme] .app.studio-shell>main.page-workspace .studio-tools[role=group]:not(:has(>:not(button[aria-pressed])))>button[aria-pressed=true]{background:var(--surface);color:var(--brand-ink);box-shadow:var(--shadow-1)}
+html[data-palette][data-theme] .page-tabs{background:var(--surface-2)}
+html[data-palette][data-theme] .page-tabs button[aria-pressed=true]{color:var(--brand-ink)}
+
+/* Denser sidebar on short windows. */
+@media(max-height:860px){
+ html[data-palette][data-theme] .studio-sidebar .sidebar-item{min-height:31px}
+ .studio-sidebar .sidebar-group{margin-top:6px}
+ html[data-palette][data-theme] .studio-sidebar .sidebar-collapse{min-height:30px;margin-top:4px;margin-bottom:6px}
+}

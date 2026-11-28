@@ -1,0 +1,119 @@
+/* Design studio: command bar, floating mode switch and canvas toolbar, framed canvas, status bar. */
+html[data-palette][data-theme] .editor-workspace{
+ --workspace-background:var(--canvas-bg);--workspace-surface:var(--surface);--workspace-border:var(--line);
+ --workspace-text:var(--text);--workspace-accent:var(--brand);--workspace-soft:var(--brand-soft);--workspace-muted:var(--muted);
+ background:var(--canvas-bg)!important;
+}
+
+/* ---------- Command bar ---------- */
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar{
+ min-height:50px;height:50px;padding:0 10px 0 14px;gap:6px;background:var(--surface);border:0;border-bottom:1px solid var(--line);box-shadow:none;
+}
+html[data-palette][data-theme] .editor-workspace .studio-document{gap:9px;margin-right:auto}
+html[data-palette][data-theme] .editor-workspace .studio-document h1{font-family:var(--font-display);font-size:15.5px;font-weight:720;letter-spacing:-.015em;color:var(--text)}
+html[data-palette][data-theme] .editor-workspace .studio-document svg{color:var(--brand)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(.studio-tool-icon,.workspace-options>summary,.studio-create-menu>summary){
+ width:34px;height:34px;min-height:34px;padding:0;display:inline-grid;place-items:center;border:0;border-radius:8px;background:transparent;color:var(--muted);box-shadow:none;
+}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-create-menu>summary{width:auto;padding:0 10px;display:inline-flex;gap:6px;color:var(--text);font-weight:600;font-size:13px}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(.studio-tool-icon,.workspace-options>summary):hover:not(:disabled){background:var(--surface-2);color:var(--text)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(.studio-tool-icon[aria-pressed=true],details[open]>summary){background:var(--brand-soft);color:var(--brand-ink)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-command-group{gap:2px;padding:0 4px;margin:0 2px;border:0;border-left:1px solid var(--line);border-radius:0;background:transparent}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-insert-action{height:34px;min-height:34px;width:auto;padding:0 9px;border:0;border-radius:8px;background:transparent;color:var(--muted)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-insert-action:hover{background:var(--surface-2);color:var(--text)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(button[aria-label="Delete selection"],.studio-price-job,.studio-save-design,.studio-export){height:34px;min-height:34px;padding:0 13px;border-radius:9px;font-size:13px;font-weight:600;gap:7px}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar button[aria-label="Delete selection"]{border:0;background:transparent;color:var(--muted)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar button[aria-label="Delete selection"]:hover:not(:disabled){background:#fdecef;color:#b42345}
+html[data-theme=dark] .editor-workspace .studio-edit-bar button[aria-label="Delete selection"]:hover:not(:disabled){background:#3a1f27;color:#ff9db1}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(.studio-price-job,.studio-save-design){border:1px solid var(--line-strong);background:var(--surface);color:var(--text)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(.studio-price-job,.studio-save-design):hover:not(:disabled){background:var(--surface-2)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-export{border:1px solid var(--brand);background:var(--brand);color:#fff;box-shadow:0 1px 2px color-mix(in srgb,var(--brand) 40%,transparent),inset 0 1px 0 rgba(255,255,255,.14)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-export:hover:not(:disabled){background:var(--brand-hover);border-color:var(--brand-hover)}
+html[data-palette][data-theme] .editor-workspace .workspace-options-panel{border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-2);padding:6px}
+html[data-palette][data-theme] .editor-workspace .workspace-options-panel>button{border:0;border-radius:7px;background:transparent;justify-content:flex-start;font-size:13px}
+html[data-palette][data-theme] .editor-workspace .workspace-options-panel>button:hover{background:var(--surface-2)}
+
+/* ---------- Canvas frame ---------- */
+html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layout{background:var(--canvas-bg);padding:10px;gap:10px}
+html[data-palette][data-theme] .editor-workspace .canvas-panel{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--canvas-bg);box-shadow:var(--shadow-1)}
+html[data-palette][data-theme] .editor-workspace .design-canvas{background:var(--canvas-bg)!important}
+html[data-palette][data-theme] .editor-workspace .design-canvas rect[fill="url(#hoop-fabric)"],
+html[data-palette][data-theme] .editor-workspace .design-canvas rect[fill="#fffdf5"]:first-of-type{filter:drop-shadow(0 6px 18px rgba(40,22,70,.16))}
+html[data-theme=dark] .editor-workspace .design-canvas rect[fill="url(#hoop-fabric)"]{filter:drop-shadow(0 8px 26px rgba(0,0,0,.6))}
+
+/* Mode switch floats over the top of the canvas. */
+html[data-palette][data-theme] .editor-workspace .studio-view-modes{
+ position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:6;width:auto;min-height:0;height:auto;
+ display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:11px;background:color-mix(in srgb,var(--surface) 92%,transparent);
+ backdrop-filter:blur(8px);box-shadow:var(--shadow-2);
+}
+html[data-palette][data-theme] .editor-workspace .studio-view-modes>button{height:30px;min-height:0;padding:0 12px;margin:0;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:13px;font-weight:600;gap:6px;box-shadow:none}
+html[data-palette][data-theme] .editor-workspace .studio-view-modes>button:hover:not(:disabled){color:var(--text);background:var(--surface-2)}
+html[data-palette][data-theme] .editor-workspace .studio-view-modes>button:is([aria-pressed=true],[aria-current],.selected,[aria-selected=true]){background:var(--brand);color:#fff;box-shadow:0 1px 3px color-mix(in srgb,var(--brand) 45%,transparent)}
+
+/* Canvas toolbar floats as a pill. */
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera.studio-camera-docked{
+ position:absolute;left:50%;transform:translateX(-50%);bottom:14px;top:auto;z-index:6;width:auto;max-width:calc(100% - 24px);height:auto;min-height:0;
+ display:flex;align-items:center;gap:3px;padding:4px;border:1px solid var(--line);border-radius:13px;
+ background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(8px);box-shadow:var(--shadow-2);overflow:visible;
+}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera.studio-camera-docked.studio-camera-top{top:58px;bottom:auto}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera :is(button,summary){height:32px;min-height:32px;padding:0 10px;margin:0;border:0;border-radius:9px;background:transparent;color:var(--text);font-size:12.5px;font-weight:600;gap:6px;box-shadow:none}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera .studio-tool-icon{width:32px;padding:0;justify-content:center}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera :is(button,summary):hover:not(:disabled){background:var(--surface-2)}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera button[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink)}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera .studio-selection-mode[aria-pressed=true]{background:var(--brand);color:#fff}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera .camera-dock-grip{color:var(--faint);cursor:grab}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera .studio-hoop-shortcut{border:1px solid var(--line);background:var(--surface-2);font-variant-numeric:tabular-nums}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera>*+*:is(.canvas-drawing-controls,.studio-selection-mode:first-of-type){margin-left:4px}
+html[data-palette][data-theme] .editor-workspace .canvas-drawing-options{border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-2)}
+
+/* Docks (layers, inspector) read as panels. */
+html[data-palette][data-theme] .editor-workspace .studio-canvas-layout>:is(.studio-inspector-dock,.studio-layers-dock,.workspace-sidebar){border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:var(--shadow-1)}
+
+/* ---------- Playback and status ---------- */
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar{height:42px;background:var(--surface);border-top:1px solid var(--line)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar>:is(.playback-tools,.workspace-status){height:41px;padding:0 12px;gap:6px;background:transparent;border-color:var(--line)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .playback-tools>button{height:30px;min-height:30px;border:0;border-radius:8px;background:transparent;color:var(--muted)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .playback-tools>button:hover:not(:disabled){background:var(--surface-2);color:var(--text)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .playback-tools>button:first-child{padding:0 14px 0 11px;border-radius:999px;background:var(--brand);color:#fff;font-weight:650}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .playback-tools select{height:28px;border-radius:7px;border:1px solid var(--line);background:var(--surface)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar input[type=range]{accent-color:var(--brand)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .workspace-status{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .status-metrics>span{color:var(--muted)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .status-metrics svg{color:var(--faint)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .sewing-estimate{height:26px;min-height:0;padding:0 10px;border:0;border-radius:999px;background:var(--brand-soft);color:var(--brand-ink);font-weight:650}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .studio-status-view button,html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .studio-status-zoom :is(button,summary){height:28px;min-height:0;border:0;border-radius:7px;background:transparent;color:var(--muted)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .studio-status-view button[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-ink)}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar :is(.studio-status-view,.studio-status-zoom) :is(button,summary):hover{background:var(--surface-2);color:var(--text)}
+
+/* Legacy sticky headings used a fixed white/green ground. */
+html[data-palette][data-theme] .editor-workspace .editor-grid h2{background:var(--surface);color:var(--text)}
+html[data-palette][data-theme] .editor-workspace .studio-canvas-start h2{background:transparent;position:static;padding:0;font-size:16px}
+html[data-palette][data-theme] .editor-workspace .studio-canvas-start{border:1px solid var(--line);border-radius:18px;background:var(--surface);color:var(--text);box-shadow:var(--shadow-3)}
+
+/* Keep the design name readable. */
+html[data-palette][data-theme] .editor-workspace .studio-document{flex:0 1 auto;min-width:150px;max-width:280px}
+html[data-palette][data-theme] .editor-workspace .studio-document h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+/* Narrower windows: secondary commands become icon-only (they keep their tooltips and labels). */
+@media(max-width:1480px){
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(button[aria-label="Delete selection"],.studio-create-menu>summary){font-size:0;gap:0;width:34px;padding:0;justify-content:center}
+ html[data-palette][data-theme] .editor-workspace .studio-document{max-width:200px;min-width:110px}
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar{gap:3px}
+}
+@media(max-width:1180px){
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(.studio-price-job,.studio-save-design,.studio-export){padding:0 10px}
+ html[data-palette][data-theme] .editor-workspace .studio-document h1{display:none}
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar{gap:1px;padding-left:10px}
+}
+@media(max-width:1100px){
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-price-job{display:none}
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-save-design{font-size:0;gap:0;width:34px;padding:0;justify-content:center}
+}
+
+/* Layers dock: segmented tabs fit the dock width. */
+html[data-palette][data-theme] .editor-workspace .layers-dock-header{min-width:0}
+html[data-palette][data-theme] .editor-workspace .layers-dock-header .workspace-segments{display:flex;width:100%;min-width:0;gap:2px;padding:3px;border-radius:10px;background:var(--surface-2);border:0}
+html[data-palette][data-theme] .editor-workspace .layers-dock-header .workspace-segments>button{flex:1 1 0;min-width:0;padding:0 4px;height:28px;min-height:0;justify-content:center;gap:4px;font-size:12px;border:0;border-radius:7px;background:transparent;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-palette][data-theme] .editor-workspace .layers-dock-header .workspace-segments>button:is([aria-pressed=true],.selected){background:var(--surface);color:var(--brand-ink);box-shadow:var(--shadow-1)}
