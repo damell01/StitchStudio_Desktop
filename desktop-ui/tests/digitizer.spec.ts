@@ -146,7 +146,11 @@ test('upload recommends a checked plan near the stitch goal and updates it witho
   await page.getByRole('button',{name:'Choose or drop an image'}).click();
   await expect.poll(() => page.evaluate(() => typeof (window as unknown as {stitchTestRelease:unknown}).stitchTestRelease)).toBe('function');
   await page.evaluate(() => (window as unknown as {stitchTestRelease:()=>void}).stitchTestRelease());
-  await expect(page.getByRole('region',{name:'Compare embroidery-ready designs'}).getByRole('button',{name:/^Maximum Stitch paths/})).toHaveAttribute('aria-pressed','true');
+  // Maximum meets the 10,000 goal but adds 150 trims; the faster, trim-free Balanced plan is
+  // recommended, and Maximum stays one click away.
+  const compare=page.getByRole('region',{name:'Compare embroidery-ready designs'});
+  await expect(compare.getByRole('button',{name:/Balanced/})).toHaveAttribute('aria-pressed','true');
+  await compare.getByRole('button',{name:/^Maximum Stitch paths/}).click();
   await expect(page.locator('.digitizer-preview-metrics')).toContainText('9,800');
   await page.getByLabel('Stitch-count goal').selectOption('15000');
   await expect(page.getByRole('region',{name:'Compare embroidery-ready designs'}).getByRole('button',{name:/Balanced/})).toHaveAttribute('aria-pressed','true');

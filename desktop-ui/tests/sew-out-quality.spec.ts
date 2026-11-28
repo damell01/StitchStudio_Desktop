@@ -41,7 +41,10 @@ async function inspector(page:import('@playwright/test').Page){
 }
 
 test('corrects a misread word only after confirmation and can keep the original shapes',async({page})=>{
+  // Selecting one shape no longer runs OCR by itself; recognition is an explicit step.
   await page.locator('.design-canvas [data-artwork-uid="12"]').click();
+  await (await inspector(page)).getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByRole('button',{name:'Recognize selected word'}).click();
   let review=page.getByRole('region',{name:'Review recognized lettering'});
   await expect(review.getByRole('textbox',{name:'Original word'})).toHaveValue('SEEO');
   await review.getByRole('textbox',{name:'Original word'}).fill('SEED');
@@ -49,6 +52,7 @@ test('corrects a misread word only after confirmation and can keep the original 
   await review.getByRole('button',{name:'Keep traced shapes'}).click();
   await expect(review).toHaveCount(0);
   expect((await logged(page)).some(call=>call.command==='preview_selected_lettering')).toBe(false);
+  await page.locator('.design-canvas [data-artwork-uid="12"]').click();
   await page.getByRole('button',{name:'Recognize selected word'}).click();
   review=page.getByRole('region',{name:'Review recognized lettering'});
   await review.getByRole('textbox',{name:'Original word'}).fill('SEED');
@@ -56,7 +60,7 @@ test('corrects a misread word only after confirmation and can keep the original 
   await review.getByRole('button',{name:'Preview lettering'}).click();
   await expect(review.getByRole('img',{name:'Editable lettering stitch paths'})).toBeVisible();
   expect((await logged(page)).some(call=>call.command==='apply_stitch_review')).toBe(false);
-  await review.getByRole('button',{name:'Apply lettering'}).click();
+  await review.getByRole('button',{name:'Replace with editable text'}).click();
   await expect.poll(async()=>(await logged(page)).find(call=>call.command==='apply_stitch_review')?.args).toEqual({id:7});
   await expect.poll(async()=>(await logged(page)).find(call=>call.command==='preview_selected_lettering')?.args)
     .toEqual({uids:[12],text:'SEED',font:'Arial',replacement:'GROW'});
@@ -73,7 +77,7 @@ test('accepts manual lettering when recognition cannot read the traced shapes',a
   await review.getByRole('button',{name:'Preview lettering'}).click();
   await expect(review.getByRole('img',{name:'Editable lettering stitch paths'})).toBeVisible();
   expect((await logged(page)).some(call=>call.command==='apply_stitch_review')).toBe(false);
-  await review.getByRole('button',{name:'Apply lettering'}).click();
+  await review.getByRole('button',{name:'Replace with editable text'}).click();
   await expect.poll(async()=>(await logged(page)).find(call=>call.command==='apply_stitch_review')?.args).toEqual({id:7});
   await expect.poll(async()=>(await logged(page)).find(call=>call.command==='preview_selected_lettering')?.args)
     .toEqual({uids:[12],text:'SEED',font:'Arial',replacement:'SEED'});
