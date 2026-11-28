@@ -29,6 +29,8 @@ if(!process.argv[2]){console.error('usage: prepare-template-artwork.mjs <source-
 
 // Designs that imitate third-party marks are not redistributed with the app.
 const excluded=[
+ // Watercolor, painterly and traced artwork does not stitch cleanly; never bundle it.
+ /^(?:curated|premium-sayings-drafts|new-artwork)\//,
  // Rejected in the template library visual review; prevent reimport.
  /^quick-stitch-vol-2\/western\/rodeo-hat\.svg$/,/^quick-stitch-vol4\/farm\/rooster\.svg$/,/^quick-stitch-vol4\/fishing\/redfish\.svg$/,/^quick-stitch-vol4\/nursery\/sailboat\.svg$/,/^quick-stitch-vol4\/outdoors\/quail\.svg$/,/^quick-stitch-vol4\/western\/saddle\.svg$/,/^solid-color-vol-3\/boutique\/ribbon-bow\.svg$/,/^solid-color-vol-3\/farm\/red-barn\.svg$/,
  // Imitates a third-party mark.

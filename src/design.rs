@@ -1175,11 +1175,69 @@ pub fn thin_centerline(rings:&[Polyline],rule:FillRule)->Option<Polyline>{
     widths.sort_by(f64::total_cmp);
     let median=widths[widths.len()/2];
     if median<0.8||median>4.5||widths.last().copied()? > 7.0{return None}
-    let center:Vec<P>=pairs.iter().map(|(a,b)|a.lerp(*b,0.5)).collect();
+    let center=simplify_line(&pairs.iter().map(|(a,b)|a.lerp(*b,0.5)).collect::<Vec<P>>(),0.4);
     if crate::geom::polyline_length(&center)<median*5.0{return None}
     if !center.windows(2).all(|p|segment_inside(rings,rule,p[0],p[1],0.5)){return None}
     Some(center)
 }
+
+/// Ramer–Douglas–Peucker: drop points within `tol` (units) of the line through
+/// their neighbours. Centerlines are sampled every 0.2 mm; running stitches keep
+/// every vertex as a corner, so dense samples would become needle drops.
+fn simplify_line(pts:&[P],tol:f64)->Vec<P>{
+    if pts.len()<3{return pts.to_vec()}
+    let mut keep=vec![false;pts.len()];keep[0]=true;*keep.last_mut().unwrap()=true;
+    let mut stack=vec![(0usize,pts.len()-1)];
+    while let Some((a,b))=stack.pop(){
+        if b<=a+1{continue}
+        let (pa,pb)=(pts[a],pts[b]);let ab=pb-pa;let len=ab.len();
+        let (mut best,mut far)=(0usize,0.0f64);
+        for i in a+1..b{let d=if len<1e-9{pts[i].dist(pa)}else{crate::geom::cross(pts[i]-pa,ab).abs()/len};if d>far{far=d;best=i}}
+        if far>tol{keep[best]=true;stack.push((a,best));stack.push((best,b));}
+    }
+    pts.iter().zip(keep).filter(|(_,k)|*k).map(|(p,_)|*p).collect()
+}
+
+/// Centerline of one thin component (median width up to `max_median`, units),
+/// or None when it is not a clean narrow column.
+fn component_centerline(comp:&[Polyline],rule:FillRule,max_median:f64)->Option<Polyline>{
+    if comp.len()!=1{return None}
+    let rails=satin::auto_rails(comp).ok()?;
+    if rails.closed{return None}
+    let pairs=satin::pairs(&rails,2.0);
+    if pairs.len()<3||pairs.len()>4000{return None}
+    let mut widths:Vec<f64>=pairs.iter().map(|(a,b)|a.dist(*b)).collect();
+    widths.sort_by(f64::total_cmp);
+    let median=widths[widths.len()/2];
+    if median>max_median||widths[widths.len()*9/10]>max_median*1.6{return None}
+    let center=simplify_line(&pairs.iter().map(|(a,b)|a.lerp(*b,0.5)).collect::<Vec<P>>(),0.4);
+    if crate::geom::polyline_length(&center)<(median*3.0).max(4.0){return None}
+    if !center.windows(2).all(|p|segment_inside(comp,rule,p[0],p[1],0.5)){return None}
+    Some(center)
+}
+
+/// Thin detail too narrow for a satin column (fine outlines, engraved hatching,
+/// stems): every component of the fill as a centerline, or None if any part is
+/// not thin. Narrower than about 1 mm, a column sews better as a running stitch
+/// than as a crowded fill or a satin that cannot cover.
+pub fn thin_centerlines(rings:&[Polyline],rule:FillRule)->Option<Vec<Polyline>>{
+    let comps=satin::components(rings,rule);
+    if comps.is_empty()||comps.len()>400{return None}
+    comps.iter().map(|c|component_centerline(c,rule,THIN_DETAIL)).collect()
+}
+/// The fill's components split into those to fill and centerlines of the thin
+/// ones (see [`thin_centerlines`]).
+pub fn split_thin_detail(rings:&[Polyline],rule:FillRule)->(Vec<Polyline>,Vec<Polyline>){
+    let comps=satin::components(rings,rule);
+    if comps.len()>2000{return (rings.to_vec(),Vec::new())}
+    let (mut filled,mut thin)=(Vec::new(),Vec::new());
+    for c in comps{
+        match component_centerline(&c,rule,THIN_DETAIL){Some(line)=>thin.push(line),None=>filled.extend(c)}
+    }
+    (filled,thin)
+}
+/// Widest column (units, 0.1 mm) sewn as a running stitch by automatic selection.
+const THIN_DETAIL:f64=9.0;
 
 fn shape_runs(
     shape: &Shape,
@@ -1202,6 +1260,17 @@ fn shape_runs(
             detail.params.spacing = Some(0.30);
             detail.params.angle = Some(0.0);
             ShapeRuns::new(fill_runs(rings, *rule, &detail, opt), Some((rings.clone(), *rule)))
+        }
+        (Geometry::Fill { rings, rule }, Kind::Fill) if p.kind.is_none() && p.border != Some(false) => {
+            // Automatic (hybrid) object: parts narrower than about 1 mm sew as
+            // centerline running stitches on top; the rest is filled. An
+            // explicitly chosen fill keeps every part filled.
+            let (filled, thin) = split_thin_detail(rings, *rule);
+            let mut groups = if filled.is_empty() { Vec::new() } else { fill_runs(&filled, *rule, shape, opt) };
+            if !thin.is_empty() {
+                groups.push(thin.iter().map(|line| Piece::reversible(running(line, false, mm(p.run_len(f)), p.run_repeats()))).collect());
+            }
+            ShapeRuns::new(groups, (!filled.is_empty()).then(|| (filled, *rule)))
         }
         (Geometry::Fill { rings, rule }, Kind::Fill) => ShapeRuns::new(
             fill_runs(rings, *rule, shape, opt),
@@ -1266,9 +1335,9 @@ fn shape_runs(
         (Geometry::Fill { rings, rule }, Kind::Run) if shape.params.border==Some(false) => {
             // Explicit centerline mode retains the editable outline in SVG.
             // If edited geometry no longer qualifies, preserve it as a fill.
-            if let Some(line)=thin_centerline(rings,*rule){
-                let run=running(&line,false,mm(p.run_len(f)),p.run_repeats());
-                ShapeRuns::new(vec![vec![Piece::reversible(run)]],None)
+            if let Some(lines)=thin_centerline(rings,*rule).map(|l|vec![l]).or_else(||thin_centerlines(rings,*rule)){
+                let pieces=lines.iter().map(|line|Piece::reversible(running(line,false,mm(p.run_len(f)),p.run_repeats()))).collect();
+                ShapeRuns::new(vec![pieces],None)
             }else{
                 ShapeRuns::new(fill_runs(rings,*rule,shape,opt),Some((rings.clone(),*rule)))
             }
@@ -1371,6 +1440,12 @@ pub fn auto_stitch_types(shapes:&mut [Shape]){
    continue
   }
   if let Geometry::Fill{rings,rule}=&s.geometry{
+   // Detail narrower than about 1 mm (fine outlines, engraved hatching,
+   // stems) sews as a running stitch along its centerline, per component.
+   if thin_centerlines(rings,*rule).is_some(){
+    s.params.kind=Some(Kind::Run);s.params.border=Some(false);
+    continue
+   }
    // Closed narrow bands (e.g. cartoon outlines and letter counters) can
    // use satin only when the rail solver confirms a usable column.
    if rings.len()==2 {

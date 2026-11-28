@@ -16,7 +16,7 @@ fn bundled_templates_plan_into_stitches() {
     let mut files = Vec::new();
     svgs(&root, &mut files);
     files.sort();
-    assert!(files.len() >= 100, "expected the bundled collection, found {}", files.len());
+    assert!(files.len() >= 40, "expected the bundled collection, found {}", files.len());
     let mut failures = Vec::new();
     for file in &files {
         let name = file.strip_prefix(&root).unwrap().display().to_string();
@@ -38,7 +38,7 @@ fn bundled_templates_plan_into_stitches() {
 #[test]
 fn tidy_islands_never_adds_trims_or_moves_painterly_templates() {
     use zigzag::document::TidyIslands;
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("desktop-ui/src/bundled-artwork/expanded/curated");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("desktop-ui/src/bundled-artwork/expanded");
     let mut files = Vec::new();
     svgs(&root, &mut files);
     files.sort();

@@ -23,9 +23,7 @@ type Props = {
   onTemplate?:(template:{name:string;svg:string})=>void;
 };
 
-const featuredIds=['expanded-curated-pink-floral-crest','expanded-curated-baseball-blue-bow','expanded-premium-sayings-drafts-faith-over-fear','expanded-curated-teddy-blue-bow',
-  'expanded-quick-stitch-vol4-coastal-pelican','expanded-curated-green-tractor','expanded-premium-sayings-drafts-blessed-mama','expanded-solid-color-vol-3-boutique-ribbon-bow',
-  'expanded-curated-woodland-fawn','expanded-premium-sayings-drafts-saltwater-soul','expanded-curated-flying-mallard','expanded-quick-stitch-vol-1-12-birthday-train'];
+const featuredIds=['expanded-quick-stitch-vol4-coastal-pelican','expanded-solid-color-vol-3-boutique-ribbon-bow','expanded-quick-stitch-vol-1-12-birthday-train'];
 const featured=featuredIds.map(id=>templateCatalog.find(t=>t.id===id)).filter((t):t is typeof templateCatalog[number]=>!!t&&!!t.svg);
 const featuredCategories=['Sayings','Monograms & frames','Boutique & bows','Baby & children','Sports','Faith','Seasonal','Western & farm','Outdoors & hunting','Beach & ocean'];
 const svgUrl=(svg:string)=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
