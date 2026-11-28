@@ -59,6 +59,11 @@ export const templateCatalog:TemplateEntry[]=[
  ...expandedManifest.flatMap(m=>{
   // Keep traced watercolor and unreviewed drafts out of the production library.
   // Source assets remain available for future clean vector redraws.
+  if(m.id==='expanded-curated-construction-nameplate'||m.id==='expanded-curated-construction-trio'){
+   const clean="<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 300 150\"><g id=\"excavator\" fill=\"#E9B52C\"><rect x=\"12\" y=\"80\" width=\"80\" height=\"17\" rx=\"8\" fill=\"#343A40\"/><rect x=\"22\" y=\"55\" width=\"52\" height=\"24\" rx=\"3\"/><rect x=\"29\" y=\"36\" width=\"29\" height=\"23\" rx=\"3\"/><rect x=\"34\" y=\"41\" width=\"19\" height=\"13\" fill=\"#8297A5\"/><path d=\"M66 58L93 13L103 17L133 49L125 56L99 29L78 65Z\"/><path d=\"M125 48L143 56L135 72L118 63Z\" fill=\"#343A40\"/></g><g id=\"dump-truck\" fill=\"#E9B52C\"><path d=\"M103 61H127L142 79V91H101V73Z\"/><path d=\"M110 65H124L134 77H110Z\" fill=\"#8297A5\"/><path d=\"M145 57H213L203 84H145Z\"/><rect x=\"132\" y=\"85\" width=\"75\" height=\"8\" fill=\"#343A40\"/><circle cx=\"119\" cy=\"94\" r=\"13\" fill=\"#343A40\"/><circle cx=\"190\" cy=\"94\" r=\"13\" fill=\"#343A40\"/><circle cx=\"119\" cy=\"94\" r=\"5\" fill=\"#8297A5\"/><circle cx=\"190\" cy=\"94\" r=\"5\" fill=\"#8297A5\"/></g><g id=\"bulldozer\" fill=\"#E9B52C\"><rect x=\"226\" y=\"82\" width=\"65\" height=\"18\" rx=\"9\" fill=\"#343A40\"/><rect x=\"238\" y=\"60\" width=\"44\" height=\"22\" rx=\"3\"/><rect x=\"249\" y=\"43\" width=\"29\" height=\"20\" rx=\"2\"/><rect x=\"254\" y=\"48\" width=\"19\" height=\"13\" fill=\"#8297A5\"/><path d=\"M238 70L223 82L215 63H209L213 92H226L244 80Z\"/></g></svg>";
+   const svg=m.id.endsWith('nameplate')?clean.replace('</svg>','<rect x="35" y="112" width="230" height="31" rx="12" fill="none" stroke="#8297A5" stroke-width="3"/></svg>'):clean;
+   return [{id:m.id,name:m.name,file:m.id+'.svg',svg,group:m.category,collection:'Solid vector redraws',tags:m.tags.filter(t=>t!=='Detailed'),draft:false,...svgStats(svg)}];
+  }
   if(m.collection==='Curated heirloom'||m.draft)return [];
   const svg=expandedFiles['./bundled-artwork/expanded/'+m.path];
   if(import.meta.env&&svg===undefined)return [];
