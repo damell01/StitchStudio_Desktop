@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {ImagePlus} from 'lucide-react';
 import {Digitizer} from './digitizer';
+import './ui-polish.css';
 
 export function EditorDigitizer({active, disabled, onOpen, onClose, onInsert}: {
   active: {file: File | null} | null;
@@ -30,7 +31,7 @@ export function EditorDigitizer({active, disabled, onOpen, onClose, onInsert}: {
   return <>
     <button type="button" className="studio-tool-icon" title="Import image and digitize" aria-label="Import image and digitize"
       aria-haspopup="dialog" disabled={disabled} onClick={onOpen}><ImagePlus size={18} aria-hidden="true"/></button>
-    <dialog ref={dialog} className="studio-modal editor-digitizer" aria-label="Digitize an image"
+    <dialog ref={dialog} className="studio-modal editor-digitizer expanded-digitizer" aria-label="Digitize an image"
       onCancel={event => {event.preventDefault(); if (!inserting) onClose();}}>
       <div className="studio-modal-heading">
         <h2>Digitize an image</h2>
