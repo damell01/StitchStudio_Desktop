@@ -190,10 +190,11 @@ fn validate_members(
             return Err("Password-protected designs cannot be imported".into());
         }
         let size = entry.size();
-        if size > limits.member_bytes as u64 {
+        let member_limit = target.member_limit(limits);
+        if size > member_limit as u64 {
             return Err(format!(
-                "{filename} exceeds the {} MB design limit",
-                limits.member_bytes / 1_000_000
+                "{filename} exceeds the {} MB file limit",
+                member_limit / 1_000_000
             ));
         }
         let filename = filename.to_owned();
@@ -205,7 +206,13 @@ fn validate_members(
         if data.len() as u64 != size {
             return Err(format!("{filename} has an inconsistent size"));
         }
-        target.validate(&data, &extension).map_err(|e| format!("Cannot import {filename}: {e}"))?;
+        if let Err(error) = target.validate(&data, &extension) {
+            if matches!(target, Target::Artwork) {
+                skipped += 1;
+                continue;
+            }
+            return Err(format!("Cannot import {filename}: {error}"));
+        }
         designs.push((filename, data));
     }
     Ok((designs, skipped))
@@ -284,13 +291,23 @@ fn publish(
 pub(crate) enum Target {
     Designs,
     Templates,
+    Artwork,
 }
 
 impl Target {
+    fn member_limit(self, limits: Limits) -> usize {
+        if matches!(self, Self::Artwork) {
+            limits.member_bytes.min(4_000_000)
+        } else {
+            limits.member_bytes
+        }
+    }
+
     fn accepts(self, extension: &str) -> bool {
         match self {
             Self::Designs => formats::READABLE_FORMATS.contains(&extension),
             Self::Templates => extension == "stitchstudio",
+            Self::Artwork => extension == "svg",
         }
     }
 
@@ -310,9 +327,45 @@ impl Target {
                     return Err("Templates need editable artwork or lettering. Use the design library for machine files.".into());
                 }
             }
+            Self::Artwork => {
+                std::str::from_utf8(bytes).map_err(|_| "Choose an uncompressed UTF-8 SVG.")?;
+                let shapes = zigzag::svg::load(bytes).map_err(|error| error.to_string())?;
+                if shapes.is_empty() {
+                    return Err("The SVG does not contain drawable vector artwork.".into());
+                }
+            }
         }
         Ok(())
     }
+}
+
+#[tauri::command]
+pub(crate) async fn import_artwork_archive() -> Result<Option<Report>, String> {
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .add_filter("SVG artwork ZIP", &["zip"])
+        .pick_file()
+        .await
+    else {
+        return Ok(None);
+    };
+    let source = file.path().to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = crate::character_root()?;
+        let destination = root.join("My imported artwork");
+        for directory in [&root, &destination] {
+            fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+            if !fs::symlink_metadata(directory)
+                .map_err(|error| error.to_string())?
+                .file_type()
+                .is_dir()
+            {
+                return Err("Invalid artwork folder".into());
+            }
+        }
+        import(&source, &destination, Target::Artwork).map(Some)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 pub(crate) fn import(path: &Path, destination: &Path, target: Target) -> Result<Report, String> {
@@ -459,6 +512,51 @@ mod tests {
         let (designs, skipped) = validate_members(&bytes, LIMITS, Target::Designs).unwrap();
         assert_eq!(skipped, 1);
         assert_eq!(designs, vec![("flower.dst".into(), design)]);
+    }
+
+    #[test]
+    fn imports_nested_svg_artwork_without_altering_source_vectors() {
+        let destination = tempfile::tempdir().unwrap();
+        let bow = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30"><path fill="purple" d="M1 5 20 12 39 5 39 25 20 18 1 25Z"/></svg>"#;
+        let petal = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30"><ellipse fill="green" cx="18" cy="15" rx="12" ry="8"/></svg>"#;
+        let bundle = archive(&[
+            ("Boutique/Bows/Ribbon.SVG", bow),
+            ("Boutique/Bows/Ribbon copy.svg", bow),
+            ("Element Sets/Garden/Leaf.svg", petal),
+            ("__MACOSX/._Ribbon.svg", b"metadata"),
+            ("notes.txt", b"worksheet"),
+        ]);
+        let mut source = NamedTempFile::new().unwrap();
+        source.write_all(&bundle).unwrap();
+
+        let report = import(source.path(), destination.path(), Target::Artwork).unwrap();
+        assert_eq!((report.imported, report.duplicates, report.skipped), (2, 1, 2));
+        assert_eq!(fs::read(destination.path().join("Ribbon.svg")).unwrap(), bow);
+        assert_eq!(fs::read(destination.path().join("Leaf.svg")).unwrap(), petal);
+
+        let retry = import(source.path(), destination.path(), Target::Artwork).unwrap();
+        assert_eq!((retry.imported, retry.duplicates, retry.skipped), (0, 3, 2));
+        assert!(validate_members(&bundle, LIMITS, Target::Designs).unwrap().0.is_empty());
+    }
+
+    #[test]
+    fn skips_unusable_svg_members_but_keeps_valid_artwork() {
+        let destination = tempfile::tempdir().unwrap();
+        let valid = br#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="10" height="10"/></svg>"#;
+        let empty = br#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"/>"#;
+        let mut source = NamedTempFile::new().unwrap();
+        source.write_all(&archive(&[
+            ("good/Flower.svg", valid),
+            ("bad/Blank.svg", empty),
+            ("bad/Invalid.svg", b"<svg invalid"),
+        ])).unwrap();
+        let report = import(source.path(), destination.path(), Target::Artwork).unwrap();
+        assert_eq!((report.imported, report.duplicates, report.skipped), (1, 0, 2));
+        assert_eq!(fs::read(destination.path().join("Flower.svg")).unwrap(), valid);
+        assert_eq!(fs::read_dir(destination.path()).unwrap().count(), 1);
+
+        let invalid_path = archive(&[("good/Flower.svg", valid), ("../unsafe.svg", empty)]);
+        assert!(validate_members(&invalid_path, LIMITS, Target::Artwork).is_err());
     }
 
     #[test]

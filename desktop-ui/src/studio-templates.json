@@ -1,0 +1,672 @@
+[
+  {
+    "id": "studio-vintage-game-day-trio",
+    "name": "Vintage game day ribbon trio",
+    "category": "Ready-made designs",
+    "tags": [
+      "football",
+      "helmet",
+      "bow",
+      "sports",
+      "boutique",
+      "name optional"
+    ],
+    "art": "<g id=\"helmet\" transform=\"translate(1 25) scale(.38)\"><path fill=\"#8f283d\" d=\"M13 58C3 30 23 12 50 12Q87 12 91 48L69 48L66 74H34L28 60Z\"/><path fill=\"#c16a72\" d=\"M16 38Q30 15 53 17L56 23Q30 24 20 45Z\"/><path fill=\"#eee2cc\" d=\"M45 13L55 13L64 47L55 47Z\"/><circle cx=\"72\" cy=\"43\" r=\"5\" fill=\"#e5d5b9\"/><path d=\"M88 44H97V67H68M75 55H97\" fill=\"none\" stroke=\"#55565a\" stroke-width=\"4\"/></g><g id=\"football\" transform=\"translate(62 28) scale(.37)\"><path fill=\"#966442\" d=\"M6 50Q48 5 94 50Q50 95 6 50Z\"/><path fill=\"#754c35\" d=\"M6 50Q50 70 94 50Q50 95 6 50Z\"/><path d=\"M24 34Q30 50 24 66M76 34Q70 50 76 66\" stroke=\"#f0e3cd\" stroke-width=\"6\" fill=\"none\"/><path d=\"M35 48H65M40 42V54M50 42V54M60 42V54\" stroke=\"#f0e3cd\" stroke-width=\"3\" fill=\"none\"/></g><g id=\"ribbon\" transform=\"translate(32 8) scale(.38)\"><path fill=\"#b86e83\" d=\"M45 36C22 12 7 19 12 39Q17 53 43 45L26 76L42 70L50 48L67 76L81 69L57 45Q85 56 90 33Q92 13 69 23L55 36Z\"/><path d=\"M19 29Q32 28 44 41M81 29Q68 28 56 41M38 62L47 48M69 62L55 48\" fill=\"none\" stroke=\"#e8b9c7\" stroke-width=\"2.5\"/><rect x=\"43\" y=\"34\" width=\"15\" height=\"16\" rx=\"4\" fill=\"#945269\"/></g><g id=\"accent\" fill=\"#b79b65\"><path d=\"M9 17L11 22L16 24L11 26L9 31L7 26L2 24L7 22ZM91 17L93 22L98 24L93 26L91 31L89 26L84 24L89 22Z\"/></g><path d=\"M13 75Q50 87 87 75\" fill=\"none\" stroke=\"#8f283d\" stroke-width=\"1.8\"/>",
+    "collection": "boutique"
+  },
+  {
+    "id": "studio-heirloom-rocking-horse",
+    "name": "Heirloom rocking horse and ribbon",
+    "category": "Ready-made designs",
+    "tags": [
+      "nursery",
+      "horse",
+      "baby",
+      "vintage",
+      "boutique"
+    ],
+    "art": "<g id=\"horse\"><path fill=\"#c5a47e\" stroke=\"#876b50\" stroke-width=\"1.5\" d=\"M20 48Q30 35 51 42L58 25L69 17L77 20L73 28L86 39L79 48L65 42L62 58L71 73H62L51 59H39L30 73H21L27 55Z\"/><path fill=\"#8b6c51\" d=\"M59 26L63 16L68 20L61 39L56 43Z M23 46Q9 39 10 58Q14 66 20 61Q15 54 23 50Z\"/><path fill=\"#8396a7\" d=\"M32 41Q45 38 55 43L51 54H34Z\"/><path d=\"M35 47H51\" stroke=\"#e8dcc4\" stroke-width=\"2\"/><circle cx=\"73\" cy=\"32\" r=\"1.8\" fill=\"#4b4037\"/><path d=\"M12 75Q50 94 88 75\" fill=\"none\" stroke=\"#876b50\" stroke-width=\"5\" stroke-linecap=\"round\"/><path d=\"M27 73V80M66 73V80\" stroke=\"#876b50\" stroke-width=\"3\"/></g><g id=\"ribbon\" transform=\"translate(34 -2) scale(.32)\"><path fill=\"#b86e83\" d=\"M45 36C22 12 7 19 12 39Q17 53 43 45L26 76L42 70L50 48L67 76L81 69L57 45Q85 56 90 33Q92 13 69 23L55 36Z\"/><path d=\"M19 29Q32 28 44 41M81 29Q68 28 56 41M38 62L47 48M69 62L55 48\" fill=\"none\" stroke=\"#e8b9c7\" stroke-width=\"2.5\"/><rect x=\"43\" y=\"34\" width=\"15\" height=\"16\" rx=\"4\" fill=\"#945269\"/></g>",
+    "collection": "boutique"
+  },
+  {
+    "id": "studio-heirloom-goose-crest",
+    "name": "Heirloom goose ribbon crest",
+    "category": "Ready-made designs",
+    "tags": [
+      "goose",
+      "nursery",
+      "heirloom",
+      "boutique",
+      "vintage",
+      "crest"
+    ],
+    "art": "<g id=\"crest\" fill=\"none\" stroke=\"#8496a5\" stroke-width=\"1.8\"><path d=\"M18 28Q18 19 29 19Q34 9 44 15Q50 6 56 15Q66 9 71 19Q82 19 82 28V59Q82 72 50 88Q18 72 18 59Z\"/><path d=\"M23 29Q23 24 32 24Q38 16 45 21L50 16L55 21Q62 16 68 24Q77 24 77 29V58Q77 68 50 82Q23 68 23 58Z\"/></g><g id=\"goose\"><path fill=\"#e9dfca\" stroke=\"#9e9079\" stroke-width=\"1.4\" d=\"M24 57Q34 48 45 52Q56 51 56 40L54 28Q53 18 63 18Q73 18 72 27Q71 32 64 33L65 48Q66 64 55 68Q36 77 24 57Z\"/><path fill=\"#c99755\" d=\"M71 24L80 28L71 31Z M42 68L40 74H49L47 68Z\"/><path fill=\"#d1c2a8\" d=\"M30 56Q42 52 54 58Q47 68 35 63Z\"/><circle cx=\"67\" cy=\"24\" r=\"1.6\" fill=\"#49453e\"/><path fill=\"#7694b0\" d=\"M59 35Q45 28 47 39Q48 45 59 40L53 50L59 48L62 40L70 49L75 46L65 39Q78 44 77 34Q76 29 64 35Z\"/><rect x=\"59\" y=\"34\" width=\"6\" height=\"7\" rx=\"2\" fill=\"#526e90\"/></g><g id=\"botanical\" fill=\"none\" stroke=\"#7d946f\" stroke-width=\"1.5\"><path d=\"M24 77Q13 65 12 49M76 77Q87 65 88 49\"/><path d=\"M18 65Q7 64 8 56Q16 56 18 65ZM22 72Q29 60 31 67Q29 74 22 72ZM82 65Q93 64 92 56Q84 56 82 65ZM78 72Q71 60 69 67Q71 74 78 72Z\" fill=\"#9cae88\"/></g>",
+    "collection": "boutique"
+  },
+  {
+    "id": "studio-duckling",
+    "name": "Heirloom duckling",
+    "category": "Children",
+    "tags": [
+      "duck",
+      "baby",
+      "nursery"
+    ],
+    "art": "<g id=\"duck\"><path fill=\"#e5bd65\" d=\"M12 61Q23 47 40 51Q31 29 48 18Q68 8 78 30Q84 46 65 53Q91 55 86 71Q78 87 43 84Q19 82 12 61Z\"/><path fill=\"#c99b48\" d=\"M30 60Q47 48 66 63Q55 79 36 72Z\"/><path fill=\"#c97d43\" d=\"M76 31L94 39L76 45Z\"/><circle cx=\"65\" cy=\"30\" r=\"3\" fill=\"#48423a\"/></g>"
+  },
+  {
+    "id": "studio-baseball-cap",
+    "name": "Classic baseball cap",
+    "category": "Sports",
+    "tags": [
+      "baseball",
+      "hat",
+      "team"
+    ],
+    "art": "<g id=\"cap\"><path fill=\"#456784\" d=\"M12 62Q12 19 48 18Q82 18 84 62Z\"/><path fill=\"#6c8da5\" d=\"M48 20Q30 34 30 61H49Z\"/><path fill=\"#304c66\" d=\"M49 60Q80 53 96 72Q77 85 38 69Z\"/><path d=\"M48 21V58\" stroke=\"#e5d9bc\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"48\" cy=\"18\" r=\"4\" fill=\"#304c66\"/></g>"
+  },
+  {
+    "id": "studio-pumpkin-bow",
+    "name": "Autumn pumpkin bow",
+    "category": "Seasonal",
+    "tags": [
+      "fall",
+      "pumpkin",
+      "bow"
+    ],
+    "art": "<g id=\"pumpkin\"><ellipse cx=\"29\" cy=\"59\" rx=\"21\" ry=\"27\" fill=\"#ce884b\"/><ellipse cx=\"71\" cy=\"59\" rx=\"21\" ry=\"27\" fill=\"#ce884b\"/><ellipse cx=\"50\" cy=\"59\" rx=\"24\" ry=\"31\" fill=\"#e3a05b\"/><path fill=\"#77835b\" d=\"M45 31L48 10L58 12L55 32Z\"/></g><g id=\"ribbon\"><path fill=\"#a76e83\" d=\"M48 31Q17 8 21 34Q24 47 47 38L35 54L47 50L51 39L65 54L73 49L56 37Q82 47 80 25Q77 11 54 31Z\"/><rect x=\"46\" y=\"28\" width=\"11\" height=\"13\" rx=\"3\" fill=\"#d7a6b6\"/></g>"
+  },
+  {
+    "id": "studio-daisy-sprig",
+    "name": "Heirloom daisy sprig",
+    "category": "Floral",
+    "tags": [
+      "flower",
+      "garden",
+      "spring"
+    ],
+    "art": "<g id=\"stem\"><path d=\"M50 90Q43 60 50 33M48 68L27 53M49 77L72 60\" fill=\"none\" stroke=\"#718c65\" stroke-width=\"3\"/><path fill=\"#8fa47b\" d=\"M43 67Q18 70 18 48Q39 48 43 67ZM54 75Q61 54 80 56Q79 75 54 75Z\"/></g><g id=\"flower\" fill=\"#f1e4cc\"><ellipse cx=\"50\" cy=\"16\" rx=\"8\" ry=\"14\"/><ellipse cx=\"50\" cy=\"44\" rx=\"8\" ry=\"14\"/><ellipse cx=\"36\" cy=\"30\" rx=\"14\" ry=\"8\"/><ellipse cx=\"64\" cy=\"30\" rx=\"14\" ry=\"8\"/><circle cx=\"50\" cy=\"30\" r=\"9\" fill=\"#c8a34f\"/></g>"
+  },
+  {
+    "id": "studio-sailor-anchor",
+    "name": "Coastal anchor",
+    "category": "Coastal",
+    "tags": [
+      "anchor",
+      "nautical",
+      "boat"
+    ],
+    "art": "<g id=\"anchor\" fill=\"none\" stroke=\"#426b83\" stroke-width=\"7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"50\" cy=\"18\" r=\"9\"/><path d=\"M50 28V83M33 39H67M15 60Q20 84 50 84Q80 84 85 60M15 60L10 72M15 60L28 64M85 60L90 72M85 60L72 64\"/></g><path d=\"M58 28Q79 44 48 55Q25 64 52 76\" fill=\"none\" stroke=\"#c2a575\" stroke-width=\"3\"/>"
+  },
+  {
+    "id": "studio-star-name-frame",
+    "name": "Little star name frame",
+    "category": "Frames",
+    "tags": [
+      "name",
+      "monogram",
+      "stars"
+    ],
+    "art": "<g id=\"frame\" fill=\"none\" stroke=\"#7894ad\" stroke-width=\"3\"><rect x=\"9\" y=\"29\" width=\"82\" height=\"42\" rx=\"14\"/><rect x=\"15\" y=\"35\" width=\"70\" height=\"30\" rx=\"10\" stroke-width=\"1.5\"/></g><g id=\"stars\" fill=\"#c8a35f\"><path d=\"M50 7L53 15L62 15L55 21L58 29L50 24L42 29L45 21L38 15L47 15Z\"/><path d=\"M26 73L28 79L35 79L30 83L32 90L26 86L20 90L22 83L17 79L24 79ZM74 73L76 79L83 79L78 83L80 90L74 86L68 90L70 83L65 79L72 79Z\"/></g>"
+  },
+  {
+    "id": "studio-varsity-helmet",
+    "name": "Varsity helmet",
+    "category": "Sports",
+    "tags": [
+      "football",
+      "helmet",
+      "team"
+    ],
+    "art": "<g id=\"helmet\"><path fill=\"#a51c30\" d=\"M18 61C5 26 30 10 55 10C83 10 96 30 91 53L70 53L68 77H39L32 63Z\"/><path fill=\"#f5e9d7\" d=\"M48 11L56 11L65 51L57 51Z\"/><circle cx=\"72\" cy=\"46\" r=\"5\" fill=\"#e8d9bc\"/><path d=\"M90 48H97V69H70M75 58H97\" fill=\"none\" stroke=\"#42454a\" stroke-width=\"4\"/></g>"
+  },
+  {
+    "id": "studio-coquette-ribbon",
+    "name": "Heirloom ribbon bow",
+    "category": "Boutique",
+    "tags": [
+      "bow",
+      "ribbon",
+      "girls"
+    ],
+    "art": "<g id=\"bow\"><path fill=\"#c786a1\" d=\"M45 39C25 12 7 12 10 37C10 58 29 59 44 48L24 84L42 77L51 52L66 84L82 77L57 47C77 60 94 52 91 30C88 10 70 15 55 39Z\"/><path fill=\"#eac2d1\" d=\"M17 29Q30 25 44 43Q28 49 17 43ZM83 29Q70 25 57 43Q72 49 83 43Z\"/><rect x=\"43\" y=\"35\" width=\"15\" height=\"18\" rx=\"5\" fill=\"#a65e81\"/></g>"
+  },
+  {
+    "id": "studio-olive-cross",
+    "name": "Olive branch cross",
+    "category": "Faith",
+    "tags": [
+      "christian",
+      "cross",
+      "botanical"
+    ],
+    "art": "<g id=\"cross\"><path fill=\"#c3a16a\" d=\"M45 10H55V35H76V45H55V88H45V45H24V35H45Z\"/></g><g id=\"olive\"><path d=\"M20 82Q40 58 77 61\" fill=\"none\" stroke=\"#637b55\" stroke-width=\"2.5\"/><path fill=\"#82996c\" d=\"M31 70Q12 66 19 55Q33 57 31 70ZM42 65Q27 50 40 48Q50 55 42 65ZM55 62Q50 46 63 48Q69 57 55 62ZM48 65Q50 82 63 74Q62 64 48 65ZM66 62Q76 48 86 56Q81 67 66 62Z\"/></g>"
+  },
+  {
+    "id": "studio-strawberry-pair",
+    "name": "Sweet strawberry pair",
+    "category": "Children",
+    "tags": [
+      "fruit",
+      "summer",
+      "nursery"
+    ],
+    "art": "<g id=\"berry-left\"><path fill=\"#bd5260\" d=\"M12 38Q12 24 30 27Q48 24 48 39Q45 62 30 76Q15 62 12 38Z\"/><path fill=\"#6f9160\" d=\"M17 29L24 20L30 25L37 19L44 29L30 36Z\"/><path d=\"M23 42l2 4M36 42l-2 4M29 56l1 4\" stroke=\"#f6d6a1\" stroke-width=\"2.5\"/></g><g id=\"berry-right\" transform=\"translate(42 7)\"><path fill=\"#d87883\" d=\"M12 38Q12 24 30 27Q48 24 48 39Q45 62 30 76Q15 62 12 38Z\"/><path fill=\"#6f9160\" d=\"M17 29L24 20L30 25L37 19L44 29L30 36Z\"/><path d=\"M23 42l2 4M36 42l-2 4M29 56l1 4\" stroke=\"#f6d6a1\" stroke-width=\"2.5\"/></g>"
+  },
+  {
+    "id": "studio-coastal-shell",
+    "name": "Scallop shell",
+    "category": "Coastal",
+    "tags": [
+      "beach",
+      "shell",
+      "summer"
+    ],
+    "art": "<g id=\"shell\"><path fill=\"#e3b69e\" d=\"M43 85C33 68 8 48 10 31Q13 15 27 21Q33 8 45 16Q55 7 65 17Q80 11 85 24Q99 26 89 43L57 85Z\"/><path d=\"M49 79L23 30M49 79L39 23M49 79L55 22M49 79L75 28\" stroke=\"#b47c69\" stroke-width=\"3\" fill=\"none\"/><path fill=\"#b47c69\" d=\"M39 78H61L58 88H42Z\"/></g>"
+  },
+  {
+    "id": "studio-laurel-name-frame",
+    "name": "Open laurel name frame",
+    "category": "Frames",
+    "tags": [
+      "monogram",
+      "personalize",
+      "name"
+    ],
+    "art": "<g id=\"laurel-left\"><path d=\"M43 81Q12 67 17 27\" fill=\"none\" stroke=\"#728e70\" stroke-width=\"2.5\"/><path fill=\"#8da17a\" d=\"M18 37Q4 31 7 21Q21 22 18 37ZM18 49Q31 30 34 43Q31 52 18 49ZM22 61Q4 56 7 45Q21 45 22 61ZM29 70Q42 54 44 66Q40 75 29 70Z\"/></g><g id=\"laurel-right\" transform=\"translate(100 0) scale(-1 1)\"><path d=\"M43 81Q12 67 17 27\" fill=\"none\" stroke=\"#728e70\" stroke-width=\"2.5\"/><path fill=\"#8da17a\" d=\"M18 37Q4 31 7 21Q21 22 18 37ZM18 49Q31 30 34 43Q31 52 18 49ZM22 61Q4 56 7 45Q21 45 22 61ZM29 70Q42 54 44 66Q40 75 29 70Z\"/></g>"
+  },
+  {
+    "id": "spring-bunny-trio",
+    "name": "Pastel Easter bunny trio",
+    "category": "Ready-made designs",
+    "tags": [
+      "easter",
+      "rabbit",
+      "spring",
+      "nursery",
+      "name optional"
+    ],
+    "art": "<g transform=\"translate(0 23) scale(.34)\"><path fill=\"#c989a6\" d=\"M39 39 C26 28 24 7 32 5 C42 3 47 24 48 35 C50 17 60 3 67 8 C75 14 63 33 59 40 C75 48 80 66 69 79 C60 90 37 90 28 78 C17 65 24 47 39 39Z\"/><circle cx=\"50\" cy=\"76\" r=\"10\" fill=\"#f7eee0\"/></g><g transform=\"translate(33 23) scale(.34)\"><path fill=\"#83a57a\" d=\"M39 39 C26 28 24 7 32 5 C42 3 47 24 48 35 C50 17 60 3 67 8 C75 14 63 33 59 40 C75 48 80 66 69 79 C60 90 37 90 28 78 C17 65 24 47 39 39Z\"/><circle cx=\"50\" cy=\"76\" r=\"10\" fill=\"#f7eee0\"/></g><g transform=\"translate(66 23) scale(.34)\"><path fill=\"#9981b7\" d=\"M39 39 C26 28 24 7 32 5 C42 3 47 24 48 35 C50 17 60 3 67 8 C75 14 63 33 59 40 C75 48 80 66 69 79 C60 90 37 90 28 78 C17 65 24 47 39 39Z\"/><circle cx=\"50\" cy=\"76\" r=\"10\" fill=\"#f7eee0\"/></g>"
+  },
+  {
+    "id": "spring-bunny",
+    "name": "Heirloom bunny silhouette",
+    "category": "Seasonal",
+    "tags": [
+      "easter",
+      "rabbit",
+      "spring"
+    ],
+    "art": "<path fill=\"#c989a6\" d=\"M39 39 C26 28 24 7 32 5 C42 3 47 24 48 35 C50 17 60 3 67 8 C75 14 63 33 59 40 C75 48 80 66 69 79 C60 90 37 90 28 78 C17 65 24 47 39 39Z\"/><circle cx=\"50\" cy=\"76\" r=\"10\" fill=\"#f7eee0\"/>"
+  },
+  {
+    "id": "nautical-sailboat",
+    "name": "Vintage coastal sailboat",
+    "category": "Coastal",
+    "tags": [
+      "sailing",
+      "nautical",
+      "beach",
+      "summer"
+    ],
+    "art": "<path d=\"M48 9 V72\" stroke=\"#725a43\" stroke-width=\"3\"/><path d=\"M45 13 L12 62 H45Z\" fill=\"#e9dfc6\"/><path d=\"M52 23 L82 62 H52Z\" fill=\"#8ca7b4\"/><path d=\"M9 69 H91 L76 83 H26Z\" fill=\"#a65e50\"/><path d=\"M10 89 Q20 84 30 89 T50 89 T70 89 T90 89\" stroke=\"#66899b\" stroke-width=\"3\" fill=\"none\"/>"
+  },
+  {
+    "id": "heirloom-shield",
+    "name": "Double border heirloom shield",
+    "category": "Frames",
+    "tags": [
+      "crest",
+      "monogram",
+      "nursery",
+      "name"
+    ],
+    "art": "<path d=\"M15 19 Q34 20 50 9 Q66 20 85 19 V52 Q84 77 50 92 Q16 77 15 52Z\" fill=\"none\" stroke=\"#b89a60\" stroke-width=\"4\"/><path d=\"M22 25 Q36 26 50 17 Q64 26 78 25 V52 Q77 72 50 84 Q23 72 22 52Z\" fill=\"none\" stroke=\"#7896a4\" stroke-width=\"2\"/>"
+  },
+  {
+    "id": "classic-bracket-nameplate",
+    "name": "Classic bracket nameplate",
+    "art": "<path d=\"M28 29 H72 Q72 36 82 36 Q82 44 94 50 Q82 56 82 64 Q72 64 72 71 H28 Q28 64 18 64 Q18 56 6 50 Q18 44 18 36 Q28 36 28 29Z\" fill=\"none\" stroke=\"#537689\" stroke-width=\"3\"/><path d=\"M28 29 H72 Q72 36 82 36 Q82 44 94 50 Q82 56 82 64 Q72 64 72 71 H28 Q28 64 18 64 Q18 56 6 50 Q18 44 18 36 Q28 36 28 29Z\" transform=\"translate(8 8) scale(.84)\" fill=\"none\" stroke=\"#537689\" stroke-width=\"1.5\"/>",
+    "category": "Frames",
+    "tags": [
+      "name badge",
+      "nameplate",
+      "monogram",
+      "personalize",
+      "heirloom",
+      "bracket",
+      "cartouche"
+    ]
+  },
+  {
+    "id": "curly-scroll-nameplate",
+    "name": "Curled end nameplate",
+    "art": "<path d=\"M17 33 H83 M17 67 H83 M17 33 C2 33 3 48 13 46 C22 44 17 36 12 40 M17 67 C2 67 3 52 13 54 C22 56 17 64 12 60 M83 33 C98 33 97 48 87 46 C78 44 83 36 88 40 M83 67 C98 67 97 52 87 54 C78 56 83 64 88 60\" fill=\"none\" stroke=\"#789779\" stroke-width=\"2.8\" stroke-linecap=\"round\"/>",
+    "category": "Frames",
+    "tags": [
+      "name badge",
+      "nameplate",
+      "monogram",
+      "personalize",
+      "heirloom",
+      "bracket",
+      "cartouche"
+    ]
+  },
+  {
+    "id": "heirloom-scallop-plaque",
+    "name": "Heirloom scalloped plaque",
+    "art": "<path d=\"M20 29 Q25 17 34 29 Q42 17 50 29 Q58 17 66 29 Q75 17 80 29 Q96 32 86 42 Q99 50 86 58 Q96 68 80 71 Q75 83 66 71 Q58 83 50 71 Q42 83 34 71 Q25 83 20 71 Q4 68 14 58 Q1 50 14 42 Q4 32 20 29Z\" fill=\"none\" stroke=\"#bf8299\" stroke-width=\"3\"/><rect x=\"20\" y=\"35\" width=\"60\" height=\"30\" rx=\"9\" fill=\"none\" stroke=\"#bf8299\" stroke-width=\"1.5\"/>",
+    "category": "Frames",
+    "tags": [
+      "name badge",
+      "nameplate",
+      "monogram",
+      "personalize",
+      "heirloom",
+      "bracket",
+      "cartouche"
+    ]
+  },
+  {
+    "id": "sports-cluster-preset",
+    "name": "Little athlete sports cluster",
+    "category": "Ready-made designs",
+    "tags": [
+      "sports",
+      "trio",
+      "boys",
+      "name optional",
+      "heirloom"
+    ],
+    "art": "<g transform=\"translate(0 27) scale(0.39)\"><circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#eee6d4\"/><path d=\"M50 31 L68 44 61 65 39 65 32 44Z M39 8 L61 8 68 19 50 27 32 19Z M8 38 L20 29 29 44 19 61 8 57Z M92 38 L80 29 71 44 81 61 92 57Z M22 82 L26 66 42 73 46 92Z M78 82 L74 66 58 73 54 92Z\" fill=\"#4c4d48\"/><path d=\"M50 27 V31 M29 44 H32 M68 44 H71 M39 65 L26 66 M61 65 L74 66\" stroke=\"#77756a\" stroke-width=\"2\"/></g><g transform=\"translate(52 23) scale(0.44)\"><circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#d89b49\"/><path d=\"M13 71 Q52 92 87 66 A43 43 0 0 1 13 71Z\" fill=\"#b97835\"/><g fill=\"none\" stroke=\"#65452e\" stroke-width=\"2.8\"><circle cx=\"50\" cy=\"50\" r=\"42\"/><path d=\"M12 30 Q50 54 88 70 M29 12 Q53 50 71 88 M8 58 Q49 22 83 23 M22 82 Q37 46 92 43\"/></g></g><g transform=\"translate(28 32) scale(0.47)\"><path d=\"M4 50 C24 19 68 10 96 50 C68 90 24 81 4 50Z\" fill=\"#8d6240\"/><path d=\"M4 50 C29 72 70 72 96 50 C68 90 24 81 4 50Z\" fill=\"#69482f\"/><path d=\"M20 33 Q28 50 20 67 M80 33 Q72 50 80 67\" stroke=\"#f4e8d2\" stroke-width=\"6\" fill=\"none\"/><path d=\"M30 49 Q50 45 70 49\" stroke=\"#523924\" stroke-width=\"3\" fill=\"none\"/><path d=\"M34 47 Q50 43 66 47 M37 42 L38 52 M44 41 L45 51 M51 40 L51 50 M58 41 L57 51 M65 42 L64 52\" stroke=\"#f4e8d2\" stroke-width=\"2.8\" stroke-linecap=\"round\" fill=\"none\"/></g><g transform=\"translate(74 16) scale(0.25)\"><circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#f4ead8\"/><path d=\"M11 66 Q50 91 89 66 A43 43 0 0 1 11 66Z\" fill=\"#d9cbb4\"/><g fill=\"none\" stroke=\"#a64b43\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M22 18 C49 36 49 64 22 82 M78 18 C51 36 51 64 78 82\"/><path d=\"M26 23 l-8 4 M33 31 l-9 3 M38 40 l-9 1 M40 50 l-9 -1 M38 60 l-9 -3 M33 69 l-8 -4 M26 77 l-7 -5 M74 23 l8 4 M67 31 l9 3 M62 40 l9 1 M60 50 l9 -1 M62 60 l9 -3 M67 69 l8 -4 M74 77 l7 -5\"/></g></g>"
+  },
+  {
+    "id": "sports-name-frame-preset",
+    "name": "Little athlete name frame",
+    "category": "Ready-made designs",
+    "tags": [
+      "sports",
+      "personalize",
+      "name frame",
+      "monogram"
+    ],
+    "art": "<g transform=\"translate(0 30) scale(0.3)\"><path d=\"M4 50 C24 19 68 10 96 50 C68 90 24 81 4 50Z\" fill=\"#8d6240\"/><path d=\"M4 50 C29 72 70 72 96 50 C68 90 24 81 4 50Z\" fill=\"#69482f\"/><path d=\"M20 33 Q28 50 20 67 M80 33 Q72 50 80 67\" stroke=\"#f4e8d2\" stroke-width=\"6\" fill=\"none\"/><path d=\"M30 49 Q50 45 70 49\" stroke=\"#523924\" stroke-width=\"3\" fill=\"none\"/><path d=\"M34 47 Q50 43 66 47 M37 42 L38 52 M44 41 L45 51 M51 40 L51 50 M58 41 L57 51 M65 42 L64 52\" stroke=\"#f4e8d2\" stroke-width=\"2.8\" stroke-linecap=\"round\" fill=\"none\"/></g><g transform=\"translate(40 4) scale(0.2)\"><circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#f4ead8\"/><path d=\"M11 66 Q50 91 89 66 A43 43 0 0 1 11 66Z\" fill=\"#d9cbb4\"/><g fill=\"none\" stroke=\"#a64b43\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M22 18 C49 36 49 64 22 82 M78 18 C51 36 51 64 78 82\"/><path d=\"M26 23 l-8 4 M33 31 l-9 3 M38 40 l-9 1 M40 50 l-9 -1 M38 60 l-9 -3 M33 69 l-8 -4 M26 77 l-7 -5 M74 23 l8 4 M67 31 l9 3 M62 40 l9 1 M60 50 l9 -1 M62 60 l9 -3 M67 69 l8 -4 M74 77 l7 -5\"/></g></g><g transform=\"translate(70 30) scale(0.3)\"><circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#d89b49\"/><path d=\"M13 71 Q52 92 87 66 A43 43 0 0 1 13 71Z\" fill=\"#b97835\"/><g fill=\"none\" stroke=\"#65452e\" stroke-width=\"2.8\"><circle cx=\"50\" cy=\"50\" r=\"42\"/><path d=\"M12 30 Q50 54 88 70 M29 12 Q53 50 71 88 M8 58 Q49 22 83 23 M22 82 Q37 46 92 43\"/></g></g><path d=\"M29 42 Q50 35 71 42 L71 65 Q50 72 29 65Z\" fill=\"none\" stroke=\"#94734e\" stroke-width=\"2.5\"/>"
+  },
+  {
+    "id": "heirloom-baseball",
+    "name": "Vintage baseball",
+    "art": "<circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#f4ead8\"/><path d=\"M11 66 Q50 91 89 66 A43 43 0 0 1 11 66Z\" fill=\"#d9cbb4\"/><g fill=\"none\" stroke=\"#a64b43\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M22 18 C49 36 49 64 22 82 M78 18 C51 36 51 64 78 82\"/><path d=\"M26 23 l-8 4 M33 31 l-9 3 M38 40 l-9 1 M40 50 l-9 -1 M38 60 l-9 -3 M33 69 l-8 -4 M26 77 l-7 -5 M74 23 l8 4 M67 31 l9 3 M62 40 l9 1 M60 50 l9 -1 M62 60 l9 -3 M67 69 l8 -4 M74 77 l7 -5\"/></g>",
+    "category": "Sports",
+    "tags": [
+      "heirloom",
+      "vintage",
+      "boutique",
+      "ball",
+      "game day"
+    ]
+  },
+  {
+    "id": "heirloom-basketball",
+    "name": "Vintage basketball",
+    "art": "<circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#d89b49\"/><path d=\"M13 71 Q52 92 87 66 A43 43 0 0 1 13 71Z\" fill=\"#b97835\"/><g fill=\"none\" stroke=\"#65452e\" stroke-width=\"2.8\"><circle cx=\"50\" cy=\"50\" r=\"42\"/><path d=\"M12 30 Q50 54 88 70 M29 12 Q53 50 71 88 M8 58 Q49 22 83 23 M22 82 Q37 46 92 43\"/></g>",
+    "category": "Sports",
+    "tags": [
+      "heirloom",
+      "vintage",
+      "boutique",
+      "ball",
+      "game day"
+    ]
+  },
+  {
+    "id": "heirloom-football",
+    "name": "Vintage stitched football",
+    "art": "<path d=\"M4 50 C24 19 68 10 96 50 C68 90 24 81 4 50Z\" fill=\"#8d6240\"/><path d=\"M4 50 C29 72 70 72 96 50 C68 90 24 81 4 50Z\" fill=\"#69482f\"/><path d=\"M20 33 Q28 50 20 67 M80 33 Q72 50 80 67\" stroke=\"#f4e8d2\" stroke-width=\"6\" fill=\"none\"/><path d=\"M30 49 Q50 45 70 49\" stroke=\"#523924\" stroke-width=\"3\" fill=\"none\"/><path d=\"M34 47 Q50 43 66 47 M37 42 L38 52 M44 41 L45 51 M51 40 L51 50 M58 41 L57 51 M65 42 L64 52\" stroke=\"#f4e8d2\" stroke-width=\"2.8\" stroke-linecap=\"round\" fill=\"none\"/>",
+    "category": "Sports",
+    "tags": [
+      "heirloom",
+      "vintage",
+      "boutique",
+      "ball",
+      "game day"
+    ]
+  },
+  {
+    "id": "heirloom-soccer",
+    "name": "Vintage soccer ball",
+    "art": "<circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#eee6d4\"/><path d=\"M50 31 L68 44 61 65 39 65 32 44Z M39 8 L61 8 68 19 50 27 32 19Z M8 38 L20 29 29 44 19 61 8 57Z M92 38 L80 29 71 44 81 61 92 57Z M22 82 L26 66 42 73 46 92Z M78 82 L74 66 58 73 54 92Z\" fill=\"#4c4d48\"/><path d=\"M50 27 V31 M29 44 H32 M68 44 H71 M39 65 L26 66 M61 65 L74 66\" stroke=\"#77756a\" stroke-width=\"2\"/>",
+    "category": "Sports",
+    "tags": [
+      "heirloom",
+      "vintage",
+      "boutique",
+      "ball",
+      "game day"
+    ]
+  },
+  {
+    "id": "boutique-bow-01",
+    "name": "Boutique tied ribbon",
+    "category": "Bows",
+    "tags": [
+      "coquette",
+      "ribbon",
+      "baby",
+      "preppy"
+    ],
+    "art": "<path fill=\"#d59aa9\" d=\"M46 43 C34 18 9 12 8 32 C5 50 24 58 44 49 L19 84 34 79 48 58 53 58 67 88 79 80 56 49 C76 59 96 48 92 29 C89 12 67 18 54 43Z\"/><path fill=\"#a75d76\" d=\"M44 45 Q25 27 17 33 Q21 45 44 48 M56 45 Q76 27 83 33 Q79 45 56 48\"/><rect x=\"43\" y=\"39\" width=\"14\" height=\"17\" rx=\"5\" fill=\"#bd748c\"/>"
+  },
+  {
+    "id": "botanical-rose-01",
+    "name": "Heirloom rose sprig",
+    "category": "Botanical",
+    "tags": [
+      "floral",
+      "vintage",
+      "garden",
+      "heirloom"
+    ],
+    "art": "<path d=\"M48 91 Q55 60 48 30 M51 69 L25 51 M52 58 L76 43\" stroke=\"#507456\" stroke-width=\"3\" fill=\"none\"/><path fill=\"#76946d\" d=\"M48 70 Q18 74 15 44 Q37 42 48 70 M53 60 Q63 35 86 39 Q84 61 53 60\"/><path fill=\"#c77e91\" d=\"M48 9 C26 0 17 22 30 34 C20 50 48 60 58 44 C81 49 88 22 69 16 C64 3 53 3 48 9Z\"/><path fill=\"#e8b3b9\" d=\"M48 16 C31 12 29 30 42 35 C43 48 65 40 64 27 C72 14 55 10 48 16Z\"/><path fill=\"#a95d76\" d=\"M43 25 Q52 17 59 26 Q55 36 46 32Z\"/>"
+  },
+  {
+    "id": "nursery-duck-01",
+    "name": "Nursery duck with bonnet",
+    "category": "Baby",
+    "tags": [
+      "duck",
+      "nursery",
+      "easter",
+      "heirloom"
+    ],
+    "art": "<path fill=\"#e7c575\" d=\"M20 63 Q8 54 10 46 L30 51 Q39 43 48 44 Q39 28 49 17 Q64 4 79 19 Q90 36 75 49 Q91 58 85 73 Q75 91 43 88 Q20 85 20 63Z\"/><path fill=\"#d7a85b\" d=\"M34 62 Q53 48 70 61 Q62 79 42 75Z\"/><path fill=\"#cf8753\" d=\"M80 31 L96 37 80 43Z M45 87 L37 95 H58 L55 87 M67 87 L62 95 H81 L75 86Z\"/><path fill=\"#9eb8ca\" d=\"M43 25 Q42 4 65 5 Q84 7 87 25 L79 29 Q67 17 43 25Z\"/><circle cx=\"72\" cy=\"32\" r=\"3\" fill=\"#443a34\"/>"
+  },
+  {
+    "id": "varsity-pennant-01",
+    "name": "Vintage varsity pennant",
+    "category": "Sports",
+    "tags": [
+      "college",
+      "team",
+      "retro",
+      "school"
+    ],
+    "art": "<path fill=\"#a34343\" d=\"M18 13 L92 43 18 74Z\"/><path fill=\"#f1dfb6\" d=\"M23 20 L77 43 23 65Z\"/><path fill=\"#a34343\" d=\"M35 31 H44 L49 47 54 31 H63 L53 56 H45Z\"/><path d=\"M14 8 V94\" stroke=\"#735640\" stroke-width=\"5\"/>"
+  },
+  {
+    "id": "scallop-frame",
+    "name": "Scalloped name frame",
+    "category": "Frames",
+    "art": "<rect x=\"10\" y=\"23\" width=\"80\" height=\"54\" rx=\"20\" fill=\"none\" stroke=\"#b86e83\" stroke-width=\"4\"/><path d=\"M20 23 Q30 8 40 23 Q50 8 60 23 Q70 8 80 23 M20 77 Q30 92 40 77 Q50 92 60 77 Q70 92 80 77\" fill=\"none\" stroke=\"#b86e83\" stroke-width=\"3\"/>"
+  },
+  {
+    "id": "oval-name-frame",
+    "name": "Oval name frame",
+    "category": "Frames",
+    "art": "<ellipse cx=\"50\" cy=\"50\" rx=\"44\" ry=\"30\" fill=\"none\" stroke=\"#789779\" stroke-width=\"4\"/><ellipse cx=\"50\" cy=\"50\" rx=\"38\" ry=\"24\" fill=\"none\" stroke=\"#789779\" stroke-width=\"2\"/>"
+  },
+  {
+    "id": "sparkle-accent",
+    "name": "Sparkle accents",
+    "category": "Decorations",
+    "art": "<path fill=\"#c18b32\" d=\"M50 8 L57 40 90 50 57 60 50 92 43 60 10 50 43 40Z M18 8 L22 18 32 22 22 26 18 36 14 26 4 22 14 18Z\"/>"
+  },
+  {
+    "id": "leaf-divider",
+    "name": "Leaf divider",
+    "category": "Decorations",
+    "art": "<path d=\"M8 50 H92\" stroke=\"#47775b\" stroke-width=\"3\"/><path fill=\"#73977b\" d=\"M30 50 Q8 22 42 36 L50 50 Q70 22 90 36 L65 50 Q90 78 58 65 L50 50 Q30 78 10 65Z\"/>"
+  },
+  {
+    "id": "simple-cross-element",
+    "name": "Classic cross",
+    "category": "Faith",
+    "art": "<path fill=\"#9473b8\" d=\"M40 8 H60 V34 H84 V54 H60 V92 H40 V54 H16 V34 H40Z\"/>"
+  },
+  {
+    "id": "ribbon-banner-element",
+    "name": "Ribbon name banner",
+    "category": "Frames",
+    "art": "<path fill=\"#b86e83\" d=\"M5 28 H25 V72 H5 L15 50Z M95 28 H75 V72 H95 L85 50Z\"/><rect x=\"18\" y=\"20\" width=\"64\" height=\"60\" rx=\"6\" fill=\"none\" stroke=\"#b86e83\" stroke-width=\"4\"/>"
+  },
+  {
+    "id": "heart",
+    "name": "Classic heart",
+    "category": "Everyday",
+    "art": "<path fill=\"#b84d65\" d=\"M50 85 C15 60 5 42 19 25 C30 12 45 18 50 32 C55 18 70 12 81 25 C95 42 85 60 50 85Z\"/>"
+  },
+  {
+    "id": "star",
+    "name": "Five-point star",
+    "category": "Everyday",
+    "art": "<path fill=\"#c18b32\" d=\"M50 8 L62 36 93 38 69 58 77 89 50 72 23 89 31 58 7 38 38 36Z\"/>"
+  },
+  {
+    "id": "leaf",
+    "name": "Botanical leaf",
+    "category": "Nature",
+    "art": "<path fill=\"#73977b\" d=\"M16 85 Q8 12 88 12 Q90 80 16 85Z\"/><path d=\"M16 85 Q48 48 80 20\" stroke=\"#234536\" stroke-width=\"3\" fill=\"none\"/>"
+  },
+  {
+    "id": "football",
+    "name": "Classic football",
+    "category": "Sports",
+    "art": "<path fill=\"#945c38\" d=\"M8 50 Q50 -5 92 50 Q50 105 8 50Z\"/><path stroke=\"#fffdf5\" stroke-width=\"3\" fill=\"none\" d=\"M30 50 H70 M38 43 V57 M46 43 V57 M54 43 V57 M62 43 V57\"/>"
+  },
+  {
+    "id": "bow",
+    "name": "Ribbon bow",
+    "category": "Everyday",
+    "art": "<path fill=\"#b86e83\" d=\"M46 45 Q4 5 8 45 Q4 82 46 55 L24 90 43 83 50 61 57 83 76 90 54 55 Q96 82 92 45 Q96 5 54 45Z\"/><rect x=\"44\" y=\"40\" width=\"12\" height=\"20\" rx=\"4\" fill=\"#8d455d\"/>"
+  },
+  {
+    "id": "mountain",
+    "name": "Mountain badge",
+    "category": "Nature",
+    "art": "<circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#e5ede6\"/><path fill=\"#315b47\" d=\"M12 70 L39 24 58 55 72 37 89 70Z\"/><path fill=\"#fffdf5\" d=\"M39 24 L29 41 39 36 49 41Z\"/>"
+  },
+  {
+    "id": "wildflower",
+    "name": "Wildflower sprig",
+    "category": "Botanical",
+    "art": "<path d=\"M50 90 Q35 55 48 18 M45 65 Q20 50 20 35 M45 75 Q75 58 78 40\" fill=\"none\" stroke=\"#47775b\" stroke-width=\"3\"/><path fill=\"#779b69\" d=\"M43 65 Q12 65 17 45 Q38 46 43 65 M48 74 Q75 48 84 59 Q80 78 48 74\"/><g fill=\"#d68a9e\"><circle cx=\"48\" cy=\"13\" r=\"9\"/><circle cx=\"38\" cy=\"23\" r=\"8\"/><circle cx=\"58\" cy=\"23\" r=\"8\"/><circle cx=\"20\" cy=\"30\" r=\"8\"/><circle cx=\"78\" cy=\"35\" r=\"8\"/></g><circle cx=\"48\" cy=\"23\" r=\"5\" fill=\"#d7a84c\"/>"
+  },
+  {
+    "id": "sunrise",
+    "name": "Sunrise adventure patch",
+    "category": "Patches",
+    "art": "<circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"#233c58\"/><circle cx=\"50\" cy=\"42\" r=\"23\" fill=\"#e5a34d\"/><path fill=\"#658d9a\" d=\"M10 64 L33 34 53 63 68 44 90 64 78 81 50 92 22 81Z\"/><path fill=\"#f5eee0\" d=\"M23 47 L33 34 43 49 33 44Z M60 55 L68 44 77 56 68 52Z\"/><circle cx=\"50\" cy=\"50\" r=\"43\" fill=\"none\" stroke=\"#d9c7a4\" stroke-width=\"3\"/>"
+  },
+  {
+    "id": "baseball",
+    "name": "Baseball diamond",
+    "category": "Sports",
+    "art": "<path fill=\"#284c6d\" d=\"M50 5 L95 50 50 95 5 50Z\"/><circle cx=\"50\" cy=\"50\" r=\"29\" fill=\"#f6eee0\"/><path d=\"M32 28 Q49 50 32 72 M68 28 Q51 50 68 72 M31 36 L40 32 M35 48 L44 46 M31 62 L40 65 M69 36 L60 32 M65 48 L56 46 M69 62 L60 65\" fill=\"none\" stroke=\"#b83c46\" stroke-width=\"2.5\"/>"
+  },
+  {
+    "id": "anchor",
+    "name": "Coastal anchor",
+    "category": "Coastal",
+    "art": "<circle cx=\"50\" cy=\"18\" r=\"8\" fill=\"none\" stroke=\"#234b70\" stroke-width=\"5\"/><path d=\"M50 26 V82 M30 38 H70 M18 58 Q18 85 50 85 Q82 85 82 58\" fill=\"none\" stroke=\"#234b70\" stroke-width=\"6\"/><path fill=\"#234b70\" d=\"M8 62 L18 48 29 62Z M71 62 L82 48 92 62Z\"/><path d=\"M39 31 Q68 46 41 59 Q28 68 54 78\" fill=\"none\" stroke=\"#c49a60\" stroke-width=\"3\"/>"
+  },
+  {
+    "id": "butterfly",
+    "name": "Garden butterfly",
+    "category": "Botanical",
+    "art": "<path fill=\"#769ac4\" d=\"M47 48 Q4 2 9 39 Q8 60 43 57 Q7 69 25 87 Q43 96 49 61Z M53 48 Q96 2 91 39 Q92 60 57 57 Q93 69 75 87 Q57 96 51 61Z\"/><path fill=\"#e7b36b\" d=\"M40 43 Q18 19 19 39 Q20 49 40 50Z M60 43 Q82 19 81 39 Q80 49 60 50Z\"/><path d=\"M50 40 V77 M50 40 L40 26 M50 40 L60 26\" stroke=\"#263c56\" stroke-width=\"4\" fill=\"none\"/>"
+  },
+  {
+    "id": "laurel",
+    "name": "Laurel monogram frame",
+    "category": "Monograms",
+    "art": "<path d=\"M46 87 Q10 65 24 22 M54 87 Q90 65 76 22\" stroke=\"#47775b\" stroke-width=\"2.5\" fill=\"none\"/><g fill=\"#73977b\"><path d=\"M24 35 Q5 20 15 12 Q30 20 24 35 M21 49 Q2 39 8 29 Q23 32 21 49 M26 65 Q7 61 8 48 Q25 49 26 65 M37 78 Q17 79 14 66 Q31 62 37 78 M76 35 Q95 20 85 12 Q70 20 76 35 M79 49 Q98 39 92 29 Q77 32 79 49 M74 65 Q93 61 92 48 Q75 49 74 65 M63 78 Q83 79 86 66 Q69 62 63 78\"/></g><path d=\"M38 87 Q50 80 62 87\" stroke=\"#c19a57\" stroke-width=\"3\" fill=\"none\"/>"
+  },
+  {
+    "id": "bear",
+    "name": "Honey bear",
+    "category": "Characters",
+    "art": "<g fill=\"#aa754d\"><circle cx=\"25\" cy=\"24\" r=\"14\"/><circle cx=\"75\" cy=\"24\" r=\"14\"/><ellipse cx=\"50\" cy=\"76\" rx=\"27\" ry=\"19\"/><ellipse cx=\"50\" cy=\"45\" rx=\"36\" ry=\"31\"/></g><g fill=\"#e9c39a\"><circle cx=\"25\" cy=\"24\" r=\"8\"/><circle cx=\"75\" cy=\"24\" r=\"8\"/><ellipse cx=\"50\" cy=\"58\" rx=\"17\" ry=\"12\"/></g><g fill=\"#292b35\"><ellipse cx=\"39\" cy=\"48\" rx=\"3\" ry=\"4\"/><ellipse cx=\"61\" cy=\"48\" rx=\"3\" ry=\"4\"/></g><path d=\"M45 59 Q50 64 55 59\" fill=\"none\" stroke=\"#292b35\" stroke-width=\"2.5\" stroke-linecap=\"round\"/><g fill=\"#e6a0a0\"><ellipse cx=\"30\" cy=\"57\" rx=\"5\" ry=\"3\"/><ellipse cx=\"70\" cy=\"57\" rx=\"5\" ry=\"3\"/></g><ellipse cx=\"50\" cy=\"54\" rx=\"5\" ry=\"3\" fill=\"#50382c\"/><path d=\"M35 76 L50 82 65 76 65 89 50 84 35 89Z\" fill=\"#537e9b\"/>"
+  },
+  {
+    "id": "bunny",
+    "name": "Meadow bunny",
+    "category": "Characters",
+    "art": "<g fill=\"#d6c5b5\"><ellipse cx=\"34\" cy=\"25\" rx=\"12\" ry=\"23\"/><ellipse cx=\"66\" cy=\"25\" rx=\"12\" ry=\"23\"/><ellipse cx=\"50\" cy=\"77\" rx=\"26\" ry=\"19\"/><ellipse cx=\"50\" cy=\"51\" rx=\"34\" ry=\"28\"/></g><g fill=\"#d99da8\"><ellipse cx=\"34\" cy=\"24\" rx=\"5\" ry=\"15\"/><ellipse cx=\"66\" cy=\"24\" rx=\"5\" ry=\"15\"/></g><g fill=\"#292b35\"><ellipse cx=\"39\" cy=\"48\" rx=\"3\" ry=\"4\"/><ellipse cx=\"61\" cy=\"48\" rx=\"3\" ry=\"4\"/></g><path d=\"M45 59 Q50 64 55 59\" fill=\"none\" stroke=\"#292b35\" stroke-width=\"2.5\" stroke-linecap=\"round\"/><g fill=\"#e6a0a0\"><ellipse cx=\"30\" cy=\"57\" rx=\"5\" ry=\"3\"/><ellipse cx=\"70\" cy=\"57\" rx=\"5\" ry=\"3\"/></g><path d=\"M50 76 L63 68 61 88Z\" fill=\"#e99448\"/><path d=\"M63 68 L68 60 M63 68 L73 65\" stroke=\"#54855e\" stroke-width=\"3\"/>"
+  },
+  {
+    "id": "fox",
+    "name": "Woodland fox",
+    "category": "Characters",
+    "art": "<path fill=\"#c86e38\" d=\"M12 13 L39 28 Q50 23 61 28 L88 13 82 61 Q70 82 50 85 Q30 82 18 61Z\"/><path fill=\"#f4ddbc\" d=\"M20 46 Q39 45 50 66 Q61 45 80 46 L76 67 Q64 83 50 85 Q36 83 24 67Z\"/><path fill=\"#75443c\" d=\"M20 23 L35 32 23 40Z M80 23 L65 32 77 40Z\"/><g fill=\"#292b35\"><ellipse cx=\"39\" cy=\"48\" rx=\"3\" ry=\"4\"/><ellipse cx=\"61\" cy=\"48\" rx=\"3\" ry=\"4\"/></g><path d=\"M45 59 Q50 64 55 59\" fill=\"none\" stroke=\"#292b35\" stroke-width=\"2.5\" stroke-linecap=\"round\"/><g fill=\"#e6a0a0\"><ellipse cx=\"30\" cy=\"57\" rx=\"5\" ry=\"3\"/><ellipse cx=\"70\" cy=\"57\" rx=\"5\" ry=\"3\"/></g><ellipse cx=\"50\" cy=\"65\" rx=\"5\" ry=\"3\" fill=\"#292b35\"/>"
+  },
+  {
+    "id": "penguin",
+    "name": "Cozy penguin",
+    "category": "Characters",
+    "art": "<ellipse cx=\"50\" cy=\"53\" rx=\"32\" ry=\"40\" fill=\"#35465c\"/><ellipse cx=\"50\" cy=\"61\" rx=\"23\" ry=\"28\" fill=\"#f4eee1\"/><path d=\"M20 48 Q2 60 14 77 L29 65 M80 48 Q98 60 86 77 L71 65\" fill=\"#35465c\"/><g fill=\"#e4a24d\"><ellipse cx=\"36\" cy=\"91\" rx=\"12\" ry=\"5\"/><ellipse cx=\"64\" cy=\"91\" rx=\"12\" ry=\"5\"/><path d=\"M44 54 H56 L50 61Z\"/></g><g fill=\"#292b35\"><circle cx=\"39\" cy=\"47\" r=\"3\"/><circle cx=\"61\" cy=\"47\" r=\"3\"/></g><path d=\"M22 33 Q50 40 78 33 L75 22 Q50 29 25 22Z\" fill=\"#ba5265\"/><circle cx=\"50\" cy=\"11\" r=\"8\" fill=\"#ba5265\"/>"
+  },
+  {
+    "id": "dino",
+    "name": "Little dinosaur",
+    "category": "Characters",
+    "art": "<path fill=\"#6c9b70\" d=\"M8 69 Q22 81 35 63 L39 39 Q39 15 61 15 Q87 15 88 36 L85 48 65 49 65 77 78 83 78 91 55 91 49 80 43 91 23 91 24 81 Q10 81 8 69Z\"/><path fill=\"#e7b65d\" d=\"M40 39 L30 31 40 24 35 15 49 18 52 7 63 15Z\"/><ellipse cx=\"62\" cy=\"67\" rx=\"9\" ry=\"13\" fill=\"#b7ce8a\"/><circle cx=\"72\" cy=\"31\" r=\"4\" fill=\"#293b34\"/><path d=\"M74 42 Q81 45 85 40\" fill=\"none\" stroke=\"#293b34\" stroke-width=\"2\"/>"
+  },
+  {
+    "id": "whale",
+    "name": "Happy little whale",
+    "category": "Coastal",
+    "art": "<path fill=\"#689cc0\" d=\"M8 48 Q25 56 35 41 Q49 20 71 35 Q96 48 85 72 Q74 91 44 83 Q20 78 18 61 Q6 61 8 48Z\"/><path fill=\"#b5d7e6\" d=\"M31 71 Q58 83 84 66 Q76 91 44 83Z\"/><circle cx=\"72\" cy=\"49\" r=\"3.5\" fill=\"#293b4a\"/><path d=\"M69 61 Q75 65 80 59\" stroke=\"#293b4a\" stroke-width=\"2\" fill=\"none\"/><path d=\"M56 28 Q43 10 36 21 M56 28 Q69 10 76 21\" stroke=\"#689cc0\" stroke-width=\"4\" fill=\"none\"/>"
+  },
+  {
+    "id": "ghost",
+    "name": "Friendly ghost",
+    "category": "Seasonal",
+    "art": "<path fill=\"#e5e1f2\" stroke=\"#766b9b\" stroke-width=\"2\" d=\"M16 83 V43 Q16 9 50 9 Q84 9 84 43 V83 L72 72 61 87 50 73 39 87 28 72Z\"/><g fill=\"#292b35\"><ellipse cx=\"39\" cy=\"48\" rx=\"3\" ry=\"4\"/><ellipse cx=\"61\" cy=\"48\" rx=\"3\" ry=\"4\"/></g><path d=\"M45 59 Q50 64 55 59\" fill=\"none\" stroke=\"#292b35\" stroke-width=\"2.5\" stroke-linecap=\"round\"/><g fill=\"#e6a0a0\"><ellipse cx=\"30\" cy=\"57\" rx=\"5\" ry=\"3\"/><ellipse cx=\"70\" cy=\"57\" rx=\"5\" ry=\"3\"/></g><path fill=\"#e6a04d\" d=\"M35 76 Q50 63 65 76 L60 88 H40Z\"/>"
+  },
+  {
+    "id": "rocket",
+    "name": "Space explorer",
+    "category": "Kids",
+    "art": "<path fill=\"#b95b52\" d=\"M37 57 L20 80 38 76 M63 57 L80 80 62 76Z\"/><path fill=\"#e6e5df\" stroke=\"#466584\" stroke-width=\"2\" d=\"M50 7 Q77 28 65 69 L35 69 Q23 28 50 7Z\"/><path fill=\"#b95b52\" d=\"M50 7 Q63 18 67 31 H33 Q37 18 50 7Z\"/><circle cx=\"50\" cy=\"45\" r=\"12\" fill=\"#466584\"/><circle cx=\"50\" cy=\"45\" r=\"7\" fill=\"#9bcce4\"/><path fill=\"#e5a54a\" d=\"M39 72 H61 L50 96Z\"/><path fill=\"#b95b52\" d=\"M46 73 H54 L50 87Z\"/>"
+  },
+  {
+    "id": "puppy",
+    "name": "Playful puppy",
+    "category": "Characters",
+    "art": "<path fill=\"#a67550\" d=\"M22 24 Q0 24 9 65 L28 60 M78 24 Q100 24 91 65 L72 60\"/><ellipse cx=\"50\" cy=\"49\" rx=\"32\" ry=\"34\" fill=\"#e5bd91\"/><ellipse cx=\"50\" cy=\"63\" rx=\"20\" ry=\"15\" fill=\"#fff0da\"/><g fill=\"#292b35\"><circle cx=\"36\" cy=\"45\" r=\"4\"/><circle cx=\"64\" cy=\"45\" r=\"4\"/><ellipse cx=\"50\" cy=\"57\" rx=\"7\" ry=\"5\"/></g><path d=\"M42 67 Q50 76 58 67\" stroke=\"#49362d\" stroke-width=\"3\" fill=\"none\"/><path d=\"M27 82 H73 V90 H27Z\" fill=\"#468bb6\"/>"
+  },
+  {
+    "id": "mouse",
+    "name": "Vintage storybook mouse",
+    "category": "Characters",
+    "art": "<g fill=\"#55505a\"><circle cx=\"22\" cy=\"24\" r=\"18\"/><circle cx=\"78\" cy=\"24\" r=\"18\"/><ellipse cx=\"50\" cy=\"52\" rx=\"36\" ry=\"35\"/></g><g fill=\"#e8b5ad\"><circle cx=\"22\" cy=\"24\" r=\"10\"/><circle cx=\"78\" cy=\"24\" r=\"10\"/></g><ellipse cx=\"50\" cy=\"61\" rx=\"26\" ry=\"21\" fill=\"#f0d5b5\"/><g fill=\"#302d36\"><circle cx=\"37\" cy=\"48\" r=\"4\"/><circle cx=\"63\" cy=\"48\" r=\"4\"/><ellipse cx=\"50\" cy=\"60\" rx=\"6\" ry=\"4\"/></g><path d=\"M40 70 Q50 78 60 70\" fill=\"none\" stroke=\"#302d36\" stroke-width=\"3\"/><path fill=\"#b85d66\" d=\"M30 83 L50 89 70 83 70 97 50 92 30 97Z\"/>"
+  },
+  {
+    "id": "turtle",
+    "name": "Sea turtle",
+    "category": "Coastal",
+    "art": "<g fill=\"#679a83\"><ellipse cx=\"50\" cy=\"17\" rx=\"12\" ry=\"15\"/><ellipse cx=\"19\" cy=\"39\" rx=\"12\" ry=\"19\" transform=\"rotate(-40 19 39)\"/><ellipse cx=\"81\" cy=\"39\" rx=\"12\" ry=\"19\" transform=\"rotate(40 81 39)\"/><ellipse cx=\"28\" cy=\"77\" rx=\"10\" ry=\"15\"/><ellipse cx=\"72\" cy=\"77\" rx=\"10\" ry=\"15\"/></g><ellipse cx=\"50\" cy=\"53\" rx=\"29\" ry=\"35\" fill=\"#3c786b\"/><path d=\"M50 25 L69 39 62 62 38 62 31 39Z M38 62 L29 75 M62 62 L71 75\" stroke=\"#d4bd7d\" stroke-width=\"3\" fill=\"none\"/><circle cx=\"45\" cy=\"12\" r=\"2\" fill=\"#243e39\"/><circle cx=\"55\" cy=\"12\" r=\"2\" fill=\"#243e39\"/>"
+  },
+  {
+    "id": "gingerbread",
+    "name": "Gingerbread friend",
+    "category": "Seasonal",
+    "art": "<path fill=\"#b77b4c\" d=\"M50 5 A19 19 0 0 1 66 34 L88 47 Q97 61 82 66 L67 57 72 85 Q74 98 59 96 L50 76 41 96 Q26 98 28 85 L33 57 18 66 Q3 61 12 47 L34 34 A19 19 0 0 1 50 5Z\"/><g fill=\"#fff1dd\"><circle cx=\"43\" cy=\"23\" r=\"3\"/><circle cx=\"57\" cy=\"23\" r=\"3\"/><circle cx=\"50\" cy=\"52\" r=\"4\"/><circle cx=\"50\" cy=\"64\" r=\"4\"/></g><path d=\"M42 31 Q50 38 58 31 M15 51 L23 58 M77 58 L85 51 M32 85 H41 M59 85 H68\" fill=\"none\" stroke=\"#fff1dd\" stroke-width=\"3\"/><path fill=\"#b94755\" d=\"M35 39 L50 44 65 39 65 49 50 45 35 49Z\"/>"
+  },
+  {
+    "id": "duck",
+    "name": "Rainy day duck",
+    "category": "Baby",
+    "art": "<ellipse cx=\"48\" cy=\"69\" rx=\"36\" ry=\"23\" fill=\"#e6b84e\"/><circle cx=\"63\" cy=\"35\" r=\"24\" fill=\"#f1cd63\"/><path fill=\"#d98a43\" d=\"M79 35 L97 43 79 49Z\"/><ellipse cx=\"40\" cy=\"69\" rx=\"18\" ry=\"12\" fill=\"#cda047\"/><circle cx=\"70\" cy=\"29\" r=\"4\" fill=\"#34343c\"/><path fill=\"#6599b5\" d=\"M38 19 Q63 0 86 19 L90 25 H35Z\"/>"
+  },
+  {
+    "id": "sailboat",
+    "name": "Coastal sailboat",
+    "category": "Coastal",
+    "art": "<path fill=\"#e5d3ac\" d=\"M48 8 V65 H10Z\"/><path fill=\"#739dbb\" d=\"M54 17 V65 H85Z\"/><path fill=\"#9b4b48\" d=\"M10 70 H90 L75 85 H25Z\"/><path d=\"M51 7 V70\" stroke=\"#34495c\" stroke-width=\"3\"/><path d=\"M5 91 Q16 84 27 91 T49 91 T71 91 T93 91\" fill=\"none\" stroke=\"#739dbb\" stroke-width=\"3\"/>"
+  },
+  {
+    "id": "coquette",
+    "name": "Pink coquette ribbon",
+    "category": "Bows",
+    "art": "<path fill=\"#efb0c5\" stroke=\"#b96a8a\" stroke-width=\"2\" d=\"M46 48 Q15 8 7 26 Q0 47 15 60 Q30 64 46 53 L24 91 42 83 51 58 63 91 78 84 56 53 Q85 70 94 46 Q99 15 83 21 Q68 24 54 48Z\"/><path d=\"M15 32 Q30 32 45 49 M85 32 Q70 32 55 49\" fill=\"none\" stroke=\"#b96a8a\" stroke-width=\"2\"/><rect x=\"43\" y=\"42\" width=\"14\" height=\"17\" rx=\"5\" fill=\"#b96a8a\"/>"
+  },
+  {
+    "id": "bluebow",
+    "name": "Powder blue ribbon",
+    "category": "Bows",
+    "art": "<path fill=\"#a9cce9\" stroke=\"#5686b2\" stroke-width=\"2\" d=\"M46 48 Q15 8 7 26 Q0 47 15 60 Q30 64 46 53 L24 91 42 83 51 58 63 91 78 84 56 53 Q85 70 94 46 Q99 15 83 21 Q68 24 54 48Z\"/><path d=\"M15 32 Q30 32 45 49 M85 32 Q70 32 55 49\" fill=\"none\" stroke=\"#5686b2\" stroke-width=\"2\"/><rect x=\"43\" y=\"42\" width=\"14\" height=\"17\" rx=\"5\" fill=\"#5686b2\"/>"
+  },
+  {
+    "id": "cherrybow",
+    "name": "Cherry ribbon",
+    "category": "Bows",
+    "art": "<path fill=\"#e75b71\" stroke=\"#a62c48\" stroke-width=\"2\" d=\"M46 48 Q15 8 7 26 Q0 47 15 60 Q30 64 46 53 L24 91 42 83 51 58 63 91 78 84 56 53 Q85 70 94 46 Q99 15 83 21 Q68 24 54 48Z\"/><path d=\"M15 32 Q30 32 45 49 M85 32 Q70 32 55 49\" fill=\"none\" stroke=\"#a62c48\" stroke-width=\"2\"/><rect x=\"43\" y=\"42\" width=\"14\" height=\"17\" rx=\"5\" fill=\"#a62c48\"/><g fill=\"#fff0e8\"><circle cx=\"20\" cy=\"36\" r=\"3\"/><circle cx=\"30\" cy=\"45\" r=\"3\"/><circle cx=\"80\" cy=\"36\" r=\"3\"/><circle cx=\"70\" cy=\"45\" r=\"3\"/></g>"
+  },
+  {
+    "id": "rainbow",
+    "name": "Pastel rainbow",
+    "category": "Cute & boutique",
+    "art": "<g fill=\"none\" stroke-width=\"8\"><path d=\"M10 76 V53 A40 40 0 0 1 90 53 V76\" stroke=\"#d98fa5\"/><path d=\"M21 76 V53 A29 29 0 0 1 79 53 V76\" stroke=\"#e8b57c\"/><path d=\"M32 76 V53 A18 18 0 0 1 68 53 V76\" stroke=\"#a6bd9b\"/><path d=\"M43 76 V53 A7 7 0 0 1 57 53 V76\" stroke=\"#8eb5d2\"/></g>"
+  },
+  {
+    "id": "cherries",
+    "name": "Sweet cherries",
+    "category": "Cute & boutique",
+    "art": "<path d=\"M30 65 Q30 30 58 16 Q73 30 72 66\" stroke=\"#54855b\" stroke-width=\"4\" fill=\"none\"/><path fill=\"#79a575\" d=\"M58 16 Q72 0 91 12 Q80 32 58 16Z\"/><g fill=\"#d84a61\"><circle cx=\"28\" cy=\"72\" r=\"19\"/><circle cx=\"72\" cy=\"72\" r=\"19\"/></g><g fill=\"#f6b0b7\"><ellipse cx=\"21\" cy=\"64\" rx=\"4\" ry=\"6\"/><ellipse cx=\"65\" cy=\"64\" rx=\"4\" ry=\"6\"/></g>"
+  },
+  {
+    "id": "strawberry",
+    "name": "Strawberry sweetheart",
+    "category": "Cute & boutique",
+    "art": "<path fill=\"#e86b7c\" d=\"M50 28 Q12 12 13 47 Q18 80 50 95 Q82 80 87 47 Q88 12 50 28Z\"/><path fill=\"#68966a\" d=\"M50 29 L22 13 43 15 50 4 57 15 78 13Z\"/><g fill=\"#f8dfb2\"><ellipse cx=\"30\" cy=\"42\" rx=\"2\" ry=\"4\"/><ellipse cx=\"50\" cy=\"40\" rx=\"2\" ry=\"4\"/><ellipse cx=\"70\" cy=\"42\" rx=\"2\" ry=\"4\"/><ellipse cx=\"40\" cy=\"58\" rx=\"2\" ry=\"4\"/><ellipse cx=\"60\" cy=\"58\" rx=\"2\" ry=\"4\"/><ellipse cx=\"50\" cy=\"76\" rx=\"2\" ry=\"4\"/></g>"
+  },
+  {
+    "id": "unicorn",
+    "name": "Pastel unicorn",
+    "category": "Kids",
+    "art": "<path fill=\"#f5e8db\" stroke=\"#aa91ae\" stroke-width=\"2\" d=\"M24 32 L20 12 42 25 Q73 15 78 48 L91 68 Q84 89 52 86 L23 76Z\"/><path fill=\"#d5a1c8\" d=\"M24 32 Q5 43 14 83 L35 88 Q22 62 43 29Z\"/><path fill=\"#e5b65e\" d=\"M47 28 L55 3 64 28Z\"/><path d=\"M53 50 Q60 57 67 50\" stroke=\"#55415c\" stroke-width=\"3\" fill=\"none\"/><ellipse cx=\"68\" cy=\"65\" rx=\"8\" ry=\"4\" fill=\"#e9a4b7\"/>"
+  },
+  {
+    "id": "pumpkin",
+    "name": "Sweet pumpkin",
+    "category": "Seasonal",
+    "art": "<g fill=\"#df9654\" stroke=\"#b8753d\" stroke-width=\"2\"><ellipse cx=\"30\" cy=\"58\" rx=\"23\" ry=\"32\"/><ellipse cx=\"70\" cy=\"58\" rx=\"23\" ry=\"32\"/><ellipse cx=\"50\" cy=\"58\" rx=\"23\" ry=\"35\"/></g><path d=\"M50 26 Q44 12 60 8\" stroke=\"#68855a\" stroke-width=\"7\" fill=\"none\"/><g fill=\"#493a37\"><circle cx=\"37\" cy=\"55\" r=\"4\"/><circle cx=\"63\" cy=\"55\" r=\"4\"/></g><path d=\"M42 68 Q50 76 58 68\" stroke=\"#493a37\" stroke-width=\"3\" fill=\"none\"/>"
+  },
+  {
+    "id": "shell",
+    "name": "Scallop shell",
+    "category": "Coastal",
+    "art": "<path fill=\"#edc0a8\" stroke=\"#b97f70\" stroke-width=\"2\" d=\"M50 91 Q5 67 5 38 Q5 20 20 25 Q20 5 37 14 Q50 0 63 14 Q80 5 80 25 Q95 20 95 38 Q95 67 50 91Z\"/><path d=\"M50 86 L20 30 M50 86 L37 19 M50 86 V12 M50 86 L63 19 M50 86 L80 30\" stroke=\"#b97f70\" stroke-width=\"2\" fill=\"none\"/>"
+  },
+  {
+    "id": "frame",
+    "name": "Scalloped monogram frame",
+    "category": "Cute & boutique",
+    "art": "<path d=\"M50 9 Q60 1 68 15 Q83 10 85 26 Q99 32 91 45 Q101 58 87 68 Q90 85 73 85 Q62 99 50 91 Q38 99 27 85 Q10 85 13 68 Q-1 58 9 45 Q1 32 15 26 Q17 10 32 15 Q40 1 50 9Z\" fill=\"none\" stroke=\"#b97c9b\" stroke-width=\"4\"/><circle cx=\"50\" cy=\"50\" r=\"30\" fill=\"none\" stroke=\"#e2b0c7\" stroke-width=\"2\"/>"
+  },
+  {
+    "id": "prairie-flower",
+    "name": "Prairie coneflower",
+    "category": "Botanical",
+    "art": "<path id=\"tl-satin\" d=\"M51 87 Q43 57 50 39\" fill=\"none\" stroke=\"#557a58\" stroke-width=\"4\"/><path fill=\"#7a9a66\" d=\"M49 69 Q27 70 21 54 Q39 53 49 69Z M49 76 Q65 57 81 65 Q72 83 49 76Z\"/><path fill=\"#b45878\" d=\"M38 38 Q19 18 24 34 Q26 53 42 50Z M46 40 Q31 50 39 62 Q52 61 55 42Z M55 39 Q62 64 72 54 Q75 47 65 36Z M66 35 Q84 45 84 31 Q78 21 63 27Z\"/><ellipse fill=\"#835032\" cx=\"51\" cy=\"34\" rx=\"18\" ry=\"11\"/>"
+  },
+  {
+    "id": "spool-mark",
+    "name": "Thread spool",
+    "category": "Everyday",
+    "art": "<path fill=\"#6945a2\" d=\"M29 25 H71 V75 H29Z\"/><path fill=\"#ceaddd\" d=\"M31 35 H69 V65 H31Z\"/><path fill=\"none\" stroke=\"#8463a3\" stroke-width=\"3\" d=\"M31 42 L69 38 M31 51 L69 47 M31 60 L69 56\"/><rect fill=\"#443358\" x=\"22\" y=\"22\" width=\"56\" height=\"10\" rx=\"4\"/><rect fill=\"#443358\" x=\"22\" y=\"68\" width=\"56\" height=\"10\" rx=\"4\"/>"
+  },
+  {
+    "id": "pine-patch",
+    "name": "Three pines patch",
+    "category": "Patches",
+    "art": "<path fill=\"#ecd9aa\" d=\"M50 9 L86 27 V67 L50 91 14 67 V27Z\"/><path fill=\"none\" stroke=\"#304c48\" stroke-width=\"4\" d=\"M50 9 L86 27 V67 L50 91 14 67 V27Z\"/><path fill=\"#52735a\" d=\"M34 40 L22 62 H46Z M66 40 L54 62 H78Z\"/><path fill=\"#31564b\" d=\"M50 30 L34 67 H66Z\"/>"
+  },
+  {
+    "id": "sunday-ball",
+    "name": "Sunday football badge",
+    "category": "Sports",
+    "art": "<ellipse fill=\"#e9dcba\" cx=\"50\" cy=\"50\" rx=\"44\" ry=\"38\"/><ellipse fill=\"none\" stroke=\"#324750\" stroke-width=\"4\" cx=\"50\" cy=\"50\" rx=\"44\" ry=\"38\"/><path fill=\"#995d3a\" d=\"M18 50 Q50 9 82 50 Q50 91 18 50Z\"/><path d=\"M34 50 H66 M39 44 V56 M46 44 V56 M54 44 V56 M61 44 V56\" fill=\"none\" stroke=\"#fff1d5\" stroke-width=\"2.4\"/>"
+  }
+]

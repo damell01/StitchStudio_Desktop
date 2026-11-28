@@ -1,7 +1,7 @@
 import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {useEffect,useMemo,useState,type ReactNode} from 'react';
 import {invoke} from '@tauri-apps/api/core';
-import {Clock3,Heart,LayoutGrid,Palette,Search,Sparkles,Upload,X,FolderOpen,Wand2,PenLine} from 'lucide-react';
+import {Clock3,FileArchive,Heart,LayoutGrid,Palette,Search,Sparkles,Upload,X,FolderOpen,Wand2,PenLine} from 'lucide-react';
 import {templateCatalog,sortCategories,type Complexity} from './template-catalog';
 import './template-gallery.css';
 
@@ -52,6 +52,7 @@ export function CharacterGallery({onArt,actionLabel='Digitize',bundledOnly=false
  const [local,setLocal]=useState<ArtworkEntry[]>([]),[query,setQuery]=useState(''),[group,setGroup]=useState(()=>{try{const c=sessionStorage.getItem('studio-template-category');sessionStorage.removeItem('studio-template-category');return c||'All'}catch{return 'All'}}),[error,setError]=useState(''),[busy,setBusy]=useState(!bundledOnly);
  const [filter,setFilter]=useState<Filter>(noFilter),[selected,setSelected]=useState<ArtworkEntry|null>(null),[working,setWorking]=useState('');
  const [favorites,setFavorites]=useState(()=>stored(FAV)),[recents,setRecents]=useState(()=>stored(RECENT));
+ const [archiveNotice,setArchiveNotice]=useState('');
  const [prepared,setPrepared]=useState<string[]>([]);
  useEffect(()=>{if(!onPrepared)return;let active=true;invoke<string[]>('prepared_bundled_designs').then(ids=>{if(active&&Array.isArray(ids))setPrepared(ids)}).catch(()=>{});return()=>{active=false}},[!!onPrepared]);
  async function refresh(){if(bundledOnly)return;setBusy(true);setError('');try{setLocal((await invoke<ArtworkEntry[]>('character_list'))??[])}catch(e){setError('Local artwork could not be loaded: '+String(e))}finally{setBusy(false)}}
@@ -85,6 +86,16 @@ export function CharacterGallery({onArt,actionLabel='Digitize',bundledOnly=false
  }
  async function openPrepared(entry:ArtworkEntry){if(!onPrepared||!entry.id)return;setWorking(keyOf(entry));setError('');try{remember(entry);await onPrepared(entry.id)}catch(e){setError(String(e))}finally{setWorking('')}}
  async function saveArtwork(){setBusy(true);setError('');try{const count=await invoke<number|null>('import_artwork_files');if(count!==null){await refresh();setGroup('My imported artwork');setQuery('')}}catch(e){setError(String(e))}finally{setBusy(false)}}
+ async function saveArchive(){
+  setBusy(true);setError('');setArchiveNotice('');
+  try{
+   const report=await invoke<{imported:number;duplicates:number;skipped:number}|null>('import_artwork_archive');
+   if(!report)return;
+   await refresh();
+   setGroup('My imported artwork');setQuery('');setFilter(previous=>({...noFilter,sort:previous.sort}));
+   setArchiveNotice(`Added ${report.imported} SVG ${report.imported===1?'file':'files'} · ${report.duplicates} already in this collection · ${report.skipped} skipped`);
+  }catch(e){setError(String(e))}finally{setBusy(false)}
+ }
  async function importArtwork(file:File){
   setError('');
   if(!file.size||file.size>20_000_000){setError('Choose artwork between 1 byte and 20 MB.');return}
@@ -117,9 +128,10 @@ export function CharacterGallery({onArt,actionLabel='Digitize',bundledOnly=false
     <select aria-label="Thread colors" value={filter.colors} onChange={e=>setFilter({...filter,colors:e.target.value})}><option value="">Any colors</option><option value="1-2">1–2 colors</option><option value="3-4">3–4 colors</option><option value="5+">5+ colors</option></select>
     <select aria-label="Stitch complexity" value={filter.complexity} onChange={e=>setFilter({...filter,complexity:e.target.value})}><option value="">Any detail</option><option>Simple</option><option>Moderate</option><option>Detailed</option></select>
     <select aria-label="Sort designs" value={filter.sort} onChange={e=>setFilter({...filter,sort:e.target.value})}><option value="name">Name A–Z</option><option value="simple">Simplest first</option><option value="colors">Fewest colors</option></select>
-    {!bundledOnly&&<span className="tg-toolbar-actions">{variant==='page'&&<label className="tg-file-button">Use a file once<input type="file" accept=".png,.webp,.jpg,.jpeg,.svg" onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void importArtwork(file)}}/></label>}<button className="primary" disabled={busy} onClick={()=>void saveArtwork()}><Upload size={15}/> Import artwork</button></span>}
+    {!bundledOnly&&<span className="tg-toolbar-actions">{variant==='page'&&<label className="tg-file-button">Use a file once<input type="file" accept=".png,.webp,.jpg,.jpeg,.svg" onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void importArtwork(file)}}/></label>}<button className="primary" disabled={busy} onClick={()=>void saveArtwork()}><Upload size={15}/> Import artwork</button><button disabled={busy} onClick={()=>void saveArchive()}><FileArchive size={15}/> Import SVG ZIP</button></span>}
    </div>
    <div className="tg-head"><h2>{heading}</h2><small>{filtered.length} {filtered.length===1?'design':'designs'}</small>{filtersOn&&<button className="tg-link" onClick={()=>{setQuery('');setFilter({...noFilter,sort:filter.sort})}}>Clear filters</button>}</div>
+   {archiveNotice&&<p role="status">{archiveNotice}</p>}
    {error&&<p className="tg-error" role="alert">{error}</p>}
    {!filtered.length?<div className="tg-empty">{group==='Favorites'&&!filtersOn?<><Heart size={22}/><strong>No favorites yet</strong><span>Tap the heart on any design to keep it here.</span></>:group==='Recent'&&!filtersOn?<><Clock3 size={22}/><strong>Nothing used yet</strong><span>Designs you open appear here.</span></>:<><Search size={22}/><strong>No designs match</strong><span>Try another word or clear the filters.</span></>}</div>
    :<><div className="tg-grid">{page.items.map(e=>{const k=keyOf(e),current=!!selected&&keyOf(selected)===k;return <div key={k} className={'tg-card'+(current?' selected':'')}>

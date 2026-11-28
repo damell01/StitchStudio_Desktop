@@ -4,6 +4,8 @@ The Artwork tab shows built-in classic animation and images from your local coll
 
 Use **Design Library → Artwork → Add artwork from disk** for local PNG, JPEG or WebP files. Open publisher PDFs through **Digitize an image → Import PDF**, select the page, then crop to the character as needed. To keep images in the searchable library, put them in collection subfolders inside **StitchStudio Artwork** in your Windows user folder.
 
+**Import SVG ZIP** adds a ZIP of SVGs from any nested folder to **My imported artwork**. Each SVG keeps its original vector data. The gallery lists designs by filename, reports duplicates, and skips unsupported files and empty or invalid SVGs. Unsafe archives are rejected. Use **Digitize** or select artwork from the editor to preview stitching at the intended embroidery size.
+
 | Character | Publisher source |
 | --- | --- |
 | Bluey, Bingo and the Heeler family | [Bluey's official coloring collection](https://www.bluey.tv/colouring/) · [Bingo PDF](https://www.bluey.tv/wp-content/uploads/2019/07/Bingo.pdf) |
@@ -17,3 +19,18 @@ Use **Design Library → Artwork → Add artwork from disk** for local PNG, JPEG
 | Winnie the Pooh | [Disney official Pooh character page](https://characters.disney.com/winnie-the-pooh/pooh) |
 
 Check the terms on publisher downloads before sharing artwork or files made from it.
+
+## Boutique design references
+
+| Direction | What to study for original designs |
+| --- | --- |
+| Bows and personalization | Leave an open lettering area so names can be resized and changed independently. Compare the silhouette at infant and adult garment widths. [Appliqué monogram frames](https://www.designsbyjuju.com/monogram-frames-applique) |
+| Nursery and heirloom | Use a few legible shapes and reserve the contrast for a ribbon, edging, or initials. [Heirloom frame examples](https://www.designsbyjuju.com/assorted-monogram-frames-embroidery-set-by-oma-s-place) |
+| Florals and faith compositions | Use single-color linework for borders where it reads clearly. Keep botanical accents far enough from small lettering to avoid joins that close its counters. [Botanical Blooms](https://urbanthreads.com/products/botanical-blooms) |
+| Coastal and fishing | Design the outline around recognizable proportions and keep fine decorative marks secondary. Check that separate elements still look balanced at chest size. [Nautical design collection](https://urbanthreads.com/collections/nautical-embroidery-designs) |
+| Sports and patches | Give the frame, motif, and personalization separate visual roles. Use original marks with interchangeable thread colors. [Frames and patches](https://www.designsbyjuju.com/all-designs/frames-and-patches) |
+| Seasonal | Check whether a variation changes its silhouette, layout, or stitch technique. [Seasonal design collection](https://urbanthreads.com/collections/season-embroidery-designs) |
+
+These commercial pages are visual references. The boutique filter links to
+original editable Stitch Studio artwork. Approval for customer orders requires a
+stitch preview at the intended size, an export round trip, and a sew-out.

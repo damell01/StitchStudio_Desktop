@@ -43,3 +43,19 @@ sealing and even coverage. Use a single appliqué piece to record where the
 machine pauses before tack-down and before any manual trimming. In Studio,
 **Inspector → Quality** shows suspected coverage gaps and dense needle cells.
 Review a repair against the original before exporting the sew-out sample.
+
+## First customer-order rehearsal
+
+Use one small design you can sew twice. A bow beside a short name, with an
+open letter such as O or A, makes a practical test for narrow details and
+negative space. Save the editable project and export the original and optimized
+plans under different names at the same width. Record stitch points, planned
+trims, and observed run time on the worksheet. Keep the same fabric, stabilizer,
+needle, speed, hoop orientation, and thread assignments for both samples.
+
+Check the openings in the bow and letters, especially near an edited entry or
+exit point. In Studio, use **Quality → Coverage gaps** and **Density map** to
+investigate visible differences. Save and reopen the optimized project, export
+it once more, and compare its dimensions, sewing order, and planned stitch count
+with the approved sample. Use the separate foam and appliqué checks above for
+orders that use those techniques.
