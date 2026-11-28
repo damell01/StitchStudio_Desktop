@@ -1262,10 +1262,11 @@ function selectObject(object:EditableObject|null,inspectLettering=true,forceWord
     while(lo>0&&gap(row[lo-1],row[lo])<=threshold)lo--;
     while(hi+1<row.length&&gap(row[hi],row[hi+1])<=threshold)hi++;
     const letters=row.slice(lo,hi+1);
-    const left=Math.min(...letters.map(o=>o.bounds![0]));
-    const right=Math.max(...letters.map(o=>o.bounds![0]+o.bounds![2]));
+    // Named apart from the left/right panel state used earlier in this callback.
+    const wordLeft=Math.min(...letters.map(o=>o.bounds![0]));
+    const wordRight=Math.max(...letters.map(o=>o.bounds![0]+o.bounds![2]));
     const components=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||letters.some(l=>l.uid===o.uid)||o.color.join(',')!==object.color.join(','))return false;
-    const [ox,oy,ow,oh]=o.bounds;return oh>0&&oh<=h*.55&&ow<=h*.55&&ox>=left-h*.12&&ox+ow<=right+h*.12&&oy>=y-h*.45&&oy+oh<=y+h*1.15});
+    const [ox,oy,ow,oh]=o.bounds;return oh>0&&oh<=h*.55&&ow<=h*.55&&ox>=wordLeft-h*.12&&ox+ow<=wordRight+h*.12&&oy>=y-h*.45&&oy+oh<=y+h*1.15});
     const wordShapes=[...letters,...components];
     // Automatic recognition is useful for words, not isolated artwork shapes.
     if(!forceWord&&letters.length<2)return;
