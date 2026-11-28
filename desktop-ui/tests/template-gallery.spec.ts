@@ -15,19 +15,19 @@ test.beforeEach(async({page})=>{
 test('the template gallery filters by category and search, and remembers favorites',async({page})=>{
   await page.getByRole('button',{name:'Template Library'}).last().click();
   const gallery=page.getByRole('region',{name:'Built-in design collection'});
-  await gallery.getByRole('button',{name:/^Sayings \d+$/}).click();
-  await expect(gallery.getByRole('heading',{name:'Sayings'})).toBeVisible();
-  await gallery.getByLabel('Search artwork').fill('walk faith');
+  await gallery.getByRole('button',{name:/^Monograms & frames \d+$/}).click();
+  await expect(gallery.getByRole('heading',{name:'Monograms & frames'})).toBeVisible();
+  await gallery.getByLabel('Search artwork').fill('pink floral crest');
   await expect(gallery.locator('.tg-card')).toHaveCount(1);
-  await gallery.getByRole('button',{name:'Add to favorites: Walk By Faith'}).click();
-  await gallery.getByRole('button',{name:'Walk By Faith',exact:true}).click();
-  const details=page.getByRole('region',{name:'Design details: Walk By Faith'});
+  await gallery.getByRole('button',{name:'Add to favorites: Pink Floral Crest'}).click();
+  await gallery.getByRole('button',{name:'Pink Floral Crest',exact:true}).click();
+  const details=page.getByRole('region',{name:'Design details: Pink Floral Crest'});
   await expect(details.getByRole('button',{name:'Digitize'})).toBeVisible();
   await details.getByRole('button',{name:'Close details'}).click();
   await gallery.getByRole('button',{name:/^Favorites \d+$/}).click();
   await gallery.getByLabel('Search artwork').fill('');
   await expect(gallery.locator('.tg-card')).toHaveCount(1);
-  expect(await page.evaluate(()=>localStorage.getItem('studio-template-favorites'))).toContain('walk-by-faith');
+  expect(await page.evaluate(()=>localStorage.getItem('studio-template-favorites'))).toContain('pink-floral-crest');
 });
 
 test('home shows real template thumbnails and opens a category in the library',async({page})=>{

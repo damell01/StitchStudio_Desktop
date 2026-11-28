@@ -25,7 +25,14 @@ const manifestPath=join(dirname(dest),'expanded-manifest.ts');
 if(!process.argv[2]){console.error('usage: prepare-template-artwork.mjs <source-folder> [dest-folder]');process.exit(1)}
 
 // Designs that imitate third-party marks are not redistributed with the app.
-const excluded=[/^new-artwork\/colorways\//,/^new-artwork\/football-(pom|script)-helmet\.svg$/];
+const excluded=[
+ // Imitates a third-party mark.
+ /^new-artwork\/colorways\//,/^new-artwork\/football-(pom|script)-helmet\.svg$/,
+ // Plain block-letter sayings with a basic icon: below the quality bar of the rest of the library.
+ /^sayings\//,
+ // Traced drafts with heavy distressing, clipped lettering or leftover fragments that cleanup cannot fix.
+ /^premium-sayings-drafts\/(boutique-bow|horseshoe|rainbow|cowboy|cowgirl|magnolia-cross|monogram-wreath|southern-mama|southern-roots|jesus-always)\.svg$/,
+];
 
 // Per-collection cleanup strength (fractions of the viewBox area).
 const cleanup={
