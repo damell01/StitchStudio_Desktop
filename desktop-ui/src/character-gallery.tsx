@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {useEffect,useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
@@ -9,7 +10,14 @@ export type Art={name:string;mime:string;bytes:number[];classic?:boolean;bundled
 const groups:Record<string,string>={
  '01_Bows':'Boutique & bows','02_Sports':'Sports','03_Animals':'Animals & characters','04_Faith':'Faith','05_Floral':'Floral & botanical','06_Blank_Name_Templates':'Blank name templates','07_Seasonal':'Seasonal motifs','08_Western_Farm':'Western & farm motifs','09_Baby':'Baby & children','10_Applique':'Appliqué shapes','11_Boutique_Nameplates':'Boutique nameplates','12_Team_Nameplates':'Sports & team nameplates','13_Faith_Frames':'Faith frames','14_Nursery_Nameplates':'Nursery nameplates','15_Seasonal_Nameplates':'Seasonal nameplates','16_Western_Farm':'Western & farm templates','17_Botanical_Frames':'Botanical frames','18_Ocean_Adventure':'Beach & ocean','19_School_Hobbies':'School & hobbies','20_Applique_Badges':'Appliqué badges'
 };
-export const builtins:ArtworkEntry[]=[...bundledArtwork,...sportsArtwork].map(a=>({id:a.id,group:groups[a.category]??a.category,name:a.id.replace(/^\d+_/,'').replace(/[-_]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),file:a.id+'.svg',svg:a.svg}));
+// Additional offline SVG packs are discovered at build time; preserve original artwork and collection names.
+const expandedFiles=import.meta.glob<string>('./bundled-artwork/expanded/**/*.svg',{eager:true,query:'?raw',import:'default'});
+const expandedGroups:Record<string,string>={'curated':'Curated artwork','quick-stitch-vol-1':'Quick Stitch Vol. 1','quick-stitch-vol-2':'Quick Stitch Vol. 2','solid-color-vol-3':'Quick Stitch Vol. 3 – solid color','quick-stitch-vol4':'Quick Stitch Vol. 4','sayings':'Sayings','premium-sayings-drafts':'Premium sayings','new-artwork':'New artwork'};
+const expandedArtwork=Object.entries(expandedFiles).map(([path,svg])=>{
+ const parts=path.split('/'),file=parts.pop()!,collection=parts.pop()!;
+ return {category:expandedGroups[collection]??collection,id:'expanded-'+collection+'-'+file.replace(/\.svg$/i,''),svg};
+});
+export const builtins:ArtworkEntry[]=[...bundledArtwork,...sportsArtwork,...expandedArtwork].map(a=>({id:a.id,group:groups[a.category]??a.category,name:(a.id.startsWith('expanded-')?a.id.replace(/^expanded-(?:curated|quick-stitch-vol-1|quick-stitch-vol-2|solid-color-vol-3|quick-stitch-vol4|sayings|premium-sayings-drafts|new-artwork)-/,''):a.id).replace(/^\d+[-_]/,'').replace(/[-_]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),file:a.id+'.svg',svg:a.svg}));
 function mime(file:string){return /\.svg$/i.test(file)?'image/svg+xml':/\.webp$/i.test(file)?'image/webp':/\.jpe?g$/i.test(file)?'image/jpeg':'image/png'}
 // Retain the original vector paths and palette. Use a sensible 80 mm starting viewport
 // for the single-artwork digitizer; the editor's insertion command sizes the actual artwork.
