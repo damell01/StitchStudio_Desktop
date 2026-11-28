@@ -530,3 +530,13 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .editor-workspace .studio-inspector-dock > * {flex-shrink:0;}
 .editor-workspace .inspector-sticky-header {position:sticky;top:0;z-index:3;background:var(--lav-panel,var(--studio-panel,#fff));}
 .editor-workspace .studio-elements-dock .template-elements-grid {padding-bottom:12px;}
+
+/* Readable, independently scrolling editor controls on compact laptop displays. */
+.editor-workspace .studio-elements-dock .template-elements-grid h3{font-size:11px;white-space:normal;overflow-wrap:anywhere;min-height:2.6em;}
+.editor-workspace .studio-elements-dock .template-elements-grid article{padding:6px;}
+.editor-workspace .studio-elements-dock .template-art-select{aspect-ratio:4/3;}
+.editor-workspace .studio-elements-dock .template-art{max-height:none;object-fit:contain;}
+.editor-workspace .studio-elements-dock .library-filters{position:sticky;top:0;z-index:4;background:var(--lav-panel,var(--panel));padding-block:5px;}
+.editor-workspace .studio-inspector-dock .workspace-segments{flex-wrap:wrap;}
+.editor-workspace .studio-inspector-dock .workspace-segments button{flex:1 1 auto;white-space:normal;}
+.editor-workspace .editor-toolrail{min-height:0;overflow-y:auto;overscroll-behavior:contain;}
