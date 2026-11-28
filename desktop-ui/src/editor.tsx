@@ -12,7 +12,7 @@ import {assistantIntent} from './assistant-intent';
 import {AssistantChat,type AssistantProposal} from './assistant-chat';
 import {rememberProject,thumbnailOf,type Project} from './library';
 import {InlineLettering,type PickedBaseline} from './lettering';
-import {Type,Clock3,ArrowUp,ArrowDown,ArrowLeft,ArrowRight,ScanLine} from 'lucide-react';
+import {LayoutTemplate,Type,Clock3,ArrowUp,ArrowDown,ArrowLeft,ArrowRight,ScanLine} from 'lucide-react';
 import {GarmentPreview} from './garment-preview';
 import {ThreadOrder,ReferenceColorPanel,type ThreadAssignments} from './thread-order';
 import {FabricPicker} from './fabric-picker';
@@ -22,6 +22,9 @@ import './editor-frame.css';
 import {ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {CommandPalette,type Command} from './command-palette';
 import {InsertDesignDialog} from './insert-design-dialog';
+import {CreatePanel,catalogEntry,ARTWORK_DRAG_TYPE,type CreateTab} from './create-panel';
+import {artworkBytes} from './character-gallery';
+const isCreateTab=(tab:string):tab is CreateTab=>tab==='templates'||tab==='text'||tab==='elements'||tab==='uploads';
 import {templates,rememberTemplate,TemplateLibrary} from './templates';
 import {EditorDigitizer} from './editor-digitizer';
 import {confirmAction,toast} from './dialogs';
@@ -60,6 +63,20 @@ useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_ca
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
 const dockBreakpoint=1100;
 const [left,setLeft]=useState(()=>localStorage.getItem('studio-layers-open')==='1'),[right,setRight]=useState(()=>localStorage.getItem('studio-inspector-open')==='1'),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",216,180,320)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,220,360));
+function openCreate(tab:CreateTab){
+  insertDialog.current?.close();
+  if(left&&layerTab===tab){showLayers(false);return;}
+  setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);drawing.pick(null);
+  setLayerTab(tab);showLayers(true);
+}
+async function insertCatalogArtwork(id:string,xMm:number,yMm:number){
+  const entry=catalogEntry(id);
+  if(!entry?.svg||busy||editLock.current)return;
+  const widthMm=Math.min(100,width*.6,height*.6);
+  if(widthMm<10){setMessage('Set a larger hoop before adding a design.');return;}
+  const result=await edit('insert_svg_artwork',{bytes:artworkBytes(entry.svg),name:entry.name,widthMm,xMm,yMm});
+  if(result.plan){setHidden([]);setCanvasMode('select');setMessage(entry.name+' added. Drag to move it, or use the corner handles to resize.')}
+}
 function showLayers(open:boolean){
   if(open&&focusCanvas)changeFocus(false);
   if(open&&window.innerWidth<dockBreakpoint)setRight(false);
@@ -76,7 +93,7 @@ useEffect(()=>{
   function onNarrow(event:MediaQueryListEvent){if(event.matches)setLeft(false)}
   query.addEventListener('change',onNarrow);
   return()=>query.removeEventListener('change',onNarrow);
-},[]);useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(initialView?.zoom??100),[pan,setPan]=useState(initialView?.pan??[0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadAssignments,setThreadAssignments]=useState<ThreadAssignments>(initialView?.threadAssignments??{});const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'|'elements'>('objects');
+},[]);useEffect(()=>{localStorage.setItem("studio-layers-width",String(leftWidth));localStorage.setItem("studio-properties-width",String(rightWidth))},[leftWidth,rightWidth]);const [zoom,setZoom]=useState(initialView?.zoom??100),[pan,setPan]=useState(initialView?.pan??[0,0]),[drag,setDrag]=useState<{x:number;y:number;px:number;py:number}|null>(null),[grid,setGrid]=useState(true),[realistic,setRealistic]=useState(false);const [exportOpen,setExportOpen]=useState(false);const [threadAssignments,setThreadAssignments]=useState<ThreadAssignments>(initialView?.threadAssignments??{});const [threadLibrary]=useState(readThreads);const [recoveryStatus,setRecoveryStatus]=useState('');const [scope,setScope]=useState('all');const [fabric,setFabric]=useState('standard'),[spacing,setSpacing]=useState(.35),[length,setLength]=useState(3),[angle,setAngle]=useState(0),[pull,setPull]=useState(.15),[underlay,setUnderlay]=useState(true);const [objects,setObjects]=useState<EditableObject[]>([]),[objectQuery,setObjectQuery]=useState(''),[selectedObject,setSelectedObject]=useState<number|null>(null),[objectKind,setObjectKind]=useState('auto');const [layerTab,setLayerTab]=useState<'objects'|'threads'|CreateTab>('objects');
 const resizePanel=useRef<{side:'left'|'right';start:number;width:number;pointer:number}|null>(null);
 function panelResizeHandle(side:'left'|'right'){
  const value=side==='left'?leftWidth:rightWidth;
@@ -1735,14 +1752,15 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {plan&&<ThreadOrder assignments={threadAssignments} onAssign={(index,value)=>setThreadAssignments(old=>({...old,[index]:value}))} blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
   <button title="Delete selected design or objects (Delete)" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={17}/> Delete</button><button className="studio-price-job" title="Calculate pricing using current stitches and sewing time" disabled={!plan||busy} onClick={()=>setPricingOpen(true)}>Price job</button><button className="studio-save-design" title="Save editable Stitch Studio project (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={17}/> Save design</button><button className="primary studio-export" disabled={!plan?.stitches||outside||busy||machineExceeded||incompatibleHoop||invalidField} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
-{context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-270))}} role="group" aria-label="Object actions"><button disabled={busy} onClick={()=>selectArtworkGroup(context.uid)}>Select entire artwork group</button><button disabled={busy} onClick={()=>selectArtworkGroup(context.uid,true)}>Edit artwork group colors</button><button onClick={()=>{const uid=context.uid;setContext(null);void invoke<unknown>('lettering_settings',{uid}).then(s=>{if(s)openText(uid);else{showInspector(true);setInspectorTab('transform')}}).catch(e=>setMessage(String(e)))}}>Object properties</button><button disabled={!canCopyStitchSettings} onClick={()=>{setContext(null);void copyStitchSettings()}}>Copy stitch settings</button><button onClick={()=>{setContext(null);drawing.pick(null);stitchGuides.setVisible(true)}}>Show stitch guides</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${focusCanvas?'canvas-focus':''} ${left?'':'hide-left'} ${right?'':'hide-right'}`} style={{'--studio-layers-width':`${leftWidth}px`,'--studio-inspector-width':`${rightWidth}px`} as CSSProperties}>
+{context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-270))}} role="group" aria-label="Object actions"><button disabled={busy} onClick={()=>selectArtworkGroup(context.uid)}>Select entire artwork group</button><button disabled={busy} onClick={()=>selectArtworkGroup(context.uid,true)}>Edit artwork group colors</button><button onClick={()=>{const uid=context.uid;setContext(null);void invoke<unknown>('lettering_settings',{uid}).then(s=>{if(s)openText(uid);else{showInspector(true);setInspectorTab('transform')}}).catch(e=>setMessage(String(e)))}}>Object properties</button><button disabled={!canCopyStitchSettings} onClick={()=>{setContext(null);void copyStitchSettings()}}>Copy stitch settings</button><button onClick={()=>{setContext(null);drawing.pick(null);stitchGuides.setVisible(true)}}>Show stitch guides</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${focusCanvas?'canvas-focus':''} ${left?'':'hide-left'} ${right?'':'hide-right'} ${left&&isCreateTab(layerTab)?'create-open':''}`} style={{'--studio-layers-width':`${leftWidth}px`,'--studio-inspector-width':`${rightWidth}px`} as CSSProperties}>
 <div className="editor-toolrail" role="group" aria-label="Editor tools">
   <button aria-pressed={canvasMode==='select'&&!realistic&&!(right&&['quality','stitches'].includes(inspectorTab))} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setCanvasMode('select');setRealistic(false);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false)}} title="Design workspace"><MousePointer2 size={20}/><small>Design</small></button>
-  <button disabled={busy} onClick={()=>{insertDialog.current?.close();uploadInput.current?.click()}} title="Upload an embroidery file, photo or logo"><FolderOpen size={20}/><small>Uploads</small></button>
-  <button disabled={busy} aria-pressed={canvasTyping} onClick={()=>{insertDialog.current?.close();toggleCanvasTyping()}} title="Type directly on the hoop"><Type size={20}/><small>Text</small></button>
+  <button aria-pressed={left&&layerTab==='templates'} onClick={()=>openCreate('templates')} title="Add a ready-made design"><LayoutTemplate size={20}/><small>Templates</small></button>
+  <button aria-pressed={left&&layerTab==='uploads'} onClick={()=>openCreate('uploads')} title="Upload an embroidery file, photo or logo"><FolderOpen size={20}/><small>Uploads</small></button>
+  <button aria-pressed={canvasTyping||(left&&layerTab==='text')} onClick={()=>openCreate('text')} title="Add text and lettering styles"><Type size={20}/><small>Text</small></button>
   <button disabled={busy} aria-pressed={left&&layerTab==='elements'} onClick={()=>{insertDialog.current?.close();if(left&&layerTab==='elements'){showLayers(false);return;}setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);drawing.pick(null);setLayerTab('elements');showLayers(true);}} title="Browse and insert designs"><FilePlus size={20}/><small>Elements</small></button>
   <details className="workspace-options studio-shapes-menu"><summary title="Add shapes" aria-label="Add shapes"><SquareDashed size={20}/><small>Shapes</small></summary><div className="workspace-options-panel studio-shapes-panel" role="group" aria-label="Shape tools">{(['rectangle','ellipse','triangle','star','hexagon'] as const).map((tool,index)=><button key={tool} disabled={busy} onClick={()=>{insertDialog.current?.close();setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setRealistic(false);drawing.pick(tool)}}><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">{tool==='rectangle'?<rect x="5" y="7" width="22" height="18" rx="2"/>:tool==='ellipse'?<ellipse cx="16" cy="16" rx="12" ry="10"/>:<polygon points={tool==='triangle'?'16,4 29,27 3,27':tool==='star'?'16,2 20,11 30,12 23,19 25,29 16,24 7,29 9,19 2,12 12,11':'9,4 23,4 30,16 23,28 9,28 2,16'}/>}</svg><span>{['Rectangle','Circle / oval','Triangle','Star','Polygon'][index]}</span></button>)}<small>Choose a shape, then drag on the hoop to draw it.</small></div></details>
-  <button aria-pressed={left&&layerTab!=='elements'} onClick={()=>{insertDialog.current?.close();if(left&&layerTab!=='elements'){showLayers(false);return;}setLayerTab('objects');showLayers(true)}} title="Manage design layers"><Layers3 size={20}/><small>Layers</small></button>
+  <button aria-pressed={left&&!isCreateTab(layerTab)} onClick={()=>{insertDialog.current?.close();if(left&&!isCreateTab(layerTab)){showLayers(false);return;}setLayerTab('objects');showLayers(true)}} title="Manage design layers"><Layers3 size={20}/><small>Layers</small></button>
   <button disabled={busy||!plan?.stitches} aria-pressed={!realistic&&right&&inspectorTab==='quality'} onClick={()=>openQuality()} title="Inspect coverage and density"><ScanLine size={20}/><small>Quality</small></button>
   <button disabled={!plan?.stitches} aria-pressed={realistic} onClick={()=>{if(right&&inspectorTab==='quality')showInspector(false);setRealistic(v=>!v)}} title="Realistic sew-out preview"><Eye size={20}/><small>Preview</small></button>
   <button onClick={()=>setHoopOpen(true)} title="Hoop and machine settings"><SquareDashed size={20}/><small>Hoop</small></button>
@@ -1751,16 +1769,22 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button disabled={busy} onClick={()=>{const command=navigation.find(n=>n.label==='Digitize an image');if(command)command.run();else void open()}} title="Digitize an image"><Wrench size={20}/><small>Digitize</small></button>
 </div>
 <article className="workspace-sidebar studio-layers-dock">
-  <div className="layers-dock-header">
-    <div className="layers-dock-title"><Layers3 size={17} aria-hidden="true"/><h2>{layerTab==='elements'?'Elements':'Layers'}</h2>
+{isCreateTab(layerTab)?<CreatePanel tab={layerTab} busy={busy} hoop={{width,height}} onClose={()=>setLeft(false)}
+  onInsertTemplate={t=>void insertCatalogArtwork(t.id,0,0)}
+  onAddText={settings=>void edit('insert_lettering_settings',{placement:null,settings}).then(r=>{if(r.plan){setHidden([]);setCanvasMode('select');setMessage('Text added. Double-click it on the hoop to change the words.')}})}
+  onTypeOnHoop={()=>{insertDialog.current?.close();if(!canvasTyping)toggleCanvasTyping()}}
+  onUpload={()=>uploadInput.current?.click()}
+  onDigitize={()=>{const command=navigation.find(n=>n.label==='Digitize an image');if(command)command.run();else void open()}}
+  elements={<section className="studio-elements-dock" aria-label="Artwork elements" inert={busy}><small>Click to add at hoop center, or drag onto the hoop.</small><TemplateLibrary quickInsert onPreview={template=>{if(busy||editLock.current)return;const widthMm=Math.min(50.8,width*.5,height*.5);if(widthMm<5){setMessage('Set a larger hoop before inserting artwork.');return;}void edit('insert_template',{id:template.id,art:template.art,widthMm,xMm:0,yMm:0}).then(result=>{if(result.plan){rememberTemplate(template.id);setHidden([]);setCanvasMode('select')}})}}/><button onClick={()=>insertDialog.current?.showModal()}>More designs &amp; placement</button></section>}/>:<>  <div className="layers-dock-header">
+    <div className="layers-dock-title"><Layers3 size={17} aria-hidden="true"/><h2>Layers</h2>
       <button className="studio-tool-icon" title="Close layers" aria-label="Close layers" onClick={()=>setLeft(false)}><X size={15}/></button>
     </div>
     <div className="workspace-segments" role="group" aria-label="Layers">
       <button aria-pressed={layerTab==='objects'} onClick={()=>setLayerTab('objects')}>Objects <span>{objects.length}</span></button>
-      <button aria-pressed={layerTab==='threads'} onClick={()=>setLayerTab('threads')}>Blocks <span>{plan?.blocks.length??0}</span></button><button aria-pressed={layerTab==='elements'} onClick={()=>setLayerTab('elements')}>Elements</button>
+      <button aria-pressed={layerTab==='threads'} onClick={()=>setLayerTab('threads')}>Blocks <span>{plan?.blocks.length??0}</span></button>
     </div>
   </div>
-  {layerTab==='elements'&&<section className="studio-elements-dock" aria-label="Artwork elements" inert={busy}><small>Click to add at hoop center, or drag onto the hoop.</small><TemplateLibrary quickInsert onPreview={template=>{if(busy||editLock.current)return;const widthMm=Math.min(50.8,width*.5,height*.5);if(widthMm<5){setMessage('Set a larger hoop before inserting artwork.');return;}void edit('insert_template',{id:template.id,art:template.art,widthMm,xMm:0,yMm:0}).then(result=>{if(result.plan){rememberTemplate(template.id);setHidden([]);setCanvasMode('select')}})}}/><button onClick={()=>insertDialog.current?.showModal()}>More designs &amp; placement</button></section>}
+  
   {layerTab==='objects' && (objects.length ? <section className="workspace-object-list">
     <label className="layers-search"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Search objects"
       placeholder="Find an object" value={objectQuery} onChange={event=>setObjectQuery(event.target.value)}/></label>
@@ -1863,16 +1887,27 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>}
     </LayerDialog>
   </div>
+</>}
 </article>
 {left&&panelResizeHandle("left")}{right&&panelResizeHandle("right")}<article className="canvas-panel"
   onDragOver={event=>{
-    if(!event.dataTransfer.types.includes('Files')&&!event.dataTransfer.types.includes('application/x-stitchstudio-template'))return;
+    if(!event.dataTransfer.types.includes('Files')&&!event.dataTransfer.types.includes('application/x-stitchstudio-template')&&!event.dataTransfer.types.includes(ARTWORK_DRAG_TYPE))return;
     event.preventDefault();
     event.dataTransfer.dropEffect=busy?'none':'copy';
     if(!busy)setArtworkDrag(true);
   }}
   onDragLeave={event=>{if(!(event.relatedTarget instanceof Node)||!event.currentTarget.contains(event.relatedTarget))setArtworkDrag(false)}}
   onDrop={event=>{
+    const artworkId=event.dataTransfer.getData(ARTWORK_DRAG_TYPE);
+    if(artworkId){
+      event.preventDefault();setArtworkDrag(false);
+      const matrix=canvasSurface.current?.querySelector<SVGSVGElement>('svg.design-canvas')?.getScreenCTM();
+      if(!matrix||busy||editLock.current)return;
+      const point=new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());
+      if(Math.abs(point.x)>width/2||Math.abs(point.y)>height/2){setMessage('Drop the design inside the hoop.');return;}
+      void insertCatalogArtwork(artworkId,point.x,point.y);
+      return;
+    }
     const templateId=event.dataTransfer.getData('application/x-stitchstudio-template');
     if(templateId){
       event.preventDefault();setArtworkDrag(false);
@@ -2054,13 +2089,13 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <p>Drop a DST, photo or logo here, or start with a ready-made design.</p>
   <div className="canvas-start-secondary">
     <button className="primary" disabled={busy} onClick={()=>uploadInput.current?.click()}><FolderOpen size={17}/> Upload a file</button>
-    <button disabled={busy} onClick={openInsertDialog}><FilePlus size={17}/> Browse templates & designs</button>
+    <button disabled={busy} onClick={()=>openCreate('templates')}><LayoutTemplate size={17}/> Browse templates</button>
   </div>
   <div className="studio-start-templates" aria-label="Recent and suggested quick start templates">
     {Array.from(new Set([...recentStarterIds,'heart','bow','football','wildflower'])).flatMap(id=>templates.filter(t=>t.id===id)).slice(0,4).map(t=><button key={t.id} disabled={busy} title={'Insert '+t.name} onClick={()=>void edit('insert_template',{id:t.id,art:t.art,widthMm:Math.min(50.8,width*.5,height*.5),xMm:0,yMm:0}).then(result=>{if(result.plan){rememberTemplate(t.id);setCanvasMode('select');setRealistic(false);}})}><svg viewBox="0 0 100 100" aria-hidden="true" dangerouslySetInnerHTML={{__html:t.art}}/><span>{t.name}</span></button>)}
   </div>
   <div className="canvas-start-secondary">
-    <button onClick={toggleCanvasTyping}><Type size={16}/> Place lettering</button>
+    <button onClick={()=>openCreate('text')}><Type size={16}/> Add text</button>
     <button onClick={()=>drawing.pick('pen')} title="Draw a running path (P)"><PenLine size={16}/> Draw a path</button>
   </div>
 </section>}</div>
