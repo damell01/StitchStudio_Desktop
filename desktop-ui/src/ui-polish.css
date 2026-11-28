@@ -69,3 +69,15 @@
 .profile-gallery.compact-profiles .profile-card-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;width:auto;}
 .profile-gallery.compact-profiles .profile-card-actions button{width:auto;min-width:0;white-space:nowrap;padding:6px 9px;}
 @media(max-width:700px){.profile-gallery.compact-profiles .profile-card{grid-template-columns:44px minmax(0,1fr)}.profile-gallery.compact-profiles .profile-card-actions{grid-column:1/-1;justify-content:flex-start}}
+
+/* Large dedicated digitizing workspace with independent settings and review scrolling. */
+dialog.studio-modal.editor-digitizer.expanded-digitizer{width:96vw;max-width:1600px;height:94dvh;max-height:94dvh;box-sizing:border-box;padding:12px;overflow:hidden;}
+dialog.expanded-digitizer[open]{display:flex;flex-direction:column;gap:8px;}
+.expanded-digitizer .studio-modal-heading{flex:0 0 auto;}
+.expanded-digitizer .digitizer-layout{flex:1;min-height:0;display:grid;grid-template-columns:minmax(230px,280px) minmax(0,1fr);gap:12px;overflow:hidden;align-items:stretch;}
+.expanded-digitizer .digitizer-controls,.expanded-digitizer .artwork-preview{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;max-height:none;}
+.expanded-digitizer .digitizer-variant-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;}
+.expanded-digitizer .digitizer-variant-card{min-width:0;padding:8px;}
+.expanded-digitizer .digitizer-variant-card svg{width:100%;height:clamp(120px,22vh,240px);max-height:none;}
+.expanded-digitizer .digitizer-review-actions{display:flex;flex-wrap:wrap;gap:6px;}
+@media(max-width:760px){.expanded-digitizer .digitizer-layout{display:block;overflow-y:auto;}.expanded-digitizer .digitizer-controls,.expanded-digitizer .artwork-preview{overflow:visible;}}
