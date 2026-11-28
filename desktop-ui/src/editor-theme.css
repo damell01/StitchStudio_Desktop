@@ -207,3 +207,24 @@ html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .status-metr
 html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .studio-status-zoom{position:relative;box-shadow:none}
 html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .studio-zoom-options{z-index:60}
 html[data-palette][data-theme] .editor-workspace .editor-bottom-bar{position:relative;z-index:20}
+
+/* Keep camera controls outside the artwork at every window size. */
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera.studio-camera-docked,
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera.studio-camera-docked.studio-camera-top {
+ position:relative; inset:auto; transform:none; flex:0 0 auto; width:auto; max-width:none;
+ min-height:36px; padding:2px 6px; margin:0; gap:2px; border:0; border-radius:0;
+ background:var(--surface); box-shadow:none; backdrop-filter:none;
+ justify-content:safe center; flex-wrap:wrap; overflow:visible;
+}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera.studio-camera-top {
+ order:-1; border-bottom:1px solid var(--line);
+}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera.studio-camera-bottom {
+ order:3; border-top:1px solid var(--line);
+}
+html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera :is(button,summary) {
+ height:30px; min-height:30px; padding:0 7px;
+}
+@media(max-width:1250px){
+ html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera .camera-label {display:none}
+}
