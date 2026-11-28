@@ -25,10 +25,10 @@ type StitchPreview = {
 const MM_PER_INCH = 25.4;
 const sources = [
   { id: 'templates', label: 'Templates', icon: LayoutGrid },
+  { id: 'artwork', label: 'Design collection', icon: Image },
   { id: 'layouts', label: 'Saved layouts', icon: LayoutGrid },
   { id: 'personal', label: 'My designs', icon: FolderOpen },
   { id: 'approved', label: 'Digitized designs', icon: LayoutGrid },
-  { id: 'artwork', label: 'Artwork', icon: Image },
 ] as const;
 
 function ApprovedPreview({file}:{file:string}){
@@ -225,7 +225,7 @@ export function InsertDesignDialog<Plan>({ dialogRef, onInsert, anchorBounds, ed
           <label>Drop artwork here or browse<input type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,.svg" disabled={busy} onChange={e=>{const file=e.currentTarget.files?.[0];if(file)chooseArtwork(file);e.currentTarget.value=''}}/></label>
           <small>Preview artwork, choose its size and placement, then insert without replacing your design.</small>
         </div>}
-        {source === 'artwork' && <CharacterGallery actionLabel="Select design" onArt={art => { setSelection({ source, art }); setError(''); }} />}
+        {source === 'artwork' && <CharacterGallery variant="picker" actionLabel="Select design" onArt={art => { setSelection({ source, art }); setError(''); }} />}
         {source==='approved'&&<><select aria-label="Design category" value={category} onChange={e=>{setCategory(e.target.value);setSelection(null)}}><option value="all">All categories</option>{Array.from(new Set(approved.map(p=>p.category??'Uncategorized'))).sort().map(c=><option key={c}>{c}</option>)}</select><label className="studio-insert-search"><Search size={16}/><input placeholder="Search digitized designs" value={query} onChange={e=>setQuery(e.target.value)}/></label>{!approvedPage.total&&<p>{approved.length?'No matching designs.':'Approve artwork in Bulk Design Import to add reusable designs here.'}</p>}<div className="approved-insert-grid">{approvedPage.items.map(project=><button key={project.file} aria-pressed={selection?.source==='approved'&&selection.project.file===project.file} onClick={()=>setSelection({source:'approved',project})}><ApprovedPreview file={project.file}/><strong>{project.name}</strong><small>{project.category??'Uncategorized'}</small><small>{project.stitches.toLocaleString()} stitches</small></button>)}</div><ListNavigation {...approvedPage}/></>}
         {source === 'layouts' && <>
           <label className="studio-insert-search"><Search size={16}/><input placeholder="Find a saved layout" aria-label="Search saved layouts"

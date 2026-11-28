@@ -1,0 +1,115 @@
+/* Template & artwork gallery: category rail, compact cards, detail panel. */
+.tg{
+ --tg-panel:var(--lav-panel,var(--studio-panel,#fff));
+ --tg-text:var(--lav-text,var(--studio-ink,#2a2236));
+ --tg-line:var(--lav-border,var(--studio-line,#e3dbee));
+ --tg-muted:var(--studio-muted,#6f6680);
+ --tg-soft:var(--brand-soft,#eee6fb);
+ --tg-brand:var(--brand,#6945a2);
+ --tg-accent:var(--brand-accent,#8b65c8);
+ --tg-thumb:#fff;
+ container-type:inline-size;
+ display:grid;grid-template-columns:208px minmax(0,1fr);gap:16px;align-items:start;color:var(--tg-text);min-width:0
+}
+.tg.tg-has-detail{grid-template-columns:208px minmax(0,1fr) 288px}
+[data-theme=dark] .tg{--tg-muted:#b3a9c2;--tg-thumb:#f6f3fa}
+
+/* Rail */
+.tg-rail{position:sticky;top:0;display:flex;flex-direction:column;gap:1px;max-height:calc(100vh - 170px);overflow:auto;padding:6px;border:1px solid var(--tg-line);border-radius:12px;background:var(--tg-panel)}
+.tg-rail h3{margin:10px 8px 4px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tg-muted)}
+.tg .tg-rail-item{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:inherit;font-size:13px;font-weight:500;text-align:left;justify-content:flex-start;min-height:30px;box-shadow:none}
+.tg .tg-rail-item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tg .tg-rail-item small{font-size:11px;color:var(--tg-muted);font-variant-numeric:tabular-nums}
+.tg .tg-rail-item:hover{background:var(--tg-soft)}
+.tg .tg-rail-item[aria-pressed=true]{background:var(--tg-soft);color:var(--tg-brand);font-weight:650}
+[data-theme=dark] .tg .tg-rail-item[aria-pressed=true]{color:var(--tg-accent)}
+.tg-rail-empty{padding:4px 8px;color:var(--tg-muted)}
+.tg-rail-select{display:none}
+
+/* Toolbar */
+.tg-main{min-width:0}
+.tg-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+.tg-toolbar select{height:34px;padding:0 8px;border-radius:8px;font-size:13px;margin:0;max-width:170px}
+.tg-search{flex:1 1 240px;display:flex;align-items:center;gap:6px;height:34px;padding:0 10px;border:1px solid var(--tg-line);border-radius:8px;background:var(--tg-panel);color:var(--tg-muted);margin:0}
+.tg-search:focus-within{border-color:var(--tg-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--tg-accent) 22%,transparent)}
+.tg-search input{flex:1;min-width:0;height:100%;border:0!important;outline:0;background:transparent!important;padding:0;font-size:13px;color:var(--tg-text);box-shadow:none!important}
+.tg .tg-search button{border:0;background:transparent;padding:2px;margin:0;min-height:0;color:var(--tg-muted)}
+.tg-toolbar-actions{display:flex;gap:8px;margin-left:auto}
+.tg-toolbar-actions button{height:34px;margin:0}
+.tg-file-button{display:inline-flex;align-items:center;height:34px;padding:0 12px;border:1px solid var(--tg-line);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:var(--tg-panel);margin:0}
+.tg-file-button:hover{background:var(--tg-soft)}
+.tg-file-button input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.tg-file-button:focus-within{outline:2px solid var(--tg-accent);outline-offset:2px}
+
+.tg-head{display:flex;align-items:baseline;gap:10px;margin:2px 2px 10px}
+.tg-head h2{margin:0;font-size:17px;font-weight:700}
+.tg-head small{color:var(--tg-muted);font-size:12px}
+.tg .tg-link{border:0;background:none;padding:0;margin:0 0 0 auto;min-height:0;color:var(--tg-brand);font-size:12px;font-weight:600;box-shadow:none}
+[data-theme=dark] .tg .tg-link{color:var(--tg-accent)}
+.tg-error{margin:0 0 10px;padding:8px 12px;border-radius:8px;background:#fdecec;color:#8a1f1f;font-size:13px}
+
+/* Grid & cards */
+.tg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px;margin-bottom:12px}
+.tg-picker .tg-grid{grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
+.tg-card{position:relative;min-width:0}
+.tg .tg-card-main{display:flex;flex-direction:column;align-items:stretch;gap:2px;width:100%;height:100%;margin:0;padding:6px 6px 8px;border:1px solid var(--tg-line);border-radius:12px;background:var(--tg-panel);color:inherit;text-align:left;cursor:pointer;box-shadow:none;transition:border-color .12s,box-shadow .12s,transform .12s;white-space:normal}
+.tg .tg-card-main:hover{border-color:color-mix(in srgb,var(--tg-accent) 55%,var(--tg-line));box-shadow:0 4px 14px color-mix(in srgb,var(--tg-brand) 12%,transparent);background:var(--tg-panel)}
+.tg .tg-card.selected .tg-card-main{border-color:var(--tg-accent);box-shadow:0 0 0 2px var(--tg-accent)}
+.tg .tg-card-main:focus-visible{outline:2px solid var(--tg-accent);outline-offset:2px}
+.tg-thumb{display:grid;place-items:center;aspect-ratio:1;border-radius:8px;background:var(--tg-thumb);overflow:hidden;margin-bottom:4px}
+.tg-thumb img{width:88%;height:88%;object-fit:contain;pointer-events:none}
+.tg-thumb.large{aspect-ratio:1;border:1px solid var(--tg-line);margin:0 0 10px}
+.tg-thumb.large img{width:92%;height:92%}
+.tg-skeleton{width:70%;height:70%;border-radius:8px;background:linear-gradient(90deg,#f1edf6 25%,#e7e0f0 50%,#f1edf6 75%);background-size:200% 100%;animation:tg-shimmer 1.2s linear infinite}
+@keyframes tg-shimmer{to{background-position:-200% 0}}
+.tg-thumb-error{font-size:11px;color:#8a7f99}
+.tg-card-name{font-size:13px;font-weight:600;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+.tg-card-meta{font-size:11px;color:var(--tg-muted);padding:0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg .tg-fav{position:absolute;top:10px;right:10px;display:grid;place-items:center;width:28px;height:28px;min-height:0;margin:0;padding:0;border:1px solid var(--tg-line);border-radius:999px;background:color-mix(in srgb,#fff 92%,transparent);color:#8b7f99;opacity:0;transition:opacity .12s;box-shadow:none}
+.tg-card:hover .tg-fav,.tg .tg-fav:focus-visible,.tg .tg-fav.on{opacity:1}
+.tg .tg-fav.on,.tg .tg-fav.on:hover{color:#d0456f!important;border-color:#f3c4d3!important;background:#fff!important}
+.tg .tg-fav.on svg{fill:currentColor}
+.tg .tg-fav:hover{background:#fff;color:#d0456f}
+.tg-badge{position:absolute;top:10px;left:10px;padding:1px 6px;border-radius:999px;background:#fff6e3;color:#8a5a00;border:1px solid #f0d9a6;font-size:10px;font-weight:700;letter-spacing:.02em}
+
+.tg-empty{display:flex;flex-direction:column;align-items:center;gap:4px;padding:48px 16px;border:1px dashed var(--tg-line);border-radius:12px;color:var(--tg-muted);text-align:center}
+.tg-empty strong{color:var(--tg-text);font-size:14px}
+.tg-empty span{font-size:13px}
+
+/* Detail panel */
+.tg-detail{position:sticky;top:0;padding:14px;border:1px solid var(--tg-line);border-radius:12px;background:var(--tg-panel);max-height:calc(100vh - 170px);overflow:auto}
+.tg .tg-detail-close{position:absolute;top:8px;right:8px;z-index:1;width:28px;height:28px;min-height:0;padding:0;margin:0;display:grid;place-items:center;border-radius:999px;background:var(--tg-panel)}
+.tg-detail h3{margin:0;font-size:16px}
+.tg-detail-sub{margin:2px 0 10px;color:var(--tg-muted);font-size:12px}
+.tg-facts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 10px}
+.tg-facts div{padding:6px 8px;border-radius:8px;background:var(--tg-soft)}
+.tg-facts dt{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--tg-muted)}
+.tg-facts dd{margin:0;font-weight:650;font-size:13px}
+.tg-tags{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}
+.tg .tg-tags button{min-height:0;padding:2px 8px;margin:0;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--tg-line);background:var(--tg-panel)}
+.tg-note{margin:0 0 10px;padding:8px 10px;border-radius:8px;background:#fff6e3;color:#6b4a00;font-size:12px;line-height:1.4}
+[data-theme=dark] .tg-note{background:#3b3020;color:#f2dcae}
+.tg-actions{display:flex;flex-direction:column;gap:6px}
+.tg-actions button{justify-content:center;margin:0;width:100%}
+.tg-hint{display:block;margin-top:10px;color:var(--tg-muted);font-size:11px}
+
+/* Narrow containers: dialog pickers and small windows. */
+@container (max-width:900px){
+ .tg.tg-has-detail{grid-template-columns:180px minmax(0,1fr)}
+ .tg-detail{grid-column:1/-1;position:static;max-height:none;display:grid;grid-template-columns:160px 1fr;gap:4px 14px}
+ .tg-detail .tg-thumb.large{grid-row:1/span 6}
+}
+@container (max-width:680px){
+ .tg,.tg.tg-has-detail{grid-template-columns:minmax(0,1fr)}
+ .tg-rail{display:none}
+ .tg-rail-select{display:block}
+ .tg-toolbar select{max-width:none;flex:1 1 120px}
+ .tg-toolbar-actions{width:100%;margin:0}
+ .tg-detail{grid-template-columns:minmax(0,1fr)}
+ .tg-detail .tg-thumb.large{grid-row:auto;max-width:220px}
+}
+.tg-picker{grid-template-columns:minmax(0,1fr)}
+.tg-picker .tg-rail{display:none}
+.tg-picker .tg-rail-select{display:block}
+.tg-picker .tg-toolbar select:not(.tg-rail-select){max-width:130px}
+[data-reduced=true] .tg *{animation:none!important}

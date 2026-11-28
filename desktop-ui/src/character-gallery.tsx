@@ -1,27 +1,19 @@
-/// <reference types="vite/client" />
 import {compareNames,ListNavigation,matchesName,usePagedList} from './list-navigation';
-import {useEffect,useState} from 'react';
+import {useEffect,useMemo,useState,type ReactNode} from 'react';
 import {invoke} from '@tauri-apps/api/core';
-import {Upload} from 'lucide-react';
-import {bundledArtwork} from './bundled-artwork/catalog';
-import {sportsArtwork} from './bundled-artwork/sports';
-export type ArtworkEntry={group:string;name:string;file:string;svg?:string;id?:string};
+import {Clock3,Heart,LayoutGrid,Palette,Search,Sparkles,Upload,X,FolderOpen,Wand2,PenLine} from 'lucide-react';
+import {templateCatalog,sortCategories,type Complexity} from './template-catalog';
+import './template-gallery.css';
+
+export type ArtworkEntry={group:string;name:string;file:string;svg?:string;id?:string;collection?:string;tags?:string[];colors?:number;complexity?:Complexity;draft?:boolean};
 export type Art={name:string;mime:string;bytes:number[];classic?:boolean;bundled?:boolean};
-const groups:Record<string,string>={
- '01_Bows':'Boutique & bows','02_Sports':'Sports','03_Animals':'Animals & characters','04_Faith':'Faith','05_Floral':'Floral & botanical','06_Blank_Name_Templates':'Blank name templates','07_Seasonal':'Seasonal motifs','08_Western_Farm':'Western & farm motifs','09_Baby':'Baby & children','10_Applique':'Appliqué shapes','11_Boutique_Nameplates':'Boutique nameplates','12_Team_Nameplates':'Sports & team nameplates','13_Faith_Frames':'Faith frames','14_Nursery_Nameplates':'Nursery nameplates','15_Seasonal_Nameplates':'Seasonal nameplates','16_Western_Farm':'Western & farm templates','17_Botanical_Frames':'Botanical frames','18_Ocean_Adventure':'Beach & ocean','19_School_Hobbies':'School & hobbies','20_Applique_Badges':'Appliqué badges'
-};
-// Additional offline SVG packs are discovered at build time; preserve original artwork and collection names.
-const expandedFiles=import.meta.glob<string>('./bundled-artwork/expanded/**/*.svg',{eager:true,query:'?raw',import:'default'});
-const expandedGroups:Record<string,string>={'curated':'Curated artwork','quick-stitch-vol-1':'Quick Stitch Vol. 1','quick-stitch-vol-2':'Quick Stitch Vol. 2','solid-color-vol-3':'Quick Stitch Vol. 3 – solid color','quick-stitch-vol4':'Quick Stitch Vol. 4','sayings':'Sayings','premium-sayings-drafts':'Premium sayings','new-artwork':'New artwork'};
-const expandedArtwork=Object.entries(expandedFiles).map(([path,svg])=>{
- const parts=path.split('/'),file=parts.pop()!,collection=parts.pop()!;
- return {category:expandedGroups[collection]??collection,id:'expanded-'+collection+'-'+file.replace(/\.svg$/i,''),svg};
-});
-export const builtins:ArtworkEntry[]=[...bundledArtwork,...sportsArtwork,...expandedArtwork].map(a=>({id:a.id,group:groups[a.category]??a.category,name:(a.id.startsWith('expanded-')?a.id.replace(/^expanded-(?:curated|quick-stitch-vol-1|quick-stitch-vol-2|solid-color-vol-3|quick-stitch-vol4|sayings|premium-sayings-drafts|new-artwork)-/,''):a.id).replace(/^\d+[-_]/,'').replace(/[-_]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),file:a.id+'.svg',svg:a.svg}));
+
+export const builtins:ArtworkEntry[]=templateCatalog;
+
 function mime(file:string){return /\.svg$/i.test(file)?'image/svg+xml':/\.webp$/i.test(file)?'image/webp':/\.jpe?g$/i.test(file)?'image/jpeg':'image/png'}
 // Retain the original vector paths and palette. Use a sensible 80 mm starting viewport
 // for the single-artwork digitizer; the editor's insertion command sizes the actual artwork.
-function artworkBytes(svg:string){
+export function artworkBytes(svg:string){
  const doc=new DOMParser().parseFromString(svg,'image/svg+xml');
  const root=doc.documentElement;
  if(root.localName!=='svg'||doc.querySelector('parsererror'))throw Error('Invalid bundled artwork');
@@ -31,31 +23,133 @@ function artworkBytes(svg:string){
  }
  return Array.from(new TextEncoder().encode(new XMLSerializer().serializeToString(root)));
 }
-function Tile({entry,onArt,actionLabel,openPrepared}:{entry:ArtworkEntry;onArt:(a:Art)=>void;actionLabel:string;openPrepared?:()=>Promise<void>}){
- const [url,setUrl]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
- useEffect(()=>{let active=true,u='';setUrl('');setError('');
-  const load=entry.svg!==undefined?Promise.resolve(new TextEncoder().encode(entry.svg)):invoke<number[]>('character_image',{group:entry.group,file:entry.file});
-  load.then(bytes=>{if(active){u=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:mime(entry.file)}));setUrl(u)}}).catch(e=>{if(active)setError(String(e))});return()=>{active=false;if(u)URL.revokeObjectURL(u)}
+const svgUrl=(svg:string)=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+const keyOf=(e:ArtworkEntry)=>(e.svg!==undefined?'built-in/':'local/')+e.group+'/'+e.file;
+
+function stored(name:string):string[]{try{const v=JSON.parse(localStorage.getItem(name)??'[]');return Array.isArray(v)?v.filter(x=>typeof x==='string'):[]}catch{return []}}
+function store(name:string,value:string[]){try{localStorage.setItem(name,JSON.stringify(value))}catch{/* preferences are optional */}}
+const FAV='studio-template-favorites',RECENT='studio-template-recents';
+
+/** Thumbnail for built-in SVGs (inline) or local files (loaded from the native library). */
+function Thumb({entry,large}:{entry:ArtworkEntry;large?:boolean}){
+ const [url,setUrl]=useState(entry.svg?svgUrl(entry.svg):''),[error,setError]=useState(false);
+ useEffect(()=>{
+  if(entry.svg!==undefined){setUrl(svgUrl(entry.svg));return}
+  let active=true,u='';setUrl('');setError(false);
+  invoke<number[]>('character_image',{group:entry.group,file:entry.file})
+   .then(bytes=>{if(active){u=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:mime(entry.file)}));setUrl(u)}})
+   .catch(()=>{if(active)setError(true)});
+  return()=>{active=false;if(u)URL.revokeObjectURL(u)}
  },[entry.group,entry.file,entry.svg]);
- async function choose(){setBusy(true);try{const bytes=entry.svg!==undefined?artworkBytes(entry.svg):await invoke<number[]>('character_image',{group:entry.group,file:entry.file});onArt({name:entry.name,mime:mime(entry.file),bytes,bundled:entry.svg!==undefined,classic:entry.group==='Classic animation (1928)'})}catch(e){setError(String(e))}finally{setBusy(false)}}
- async function open(){if(!openPrepared)return;setBusy(true);setError('');try{await openPrepared()}catch(e){setError(String(e))}finally{setBusy(false)}}
- return <article><div style={{height:108,display:'grid',placeItems:'center',background:'white',borderRadius:8}}>{url?<img src={url} alt={entry.name} loading="lazy" style={{maxWidth:'100%',maxHeight:108,objectFit:'contain'}}/>:<small>{error?'Image unavailable':'Loading artwork…'}</small>}</div><small>{entry.group}{entry.svg!==undefined?' · Built-in SVG':''}</small>{entry.file==='mickey-1928.jpg'&&entry.group==='Classic animation (1928)'&&<div><a href="https://commons.wikimedia.org/wiki/File:Mickey_Mouse_as_he_appears_in_Steamboat_Willie_(1928).jpg" target="_blank" rel="noreferrer">Artwork source</a></div>}{entry.file==='minnie-1928.png'&&entry.group==='Classic animation (1928)'&&<div><a href="https://commons.wikimedia.org/wiki/File:Minnie_Mouse_from_Steamboat_Willie.png" target="_blank" rel="noreferrer">Artwork source</a></div>}<h3>{entry.name}</h3>{openPrepared&&<><small>Prepared stitch plan · up to 75 mm</small><button className="primary" disabled={busy} onClick={()=>void open()}>Open ready-to-edit design</button></>}<button disabled={busy||!url} onClick={choose}>{busy?'Opening…':actionLabel}</button>{error&&<small role="alert">{error}</small>}</article>
+ return <div className={'tg-thumb'+(large?' large':'')}>{url?<img src={url} alt={entry.name} loading="lazy" draggable={false}/>:<span className={error?'tg-thumb-error':'tg-skeleton'}>{error?'Preview unavailable':''}</span>}</div>;
 }
-export function CharacterGallery({onArt,actionLabel='Digitize',bundledOnly=false,onPrepared}:{onArt:(a:Art)=>void;actionLabel?:string;bundledOnly?:boolean;onPrepared?:(id:string)=>Promise<void>}){
- const [local,setLocal]=useState<ArtworkEntry[]>([]),[query,setQuery]=useState(''),[group,setGroup]=useState('All'),[source,setSource]=useState<'all'|'built-in'|'local'>(bundledOnly?'built-in':'all'),[error,setError]=useState(''),[busy,setBusy]=useState(!bundledOnly);
+
+type Filter={style:string;colors:string;complexity:string;sort:string};
+const noFilter:Filter={style:'',colors:'',complexity:'',sort:'name'};
+const rank:Record<Complexity,number>={Simple:0,Moderate:1,Detailed:2};
+
+export function CharacterGallery({onArt,actionLabel='Digitize',bundledOnly=false,onPrepared,variant='page'}:{onArt:(a:Art)=>void;actionLabel?:string;bundledOnly?:boolean;onPrepared?:(id:string)=>Promise<void>;variant?:'page'|'picker'}){
+ const [local,setLocal]=useState<ArtworkEntry[]>([]),[query,setQuery]=useState(''),[group,setGroup]=useState(()=>{try{const c=sessionStorage.getItem('studio-template-category');sessionStorage.removeItem('studio-template-category');return c||'All'}catch{return 'All'}}),[error,setError]=useState(''),[busy,setBusy]=useState(!bundledOnly);
+ const [filter,setFilter]=useState<Filter>(noFilter),[selected,setSelected]=useState<ArtworkEntry|null>(null),[working,setWorking]=useState('');
+ const [favorites,setFavorites]=useState(()=>stored(FAV)),[recents,setRecents]=useState(()=>stored(RECENT));
  const [prepared,setPrepared]=useState<string[]>([]);
  useEffect(()=>{if(!onPrepared)return;let active=true;invoke<string[]>('prepared_bundled_designs').then(ids=>{if(active&&Array.isArray(ids))setPrepared(ids)}).catch(()=>{});return()=>{active=false}},[!!onPrepared]);
- async function refresh(){if(bundledOnly)return;setBusy(true);setError('');try{setLocal(await invoke<ArtworkEntry[]>('character_list'))}catch(e){setError('Local artwork could not be loaded: '+String(e))}finally{setBusy(false)}}
+ async function refresh(){if(bundledOnly)return;setBusy(true);setError('');try{setLocal((await invoke<ArtworkEntry[]>('character_list'))??[])}catch(e){setError('Local artwork could not be loaded: '+String(e))}finally{setBusy(false)}}
  useEffect(()=>{void refresh()},[bundledOnly]);
- const entries=source==='built-in'||bundledOnly?builtins:source==='local'?local:[...builtins,...local];
- const filtered=entries.filter(e=>(group==='All'||e.group===group)&&matchesName(e.name+' '+e.group,query)).sort((a,b)=>compareNames(a.name,b.name));
- const page=usePagedList(filtered,JSON.stringify([query,group,source]));
- const categories=Array.from(new Set(entries.map(e=>e.group))).sort(compareNames);
- async function saveArtwork(){setBusy(true);setError('');try{const count=await invoke<number|null>('import_artwork_files');if(count!==null){await refresh();setSource('local');setGroup('My imported artwork');setQuery('');}}catch(e){setError(String(e))}finally{setBusy(false)}}
- async function importArtwork(file:File){
-   setError('');
-   if(!file.size||file.size>20_000_000){setError('Choose artwork between 1 byte and 20 MB.');return}
-   try{onArt({name:file.name.replace(/\.[^.]+$/,''),mime:mime(file.name),bytes:Array.from(new Uint8Array(await file.arrayBuffer()))})}catch(e){setError(String(e))}
+ useEffect(()=>{if(!selected)return;const k=(e:KeyboardEvent)=>{if(e.key==='Escape')setSelected(null)};document.addEventListener('keydown',k);return()=>document.removeEventListener('keydown',k)},[selected]);
+
+ const all=useMemo(()=>bundledOnly?builtins:[...builtins,...local],[local,bundledOnly]);
+ const byKey=useMemo(()=>new Map(all.map(e=>[keyOf(e),e])),[all]);
+ const categories=useMemo(()=>sortCategories(Array.from(new Set(builtins.map(e=>e.group)))),[]);
+ const localGroups=useMemo(()=>Array.from(new Set(local.map(e=>e.group))).sort(compareNames),[local]);
+ const counts=useMemo(()=>{const m=new Map<string,number>();for(const e of all)m.set(e.group,(m.get(e.group)??0)+1);return m},[all]);
+ const styles=useMemo(()=>Array.from(new Set(builtins.flatMap(e=>e.tags?.filter(t=>['Line art','Solid color','Filled','Detailed','Lettering'].includes(t))??[]))).sort(),[]);
+ const pick=(keys:string[])=>keys.map(k=>byKey.get(k)).filter((e):e is ArtworkEntry=>!!e);
+
+ const scoped=group==='All'?all:group==='Favorites'?pick(favorites):group==='Recent'?pick(recents):all.filter(e=>e.group===group);
+ const filtered=scoped.filter(e=>matchesName([e.name,e.group,e.collection??'',...(e.tags??[])].join(' '),query)
+  &&(!filter.style||!!e.tags?.includes(filter.style))
+  &&(!filter.complexity||e.complexity===filter.complexity)
+  &&(!filter.colors||(e.colors!==undefined&&(filter.colors==='1-2'?e.colors<=2:filter.colors==='3-4'?e.colors>=3&&e.colors<=4:e.colors>=5))));
+ if(group!=='Recent')filtered.sort((a,b)=>filter.sort==='simple'?(rank[a.complexity??'Moderate']-rank[b.complexity??'Moderate'])||compareNames(a.name,b.name)
+  :filter.sort==='colors'?((a.colors??9)-(b.colors??9))||compareNames(a.name,b.name):compareNames(a.name,b.name));
+ const page=usePagedList(filtered,JSON.stringify([query,group,filter]),variant==='picker'?24:48);
+ const filtersOn=!!(query||filter.style||filter.colors||filter.complexity);
+
+ function toggleFavorite(e:ArtworkEntry){const k=keyOf(e);setFavorites(f=>{const next=f.includes(k)?f.filter(x=>x!==k):[k,...f];store(FAV,next);return next})}
+ function remember(e:ArtworkEntry){const k=keyOf(e);setRecents(r=>{const next=[k,...r.filter(x=>x!==k)].slice(0,24);store(RECENT,next);return next})}
+ async function choose(entry:ArtworkEntry){
+  setWorking(keyOf(entry));setError('');
+  try{const bytes=entry.svg!==undefined?artworkBytes(entry.svg):await invoke<number[]>('character_image',{group:entry.group,file:entry.file});remember(entry);onArt({name:entry.name,mime:mime(entry.file),bytes,bundled:entry.svg!==undefined,classic:entry.group==='Classic animation (1928)'})}
+  catch(e){setError(String(e))}finally{setWorking('')}
  }
- return <section><div className="artwork-library-heading"><div><h2>{bundledOnly?'Built-in design collection':'Artwork library'}</h2><small>{builtins.length} offline, editable vector designs · {new Set(builtins.map(e=>e.group)).size} categories</small></div>{!bundledOnly&&<button className="primary" disabled={busy} onClick={()=>void saveArtwork()}><Upload size={16}/> Import artwork files</button>}</div>{!bundledOnly&&<label>Choose a file without saving to library<input type="file" accept=".png,.webp,.jpg,.jpeg,.svg" onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void importArtwork(file);}}/></label>}<div className="template-filters">{!bundledOnly&&<select aria-label="Artwork source" value={source} onChange={e=>{setSource(e.target.value as typeof source);setGroup('All')}}><option value="all">All artwork</option><option value="built-in">Built-in collection ({builtins.length})</option><option value="local">Local artwork</option></select>}<input aria-label="Search artwork" placeholder="Search artwork" value={query} onChange={e=>{setQuery(e.target.value)}}/><select aria-label="Design category" value={group} onChange={e=>{setGroup(e.target.value)}}>{['All',...categories].map(g=><option key={g} value={g}>{g==='All'?'All categories':g+' ('+entries.filter(e=>e.group===g).length+')'}</option>)}</select>{!bundledOnly&&<button onClick={()=>void refresh()} disabled={busy}>Refresh</button>}</div>{error&&<p role="alert">{error}</p>}{busy&&<small role="status">Loading local artwork…</small>}{!filtered.length?<p>No artwork matches your filters.</p>:<><small>{filtered.length} designs</small><div className="template-grid">{page.items.map(e=><Tile key={(e.svg!==undefined?'built-in/':'local/')+e.group+'/'+e.file} entry={e} onArt={onArt} actionLabel={actionLabel} openPrepared={onPrepared&&e.id&&prepared.includes(e.id)?()=>onPrepared(e.id!):undefined}/>)}</div><ListNavigation {...page}/></>}</section>
+ async function openPrepared(entry:ArtworkEntry){if(!onPrepared||!entry.id)return;setWorking(keyOf(entry));setError('');try{remember(entry);await onPrepared(entry.id)}catch(e){setError(String(e))}finally{setWorking('')}}
+ async function saveArtwork(){setBusy(true);setError('');try{const count=await invoke<number|null>('import_artwork_files');if(count!==null){await refresh();setGroup('My imported artwork');setQuery('')}}catch(e){setError(String(e))}finally{setBusy(false)}}
+ async function importArtwork(file:File){
+  setError('');
+  if(!file.size||file.size>20_000_000){setError('Choose artwork between 1 byte and 20 MB.');return}
+  try{onArt({name:file.name.replace(/\.[^.]+$/,''),mime:mime(file.name),bytes:Array.from(new Uint8Array(await file.arrayBuffer()))})}catch(e){setError(String(e))}
+ }
+
+ const railItem=(id:string,label:string,count:number,icon?:ReactNode)=><button key={id} className="tg-rail-item" aria-pressed={group===id} onClick={()=>{setGroup(id);setSelected(null)}}>{icon}<span>{label}</span><small>{count}</small></button>;
+ const isFav=(e:ArtworkEntry)=>favorites.includes(keyOf(e));
+ const meta=(e:ArtworkEntry)=>[e.colors!==undefined?e.colors+(e.colors===1?' color':' colors'):null,e.complexity].filter(Boolean).join(' · ');
+ const heading=group==='All'?'All designs':group==='Recent'?'Recently used':group;
+ const preparedFor=(e:ArtworkEntry)=>!!(onPrepared&&e.id&&prepared.includes(e.id));
+
+ return <section className={'tg tg-'+variant+(selected&&variant==='page'?' tg-has-detail':'')} aria-label={bundledOnly?'Built-in design collection':'Artwork library'}>
+  <nav className="tg-rail" aria-label="Design categories">
+   {railItem('All','All designs',all.length,<LayoutGrid size={15}/>)}
+   {railItem('Favorites','Favorites',pick(favorites).length,<Heart size={15}/>)}
+   {railItem('Recent','Recently used',pick(recents).length,<Clock3 size={15}/>)}
+   <h3>Categories</h3>
+   {categories.map(c=>railItem(c,c,counts.get(c)??0))}
+   {!bundledOnly&&<><h3>My artwork</h3>{localGroups.length?localGroups.map(c=>railItem(c,c,counts.get(c)??0,<FolderOpen size={15}/>)):<small className="tg-rail-empty">{busy?'Loading…':'No imported artwork yet'}</small>}</>}
+  </nav>
+  <div className="tg-main">
+   <div className="tg-toolbar">
+    <select className="tg-rail-select" aria-label="Design category" value={group} onChange={e=>{setGroup(e.target.value);setSelected(null)}}>
+     <option value="All">All designs ({all.length})</option><option value="Favorites">Favorites</option><option value="Recent">Recently used</option>
+     {[...categories,...localGroups].map(c=><option key={c} value={c}>{c} ({counts.get(c)??0})</option>)}
+    </select>
+    <label className="tg-search"><Search size={15} aria-hidden="true"/><input aria-label="Search artwork" placeholder={'Search '+all.length+' designs: bow, faith, nameplate…'} value={query} onChange={e=>setQuery(e.target.value)}/>{query&&<button aria-label="Clear search" onClick={()=>setQuery('')}><X size={14}/></button>}</label>
+    <select aria-label="Artwork style" value={filter.style} onChange={e=>setFilter({...filter,style:e.target.value})}><option value="">Any style</option>{styles.map(s=><option key={s}>{s}</option>)}</select>
+    <select aria-label="Thread colors" value={filter.colors} onChange={e=>setFilter({...filter,colors:e.target.value})}><option value="">Any colors</option><option value="1-2">1–2 colors</option><option value="3-4">3–4 colors</option><option value="5+">5+ colors</option></select>
+    <select aria-label="Stitch complexity" value={filter.complexity} onChange={e=>setFilter({...filter,complexity:e.target.value})}><option value="">Any detail</option><option>Simple</option><option>Moderate</option><option>Detailed</option></select>
+    <select aria-label="Sort designs" value={filter.sort} onChange={e=>setFilter({...filter,sort:e.target.value})}><option value="name">Name A–Z</option><option value="simple">Simplest first</option><option value="colors">Fewest colors</option></select>
+    {!bundledOnly&&<span className="tg-toolbar-actions">{variant==='page'&&<label className="tg-file-button">Use a file once<input type="file" accept=".png,.webp,.jpg,.jpeg,.svg" onChange={event=>{const file=event.currentTarget.files?.[0];event.currentTarget.value='';if(file)void importArtwork(file)}}/></label>}<button className="primary" disabled={busy} onClick={()=>void saveArtwork()}><Upload size={15}/> Import artwork</button></span>}
+   </div>
+   <div className="tg-head"><h2>{heading}</h2><small>{filtered.length} {filtered.length===1?'design':'designs'}</small>{filtersOn&&<button className="tg-link" onClick={()=>{setQuery('');setFilter({...noFilter,sort:filter.sort})}}>Clear filters</button>}</div>
+   {error&&<p className="tg-error" role="alert">{error}</p>}
+   {!filtered.length?<div className="tg-empty">{group==='Favorites'&&!filtersOn?<><Heart size={22}/><strong>No favorites yet</strong><span>Tap the heart on any design to keep it here.</span></>:group==='Recent'&&!filtersOn?<><Clock3 size={22}/><strong>Nothing used yet</strong><span>Designs you open appear here.</span></>:<><Search size={22}/><strong>No designs match</strong><span>Try another word or clear the filters.</span></>}</div>
+   :<><div className="tg-grid">{page.items.map(e=>{const k=keyOf(e),current=!!selected&&keyOf(selected)===k;return <div key={k} className={'tg-card'+(current?' selected':'')}>
+     <button className="tg-card-main" aria-label={(variant==='picker'?actionLabel+': ':'')+e.name} aria-pressed={variant==='page'?current:undefined} disabled={working===k}
+      onClick={()=>variant==='picker'?void choose(e):setSelected(current?null:e)} onDoubleClick={()=>{if(variant==='page')void choose(e)}}>
+      <Thumb entry={e}/>
+      <span className="tg-card-name">{e.name}</span>
+      <span className="tg-card-meta">{e.svg===undefined?'My artwork':meta(e)}</span>
+     </button>
+     <button className={'tg-fav'+(isFav(e)?' on':'')} aria-label={(isFav(e)?'Remove from':'Add to')+' favorites: '+e.name} aria-pressed={isFav(e)} onClick={()=>toggleFavorite(e)}><Heart size={14}/></button>
+     {e.draft&&<span className="tg-badge" title="Traced artwork. Review lettering and edges before production.">Draft</span>}
+    </div>})}</div><ListNavigation {...page}/></>}
+  </div>
+  {variant==='page'&&selected&&<div role="region" className="tg-detail" aria-label={'Design details: '+selected.name}>
+   <button className="tg-detail-close" aria-label="Close details" onClick={()=>setSelected(null)}><X size={16}/></button>
+   <Thumb entry={selected} large/>
+   <h3>{selected.name}</h3>
+   <p className="tg-detail-sub">{selected.svg===undefined?'My artwork · '+selected.group:[selected.group,selected.collection].filter(Boolean).join(' · ')}</p>
+   {(selected.colors!==undefined||selected.complexity)&&<dl className="tg-facts">
+    {selected.colors!==undefined&&<div><dt><Palette size={13}/> Colors</dt><dd>{selected.colors}</dd></div>}
+    {selected.complexity&&<div><dt><Sparkles size={13}/> Detail</dt><dd>{selected.complexity}</dd></div>}
+   </dl>}
+   {!!selected.tags?.length&&<div className="tg-tags">{selected.tags.map(t=><button key={t} onClick={()=>{setQuery(t);setGroup('All');setSelected(null)}}>{t}</button>)}</div>}
+   {selected.draft&&<p className="tg-note">Traced artwork. Check lettering and edges in the stitch preview before sewing.</p>}
+   <div className="tg-actions">
+    {preparedFor(selected)&&<button className="primary" disabled={!!working} onClick={()=>void openPrepared(selected)}><PenLine size={15}/> Open ready-to-edit design</button>}
+    <button className={preparedFor(selected)?'':'primary'} disabled={!!working} onClick={()=>void choose(selected)}><Wand2 size={15}/> {working===keyOf(selected)?'Opening…':actionLabel}</button>
+    <button onClick={()=>toggleFavorite(selected)} aria-pressed={isFav(selected)}><Heart size={15}/> {isFav(selected)?'Favorited':'Add to favorites'}</button>
+   </div>
+   <small className="tg-hint">Double-click a design to {actionLabel.toLowerCase()} it straight away.</small>
+  </div>}
+ </section>;
 }

@@ -1,0 +1,54 @@
+/* Final layer of shared UI polish. Loaded after every other stylesheet. */
+:root{
+ --ui-panel:var(--lav-panel,var(--studio-panel,#fff));
+ --ui-line:var(--lav-border,var(--studio-line,#e2d9ee));
+ --ui-text:var(--lav-text,var(--studio-ink,#352744));
+ --ui-muted:var(--studio-muted,#6d6279);
+ --ui-soft:var(--brand-soft,#eee6fb);
+ --ui-brand:var(--brand,#6945a2);
+ --ui-accent:var(--brand-accent,#8b65c8);
+ --ui-radius:10px;
+}
+[data-theme=dark]{--ui-muted:#b6abc6}
+
+/* Compact page header: title and one-line description, no banner box. */
+.app>main.page-workspace>.workspace-heading{min-height:0;padding:2px 2px 10px;margin:0 0 12px;border:0;border-bottom:1px solid var(--ui-line);border-radius:0;background:none!important;align-items:center}
+.app>main.page-workspace>.workspace-heading>div:first-child{display:flex;align-items:baseline;gap:12px;min-width:0;flex-wrap:wrap}
+.app>main.page-workspace>.workspace-heading h1{font-size:20px;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:0}
+.app>main.page-workspace>.workspace-heading p{font-size:13px;margin:0;color:var(--ui-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60ch}
+.app>main.page-workspace>.workspace-heading-actions button,.app>main.page-workspace>.workspace-heading button{min-height:30px;padding:4px 10px;font-size:12.5px}
+@media(max-width:820px){.app>main.page-workspace>.workspace-heading p{display:none}}
+
+/* Segmented tabs used for page-level sources (Template Library, Machines/Hoops). */
+.page-tabs,.app main .setup-tabs{display:inline-flex;gap:2px;padding:3px;margin:0 0 14px;border:1px solid var(--ui-line);border-radius:10px;background:var(--ui-soft);width:auto;flex-wrap:wrap}
+.page-tabs button,.app main .setup-tabs button{min-height:30px;padding:4px 12px;margin:0;border:0!important;border-radius:7px;background:transparent!important;color:var(--ui-text);font-size:13px;font-weight:600;box-shadow:none}
+.page-tabs button:hover,.app main .setup-tabs button:hover{background:color-mix(in srgb,var(--ui-panel) 60%,transparent)!important}
+.page-tabs button[aria-pressed=true],.app main .setup-tabs button[aria-pressed=true]{background:var(--ui-panel)!important;color:var(--ui-brand);box-shadow:0 1px 3px rgba(40,20,70,.12)}
+[data-theme=dark] .page-tabs button[aria-pressed=true],[data-theme=dark] .app main .setup-tabs button[aria-pressed=true]{color:var(--ui-accent)}
+
+/* Consistent keyboard focus. */
+.app :is(button,a,select,input,textarea,summary,[tabindex]):focus-visible{outline:2px solid var(--ui-accent);outline-offset:2px}
+
+/* Toasts: compact, themed, stacked bottom-right, with an entry animation. */
+#studio-toasts{bottom:18px;right:18px;gap:6px}
+.studio-toast{padding:10px 12px 10px 14px;border-radius:10px;font-size:13.5px;line-height:1.35;box-shadow:0 10px 30px rgba(30,15,50,.25);animation:ui-toast-in .18s ease-out}
+.studio-toast button{min-height:0;padding:2px 6px;font-size:16px;line-height:1;opacity:.8}
+.studio-toast button:hover{opacity:1;background:rgba(255,255,255,.15)!important}
+@keyframes ui-toast-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* Thin, quiet scrollbars across panels. */
+.app *{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ui-accent) 35%,transparent) transparent}
+
+/* Confirmation dialog. */
+.studio-confirm{border-radius:14px;padding:20px 22px;max-width:min(440px,92vw);border:1px solid var(--ui-line)}
+.studio-confirm h2{font-size:17px;margin:0 0 6px}
+.studio-confirm p{font-size:14px;margin:0 0 16px;color:var(--ui-muted)}
+.studio-confirm footer{display:flex;justify-content:flex-end;gap:8px}
+.studio-confirm::backdrop{background:rgba(25,15,40,.38);backdrop-filter:blur(2px)}
+
+/* Template Library page fits the window: the gallery rail and detail stick while cards scroll. */
+.app>main.page-workspace .tg-rail,.app>main.page-workspace .tg-detail{top:0}
+[data-reduced=true] .studio-toast{animation:none}
+
+/* Template thumbnails were caught by the 14px icon rule for card buttons. */
+.template-grid article>button.template-art-select svg.template-art{flex:none;width:100%!important;height:auto!important;aspect-ratio:1;max-height:120px;padding:6px!important}

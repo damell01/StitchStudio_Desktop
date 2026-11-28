@@ -6,6 +6,7 @@ import {
 import {useEffect,useState} from 'react';
 import {confirmAction} from './dialogs';
 import {RecentProjects} from './library';
+import {templateCatalog} from './template-catalog';
 import heroPhoto from './assets/home-embroidery.webp';
 import './home-workspace.css';
 
@@ -16,7 +17,18 @@ type Props = {
   studio:(assistant?:boolean)=>void;
   projects:()=>void;
   onArtworkDrop:(file:File)=>void;
+  /** Opens the template library, optionally on one category. */
+  templates?:(category?:string)=>void;
+  /** Starts digitizing one built-in template. */
+  onTemplate?:(template:{name:string;svg:string})=>void;
 };
+
+const featuredIds=['expanded-curated-pink-floral-crest','expanded-curated-baseball-blue-bow','expanded-sayings-faith-walk-by-faith','expanded-curated-teddy-blue-bow',
+  'expanded-quick-stitch-vol4-coastal-pelican','expanded-curated-green-tractor','expanded-premium-sayings-drafts-blessed-mama','expanded-solid-color-vol-3-boutique-ribbon-bow',
+  'expanded-curated-woodland-fawn','expanded-sayings-southern-sweet-as-honey','expanded-curated-flying-mallard','expanded-quick-stitch-vol-1-12-birthday-train'];
+const featured=featuredIds.map(id=>templateCatalog.find(t=>t.id===id)).filter((t):t is typeof templateCatalog[number]=>!!t&&!!t.svg);
+const featuredCategories=['Sayings','Monograms & frames','Boutique & bows','Baby & children','Sports','Faith','Seasonal','Western & farm','Outdoors & hunting','Beach & ocean'];
+const svgUrl=(svg:string)=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
 
 const quickCreate = [
   {label:'Lettering',page:'Create lettering',Icon:Type},
@@ -33,7 +45,7 @@ const resources = [
   {page:'Help Center',label:'How-to guides',Icon:BookOpen},
 ] as const;
 
-export function HomeWorkspace({navigate,studio,projects,onArtworkDrop}:Props) {
+export function HomeWorkspace({navigate,studio,projects,onArtworkDrop,templates,onTemplate}:Props) {
   const [overview,setOverview]=useState<Overview>({current:null,recovery:false});
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
@@ -102,12 +114,30 @@ export function HomeWorkspace({navigate,studio,projects,onArtworkDrop}:Props) {
         <div className="studio-home-open" aria-label="Open files">
           <button disabled={busy} onClick={()=>void open('project')}><FileText size={16}/> Open project</button>
           <button disabled={busy} onClick={()=>void open('embroidery')}><FolderOpen size={16}/> Open embroidery</button>
+          <span className="studio-home-divider" aria-hidden="true"/>
+          {quickCreate.map(({label,page,Icon})=><button key={page} aria-label={page} disabled={busy} onClick={()=>navigate(page)}><Icon size={16}/>{label}</button>)}
         </div>
       </div>
       <img className="studio-home-hero-photo" src={heroPhoto} width="800" height="800" alt="Lavender sprigs and a stitched ribbon in a wooden embroidery hoop"/>
     </section>
 
     {message&&<p className="studio-home-error" role="alert">{message}</p>}
+    {!!featured.length&&<section className="studio-home-templates" aria-labelledby="studio-home-templates">
+      <div className="studio-home-section-title">
+        <h2 id="studio-home-templates">Start from a template</h2>
+        <button disabled={busy} onClick={()=>templates?templates():navigate('Template Library')}>Browse all {templateCatalog.length} <ArrowRight size={15}/></button>
+      </div>
+      <div className="studio-home-chips" role="group" aria-label="Template categories">
+        {featuredCategories.map(c=><button key={c} disabled={busy} onClick={()=>templates?templates(c):navigate('Template Library')}>{c}</button>)}
+      </div>
+      <div className="studio-home-template-row">
+        {featured.map(t=><button key={t.id} className="studio-home-template" disabled={busy} title={'Digitize '+t.name}
+          onClick={()=>onTemplate?onTemplate({name:t.name,svg:t.svg}):navigate('Template Library')}>
+          <span><img src={svgUrl(t.svg)} alt="" loading="lazy" draggable={false}/></span>
+          <strong>{t.name}</strong><small>{t.group}</small>
+        </button>)}
+      </div>
+    </section>}
     <div className="studio-home-work">
       <section className="studio-home-recent" aria-labelledby="studio-home-recent">
         <div className="studio-home-section-title">
@@ -131,13 +161,7 @@ export function HomeWorkspace({navigate,studio,projects,onArtworkDrop}:Props) {
       </section>
     </div>
 
-    <div className="studio-home-tools">
-      <section aria-labelledby="studio-home-create">
-        <h2 id="studio-home-create">Quick create</h2>
-        <div className="studio-home-link-list">
-          {quickCreate.map(({label,page,Icon})=><button key={page} aria-label={page} disabled={busy} onClick={()=>navigate(page)}><Icon size={17}/>{label}</button>)}
-        </div>
-      </section>
+    <div className="studio-home-tools studio-home-tools-single">
       <section aria-labelledby="studio-home-resources">
         <h2 id="studio-home-resources">Libraries and setup</h2>
         <div className="studio-home-link-list">
