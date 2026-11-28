@@ -1160,35 +1160,50 @@ fn production_not_worse(original:&Design,candidate:&Design)->bool{
     next_peak<=peak.max(24)&&next_hot<=hot
         &&b.long<=a.long&&b.zero<=a.zero&&b.short<=a.short.saturating_add(5)
 }
-fn optimization_quality(original:&Design,plan:&Design,speed:f64,trim:f64)->OptimizationQuality{
-    use std::collections::{HashSet,HashMap};
-    let sample=|d:&Design|{
-        let mut cells=HashSet::new();let mut density=HashMap::<(i32,i32),usize>::new();
-        for block in &d.blocks { for run in &block.runs{
+type StitchFootprint = std::collections::HashSet<([u8; 3], i32, i32)>;
+
+fn stitch_footprint(design: &Design) -> (StitchFootprint, usize) {
+    use std::collections::{HashMap, HashSet};
+    let mut cells = HashSet::new();
+    let mut density = HashMap::<(i32, i32), usize>::new();
+    for block in &design.blocks {
+        for run in &block.runs {
             for p in &run.pts {
-                let cell = ((p.x/10.).floor() as i32, (p.y/10.).floor() as i32);
+                let cell = ((p.x / 10.).floor() as i32, (p.y / 10.).floor() as i32);
                 *density.entry(cell).or_default() += 1;
-                // Single-point runs and isolated needle penetrations are also artwork.
+                // Single-point runs can represent isolated artwork.
                 cells.insert((block.color, cell.0, cell.1));
             }
-            for pair in run.pts.windows(2){
-                let n=(pair[0].dist(pair[1])/5.).ceil().clamp(1.,100.) as usize;
-                for k in 0..=n{let p=pair[0].lerp(pair[1],k as f64/n as f64);cells.insert((block.color,(p.x/10.).floor() as i32,(p.y/10.).floor() as i32));}
+            for pair in run.pts.windows(2) {
+                let samples = (pair[0].dist(pair[1]) / 5.).ceil().clamp(1., 100.) as usize;
+                for step in 0..=samples {
+                    let p = pair[0].lerp(pair[1], step as f64 / samples as f64);
+                    cells.insert((block.color, (p.x / 10.).floor() as i32, (p.y / 10.).floor() as i32));
+                }
             }
         }
-        }
-        (cells,density.values().copied().max().unwrap_or(0))
-    };
-    let (a,_)=sample(original);let (b,peak)=sample(plan);
-    let overlap=a.intersection(&b).count() as f64/a.union(&b).count().max(1) as f64;
+    }
+    (cells, density.values().copied().max().unwrap_or(0))
+}
+
+fn optimization_quality(original: &Design, plan: &Design, speed: f64, trim: f64) -> OptimizationQuality {
+    let (reference, _) = stitch_footprint(original);
+    compare_stitch_footprint(&reference, plan, speed, trim)
+}
+
+fn compare_stitch_footprint(a: &StitchFootprint, plan: &Design, speed: f64, trim: f64) -> OptimizationQuality {
+    use std::collections::HashMap;
+    let (candidate, peak) = stitch_footprint(plan);
+    let b = &candidate;
+    let overlap=a.intersection(b).count() as f64/a.union(b).count().max(1) as f64;
     // A small contrasting detail should not disappear inside a large fill.
     let mut totals=HashMap::<[u8;3],(usize,usize)>::new();
-    for cell in a.union(&b){let t=totals.entry(cell.0).or_default();t.0+=1;if a.contains(cell)&&b.contains(cell){t.1+=1;}}
+    for cell in a.union(b){let t=totals.entry(cell.0).or_default();t.0+=1;if a.contains(cell)&&b.contains(cell){t.1+=1;}}
     let weakest=totals.values().map(|(n,k)|*k as f64/(*n).max(1) as f64).fold(1.0_f64,f64::min);
     // A disconnected same-thread detail can be lost even when the overall
     // color footprint is almost unchanged. Preserve isolated cells, with
     // one millimetre of tolerance for harmless needle-position changes.
-    let isolated_lost=a.difference(&b).any(|&(color,x,y)|{
+    let isolated_lost=a.difference(b).any(|&(color,x,y)|{
         let has_original_neighbor=(-2i32..=2).any(|dx|(-2i32..=2).any(|dy|(dx!=0||dy!=0)&&a.contains(&(color,x+dx,y+dy))));
         !has_original_neighbor && !(-1i32..=1).any(|dx|(-1i32..=1).any(|dy|b.contains(&(color,x+dx,y+dy))))
     });
@@ -1369,12 +1384,13 @@ fn choose_fast_stitch(source:&zigzag::document::Document,original:&Design,uids:O
         }
     }
     let audit=measure_stitches(original);let bounds=original.bounds();
+    let (reference_footprint, _) = stitch_footprint(original);
     choices.retain(|(_,d)|{let b=d.bounds();let q=measure_stitches(d);
         d.stitch_count()>0&&d.stitch_count()<=original.stitch_count()&&score(d)<baseline_seconds&&q.long<=audit.long&&q.zero<=audit.zero&&q.short<=audit.short.saturating_add(5)
         &&d.trim_count()<=original.trim_count()
         &&bounds.min.dist(b.min)<=5.&&bounds.max.dist(b.max)<=5.
         &&original.blocks.iter().map(|b|b.color).eq(d.blocks.iter().map(|b|b.color))
-        &&optimization_quality(original,d,speed,trim).coverage>=85.
+        &&compare_stitch_footprint(&reference_footprint,d,speed,trim).coverage>=85.
     });
     choices.sort_by(|a,b|{let gap=|d:&Design|options.target_minutes.filter(|t|t.is_finite()&&*t>0.).map(|t|(score(d)/(t*60.)-1.).max(0.)).unwrap_or(0.)+options.target_stitches.filter(|n|*n>0).map(|n|(d.stitch_count() as f64/n as f64-1.).max(0.)).unwrap_or(0.);gap(&a.1).total_cmp(&gap(&b.1)).then_with(||score(&a.1).total_cmp(&score(&b.1)))});
     choices.into_iter().next().ok_or("No faster eligible stitch plan found".into())
@@ -1652,7 +1668,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
         let target=options.target_minutes.filter(|v|v.is_finite()&&*v>0.0).map(|v|v*60.0);
         let stitch_goal=options.target_stitches.or_else(||(original.stitch_count()>15_000).then_some(10_000));
         let before=measure_stitches(original);let a=original.bounds();let baseline_seconds=seconds(original);
-        let baseline_peak=optimization_quality(original,original,speed,trim).density_peak;
+        let (reference_footprint, baseline_peak) = stitch_footprint(original);
         let (_, original_hotspots)=production_hotspots(original);
         let nearest_rejection = std::cell::Cell::new((usize::MAX, "No cheaper stitch plan was found for the eligible artwork."));
         let reject = |d: &Design, reason: &'static str| {
@@ -1678,7 +1694,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
                 return reject(d, "A cheaper plan moved the design edges by more than 0.5 mm.");
             }
             let threshold = if strength == 1 { 95. } else if strength == 2 { 90. } else { 85. };
-            let quality=optimization_quality(original,d,speed,trim);
+            let quality=compare_stitch_footprint(&reference_footprint,d,speed,trim);
             // Allow minor cell-boundary variation, but do not trade lower
             // total stitch counts for substantially worse local congestion.
             if quality.density_peak>baseline_peak.saturating_add(3).max(baseline_peak.saturating_mul(110)/100) {
