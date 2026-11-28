@@ -1,0 +1,57 @@
+.dc-bar{position:relative;display:flex;align-items:center;gap:6px}
+.dc-label{display:inline-flex;align-items:center;gap:5px;padding:0 4px 0 6px;font-size:12.5px;font-weight:650;color:var(--muted)}
+html[data-palette][data-theme] .dc-bar .dc-swatch{width:26px;height:26px;min-height:0;padding:0;margin:0;border-radius:999px;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line-strong);cursor:pointer;flex:none;transition:transform .1s}
+html[data-palette][data-theme] .dc-bar .dc-swatch:hover:not(:disabled){transform:scale(1.1);background-image:none}
+html[data-palette][data-theme] .dc-bar .dc-swatch[aria-pressed=true]{box-shadow:0 0 0 2px var(--brand-accent)}
+.dc-compact .dc-swatch{width:22px!important;height:22px!important}
+.dc-more{font-size:11.5px;color:var(--muted);font-weight:600}
+/* Floating bar when nothing is selected. */
+html[data-palette][data-theme] .editor-workspace .workspace-canvas>.dc-floating{
+ position:absolute;top:12px;left:14px;z-index:7;padding:4px 8px 4px 4px;border:1px solid var(--line);border-radius:13px;
+ background:color-mix(in srgb,var(--surface) 96%,transparent);backdrop-filter:blur(8px);box-shadow:var(--shadow-2);
+}
+.dc-popover{z-index:300;width:276px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--text);box-shadow:var(--shadow-3);text-align:left}
+.dc-pop-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.dc-big{width:36px;height:36px;border-radius:10px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);flex:none}
+.dc-pop-head strong{display:block;font-size:14px;font-variant-numeric:tabular-nums}
+.dc-pop-head small{font-size:11.5px!important;color:var(--muted);font-weight:450!important;letter-spacing:normal}
+.dc-popover h4{margin:10px 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+.dc-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:5px}
+html[data-palette][data-theme] .dc-popover .dc-chip{aspect-ratio:1;width:100%;min-height:0;padding:0;margin:0;border:0;border-radius:7px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);display:grid;place-items:center;cursor:pointer}
+html[data-palette][data-theme] .dc-popover .dc-chip:hover:not(:disabled){transform:scale(1.12);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14),0 2px 6px rgba(0,0,0,.2)}
+.dc-scope{display:flex;gap:2px;padding:3px;border-radius:9px;background:var(--surface-2)}
+html[data-palette][data-theme] .dc-popover .dc-scope button{flex:1;height:28px;min-height:0;margin:0;padding:0 6px;border:0;border-radius:7px;background:transparent;font-size:12px;font-weight:600;color:var(--muted);justify-content:center}
+html[data-palette][data-theme] .dc-popover .dc-scope button[aria-pressed=true]{background:var(--surface);color:var(--brand-ink);box-shadow:var(--shadow-1)}
+.dc-custom{display:flex;gap:6px;align-items:center}
+html[data-palette][data-theme] .dc-custom input[type=color]{width:34px;height:32px;padding:0;border:1px solid var(--line);border-radius:8px;background:none;flex:none}
+html[data-palette][data-theme] .dc-custom input:not([type=color]){flex:1;min-width:0;height:32px;padding:0 8px;font-family:ui-monospace,monospace;font-size:12.5px}
+html[data-palette][data-theme] .dc-custom button{height:32px;min-height:0;margin:0;padding:0 12px}
+html[data-palette][data-theme] .dc-popover .dc-link{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 0;padding:6px 4px;min-height:0;border:0;background:transparent;color:var(--brand-ink);font-size:12.5px;font-weight:600;justify-content:flex-start}
+html[data-palette][data-theme] .dc-popover .dc-link:hover{background:var(--surface-2)}
+
+/* Inline word editor that opens on a double-clicked word in the artwork. */
+html[data-palette][data-theme] .editor-workspace .workspace-canvas>.word-inline{
+ position:absolute;z-index:30;display:flex;flex-direction:column;gap:6px;width:min(340px,calc(100% - 16px));padding:8px;
+ border:1px solid var(--line);border-radius:13px;background:var(--surface);color:var(--text);box-shadow:var(--shadow-3);
+}
+.word-inline-row{display:flex;align-items:center;gap:5px;margin:0}
+.word-inline-row>span{font-size:12px;color:var(--muted);white-space:nowrap}
+html[data-palette][data-theme] .word-inline input{flex:1;min-width:0;height:34px;padding:0 10px;font-size:15px;font-weight:600;border-radius:9px}
+html[data-palette][data-theme] .word-inline select{width:104px;height:34px;padding:0 6px;font-size:12px;border-radius:9px}
+html[data-palette][data-theme] .word-inline button{height:34px;min-height:0;margin:0;padding:0 11px;border-radius:9px;font-size:12.5px;font-weight:650}
+html[data-palette][data-theme] .word-inline button[type=button]{width:30px;padding:0;justify-content:center;border:0;background:transparent;color:var(--muted)}
+html[data-palette][data-theme] .word-inline small{font-size:11.5px!important;font-weight:450!important;letter-spacing:normal;color:var(--muted);line-height:1.35}
+.word-inline .word-inline-error{color:#b42345!important}
+
+/* Detected words: a compact chip under the colors bar; it opens a list of words to edit. */
+html[data-palette][data-theme] .editor-workspace .workspace-canvas>.studio-detected-text{
+ position:absolute;top:60px;left:14px;z-index:6;width:auto;max-width:min(420px,calc(100% - 28px));margin:0;padding:0;
+ border:1px solid var(--line);border-radius:11px;background:color-mix(in srgb,var(--surface) 96%,transparent);box-shadow:var(--shadow-1);
+}
+html[data-palette][data-theme] .editor-workspace .workspace-canvas>.studio-detected-text>summary{display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;font-size:12px;font-weight:650;color:var(--muted);cursor:pointer;list-style:none}
+html[data-palette][data-theme] .editor-workspace .workspace-canvas>.studio-detected-text>summary span{padding:0 6px;border-radius:999px;background:var(--brand-soft);color:var(--brand-ink);font-size:11px}
+html[data-palette][data-theme] .editor-workspace .workspace-canvas>.studio-detected-text[open]{padding-bottom:8px}
+html[data-palette][data-theme] .editor-workspace .workspace-canvas>.studio-detected-text .studio-detected-content{display:flex;flex-wrap:wrap;gap:5px;padding:4px 10px 0}
+html[data-palette][data-theme] .editor-workspace .workspace-canvas>.studio-detected-text .studio-detected-content button{height:28px;min-height:0;margin:0;padding:0 10px;border-radius:8px;font-size:12.5px}
+html[data-palette][data-theme] .editor-workspace .workspace-canvas:has(>.canvas-selection-bar)>.studio-detected-text{top:12px;left:14px}
+html[data-palette][data-theme] .editor-workspace .workspace-canvas:has(>.canvas-selection-bar)>.studio-detected-text:not([open]){display:none}

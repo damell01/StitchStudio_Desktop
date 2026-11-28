@@ -24,6 +24,7 @@ import {CommandPalette,type Command} from './command-palette';
 import {InsertDesignDialog} from './insert-design-dialog';
 import {CreatePanel,catalogEntry,ARTWORK_DRAG_TYPE,type CreateTab} from './create-panel';
 import {artworkBytes} from './character-gallery';
+import {DesignColors,useDesignColors,type RGB,type ColorScope} from './design-colors';
 const isCreateTab=(tab:string):tab is CreateTab=>tab==='templates'||tab==='text'||tab==='elements'||tab==='uploads';
 import {templates,rememberTemplate,TemplateLibrary} from './templates';
 import {EditorDigitizer} from './editor-digitizer';
@@ -77,6 +78,24 @@ async function insertCatalogArtwork(id:string,xMm:number,yMm:number){
   const result=await edit('insert_svg_artwork',{bytes:artworkBytes(entry.svg),name:entry.name,widthMm,xMm,yMm});
   if(result.plan){setHidden([]);setCanvasMode('select');setMessage(entry.name+' added. Drag to move it, or use the corner handles to resize.')}
 }
+function selectColor(color:RGB){
+  const ids=objects.filter(o=>!o.hidden&&!o.locked&&!lockedObjects.includes(o.uid)&&o.color.slice(0,3).join(',')===color.join(',')).map(o=>o.uid);
+  dismissWordReview();setCanvasText(null);setCanvasEditTarget(null);setActiveGroup(null);setSelectedObject(null);setMulti(ids);setCanvasMode('select');
+  setMessage(ids.length?ids.length+' objects with this color selected.':'No editable objects use this color.');
+}
+async function recolor(previous:RGB,color:RGB,scope:ColorScope){
+  const same=(o:EditableObject)=>!o.hidden&&!o.locked&&!lockedObjects.includes(o.uid)&&o.color.slice(0,3).join(',')===previous.join(',');
+  if(scope==='selection'){
+    const uids=movementIds.filter(uid=>{const o=objects.find(x=>x.uid===uid);return o&&same(o)});
+    if(uids.length){const r=await edit('recolor_artwork_group',{uids,previous,color});if(r.plan)setMessage('Color changed in the selection.');return}
+  }
+  const r=await edit('replace_design_color',{previous,color});
+  if(r.plan){setMessage('Color changed everywhere in the design.');return}
+  // Special stitch patterns refuse a whole-design swap; recolor the matching objects directly instead.
+  const uids=objects.filter(same).map(o=>o.uid);
+  if(uids.length){const again=await edit('recolor_artwork_group',{uids,previous,color});if(again.plan)setMessage('Color changed on '+uids.length+' objects.')}
+}
+function openObjectEditor(object:EditableObject,clientX:number,clientY:number){if(busy||lockedObjects.includes(object.uid))return;const surface=canvasSurface.current?.getBoundingClientRect();if(!surface)return;dismissWordReview();const request=selectionRequest.current;const left=Math.max(8,Math.min(clientX-surface.left,surface.width-300)),top=Math.max(8,Math.min(clientY-surface.top,surface.height-260));void invoke<Record<string,unknown>|null>('lettering_settings',{uid:object.uid}).then(settings=>{if(selectionRequest.current!==request)return;if(!settings){const word=detectedText.find(d=>d.uids.includes(object.uid));const shapes=word?objects.filter(o=>word.uids.includes(o.uid)&&!o.hidden&&!o.locked&&o.bounds):[];if(word&&shapes.length===word.uids.length){setMulti(shapes.map(o=>o.uid));setSelectedObject(null);setInlineWordError('');setInlineWord({left:Math.max(8,Math.min(clientX-surface.left-40,surface.width-340)),top:Math.max(8,Math.min(clientY-surface.top+18,surface.height-150))});void recognizeWord(shapes,request,true,true);return;}selectObject(object,true,true);return;}setSelectedObject(object.uid);setCanvasEditTarget({uid:object.uid,settings});setCanvasTextValue(String(settings.text??''));setCanvasLetterFont(String(settings.font??''));setCanvasLetterHeight(Number(settings.size??12));setCanvasLetterSpacing(Number(settings.spacing??.4));setCanvasLetterBold(Boolean(settings.bold));setCanvasLetterItalic(Boolean(settings.italic));if(Array.isArray(settings.color))setCanvasLetterColor('#'+settings.color.map(v=>Number(v).toString(16).padStart(2,'0')).join(''));setCanvasTextError('');setCanvasTyping(false);setCanvasText({point:[0,0],left,top});}).catch(error=>{if(selectionRequest.current===request)setMessage(String(error))})}
 function showLayers(open:boolean){
   if(open&&focusCanvas)changeFocus(false);
   if(open&&window.innerWidth<dockBreakpoint)setRight(false);
@@ -265,6 +284,8 @@ const [baselinePicking,setBaselinePicking]=useState(false),[textBaseline,setText
 useEffect(()=>{if(inspectorTab!=='text')setBaselinePicking(false)},[inspectorTab]);
 function openText(uid:number|null=null){setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);++baselineRequest.current;setTextBaseline(null);setBaselinePicking(false);setTextTarget(uid);setTextSession(n=>n+1);showInspector(true);setInspectorTab('text')};
 const [hoops]=useState(()=>profiles('studio-hoops',[{id:'100',name:'4 × 4 inch',width:100,height:100},{id:'130',name:'5 × 7 inch',width:130,height:180}])),[machines]=useState(()=>profiles('studio-machines',[])),[machine,setMachine]=useState(()=>initialView?.machine??(localStorage.getItem('studio-default-machine')||'')),[hoop,setHoop]=useState(()=>initialView?.hoop??(localStorage.getItem('studio-default-hoop')||''));const [plan,setPlan]=useState<Plan|null>(null),[format,setFormat]=useState(initialView?.format??'dst'),[width,setWidth]=useState(initialView?.width??130),[height,setHeight]=useState(initialView?.height??180),[playhead,setPlayhead]=useState<number|null>(null),[playbackSpeed,setPlaybackSpeed]=useState(1),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[artWidth,setArtWidth]=useState(80),[colors,setColors]=useState(0),[removeBackground,setRemoveBackground]=useState(true),[detail,setDetail]=useState(60),[playing,setPlaying]=useState(false),[scale,setScale]=useState(100),[rotation,setRotation]=useState(0),[dx,setDx]=useState(0),[dy,setDy]=useState(0),[hidden,setHidden]=useState<number[]>([]);
+const designColors=useDesignColors(plan?.blocks,objects);
+const selectionColorKeys=Array.from(new Set(movementIds.map(uid=>objects.find(o=>o.uid===uid)?.color.slice(0,3).join(',')).filter((k):k is string=>!!k)));
 useEffect(()=>{
   onWorkspaceStatus?.({name:plan?.stitches?plan.name:null,busy,view:{width,height,format,machine,hoop,zoom,pan,threadAssignments}});
 },[plan,busy,width,height,format,machine,hoop,zoom,pan,threadAssignments,tabId]);
@@ -1050,18 +1071,36 @@ const [fontGallery,setFontGallery]=useState<{key:string;items:{font:string;previ
 const fontGalleryKey=JSON.stringify([recognizedIds,recognizedOriginal,convertWord]);
 
 const reviewedWord=wordPreview?.basis===plan?wordPreview?.result:null;
+const [inlineWord,setInlineWord]=useState<{left:number;top:number}|null>(null);
+const [inlineWordError,setInlineWordError]=useState('');
+async function replaceWordInline(){
+  const original=recognizedOriginal.trim(),replacement=convertWord.trim();
+  if(busy||wordPreviewPending||!recognizedIds.length||!replacement||!original||!convertFont)return;
+  const request=++selectionRequest.current;
+  setWordPreviewPending(true);setInlineWordError('');
+  try{
+    const preview=await invoke<WordPreview>('preview_selected_lettering',{uids:recognizedIds,text:original,font:convertFont,replacement});
+    if(selectionRequest.current!==request)return;
+    setWordPreviewPending(false);
+    const result=await edit('apply_stitch_review',{id:preview.id});
+    if(!result.plan){setInlineWordError(result.error||'The new lettering could not be applied.');return}
+    dismissWordReview();setInlineWord(null);setMulti([]);setSelectedObject(preview.uid);
+    setMessage('“'+replacement+'” is now editable lettering. Double-click it to keep editing.');
+  }catch(error){if(selectionRequest.current===request)setInlineWordError(String(error))}
+  finally{if(selectionRequest.current===request)setWordPreviewPending(false)}
+}
 function dismissWordReview(){
   ++selectionRequest.current;
   setRecognizingWord(false);setConvertText(false);setRecognizedIds([]);setRecognitionError('');
   setWordPreview(null);setWordPreviewPending(false);
 }
-async function recognizeWord(shapes:EditableObject[],request:number,manual=false){
+async function recognizeWord(shapes:EditableObject[],request:number,manual=false,inline=false){
   if(!shapes.length)return;
   const ids=shapes.map(shape=>shape.uid);
   const key=JSON.stringify(shapes.map(shape=>[shape.uid,shape.bounds,shape.path,shape.color]));
   const cached=recognitionCache.current.get(key);
   setRecognizingWord(true);
-  if(manual){showInspector(true);setInspectorTab('transform');}
+  if(manual&&!inline){showInspector(true);setInspectorTab('transform');}
   try{
     const [result,fonts]=await Promise.all([
       cached?Promise.resolve(cached):invoke<{text:string;font:string}[]>('recognize_selected_lettering',{uids:ids})
@@ -1078,7 +1117,7 @@ async function recognizeWord(shapes:EditableObject[],request:number,manual=false
     if(!word&&!manual)return;
     setConvertFonts(fonts);setConvertFont(fonts.includes(lines[0]?.font)?lines[0].font:fonts[0]??'');
     setRecognizedOriginal(word);setConvertWord(word);setRecognizedIds(ids);setConvertText(true);
-    setMulti(ids);setSelectedObject(null);showInspector(true);setInspectorTab('transform');
+    setMulti(ids);setSelectedObject(null);if(!inline){showInspector(true);setInspectorTab('transform');}
   }catch(error){
     if(manual&&selectionRequest.current===request)setMessage(String(error));
   }finally{if(selectionRequest.current===request)setRecognizingWord(false)}
@@ -1978,7 +2017,18 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button disabled={!plan?.stitches||busy} aria-pressed={right&&inspectorTab==='quality'} onClick={()=>{setRealistic(false);openQuality()}}><ScanLine size={15}/> Quality</button>
   <button disabled={!plan?.stitches} aria-pressed={realistic&&!(right&&inspectorTab==='quality')} onClick={()=>{insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);if(right&&['quality','stitches'].includes(inspectorTab))showInspector(false);setRealistic(true)}}><Eye size={15}/> Preview</button>
 </div>
-{plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar">{movementIds.length>1&&<div className="studio-selection-docked" role="group" aria-label="Multiple object actions"><span className="studio-selection-name">{movementIds.length} objects selected</span><button onClick={fitSelection}><Maximize size={16}/> Focus</button><button disabled={busy} onClick={()=>scaleSelectedObjects(.9)}>− Size</button><button disabled={busy} onClick={()=>scaleSelectedObjects(1.1)}>+ Size</button><button onClick={()=>{showInspector(true);setInspectorTab('transform')}}><Move size={16}/> Position</button>{canvasMode==='select'&&selectionIds.length>1&&<button disabled={busy} onClick={async()=>{const result=await edit('set_artwork_group',{uids:selectionIds,group:true});if(result.plan){setActiveGroup(null);setCanvasMode('design');setMulti([])}}}><Group size={16}/> Group</button>}{canvasMode==='design'&&activeGroup&&<button disabled={busy} onClick={async()=>{const result=await edit('set_artwork_group',{uids:movementIds,group:false});if(result.plan){setActiveGroup(null);setCanvasMode('select');setMulti([])}}}>Ungroup</button>}<details className="studio-selection-more"><summary>Align</summary><div className="studio-selection-more-actions">{[{mode:'center_x',label:'Align horizontal centers'},{mode:'center_y',label:'Align vertical centers'},{mode:'distribute_x',label:'Distribute horizontally'},{mode:'distribute_y',label:'Distribute vertically'}].map(a=><button key={a.mode} disabled={busy||movementIds.length<(a.mode.startsWith('distribute')?3:2)} onClick={()=>void edit('align_artwork_objects',{uids:movementIds,mode:a.mode})}>{a.label}</button>)}</div></details></div>}{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
+{inlineWord&&<form className="word-inline" style={{left:inlineWord.left,top:inlineWord.top}} aria-label="Edit this word" onSubmit={e=>{e.preventDefault();void replaceWordInline()}}
+  onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();dismissWordReview();setInlineWord(null)}}}>
+  {!recognizingWord&&!recognizedOriginal.trim()&&<label className="word-inline-row"><span>It says</span><input aria-label="Current word" placeholder="Type the word you see" value={recognizedOriginal} onChange={e=>setRecognizedOriginal(e.target.value)} maxLength={120}/></label>}
+  <div className="word-inline-row">
+    <input autoFocus aria-label="New word" placeholder={recognizingWord?'Reading the word…':'Type the new word'} disabled={recognizingWord||wordPreviewPending||busy} value={convertWord} maxLength={120} onChange={e=>{setConvertWord(e.target.value);setInlineWordError('')}}/>
+    <select aria-label="Font" value={convertFont} disabled={recognizingWord||wordPreviewPending||busy||!convertFonts.length} onChange={e=>setConvertFont(e.target.value)}>{convertFonts.map(f=><option key={f}>{f}</option>)}</select>
+    <button type="submit" className="primary" disabled={recognizingWord||wordPreviewPending||busy||!convertWord.trim()||!recognizedOriginal.trim()||!convertFont}>{wordPreviewPending||busy?'Stitching…':'Replace'}</button>
+    <button type="button" aria-label="Close word editor" onClick={()=>{dismissWordReview();setInlineWord(null)}}><X size={14}/></button>
+  </div>
+  {inlineWordError?<small role="alert" className="word-inline-error">{inlineWordError}</small>:<small>{recognizingWord?'Recognizing lettering…':recognizedOriginal.trim()?'Read as “'+recognizedOriginal.trim()+'”. Press Enter to restitch it as editable lettering.':'The word could not be read. Type what it says, then the new word.'}</small>}
+</form>}
+{!!plan?.stitches&&!(movementIds.length>0||(selected&&canvasMode==='select'))&&canvasMode!=='design'&&!drawing.tool&&!canvasTyping&&<div className="dc-floating"><DesignColors colors={designColors} selectionCount={0} busy={busy} onApply={(p,c,sc)=>void recolor(p,c,sc)} onSelectColor={selectColor}/></div>}{plan&&(movementIds.length>0||(selected&&canvasMode==='select'))&&<div className="canvas-selection-bar"><DesignColors compact colors={designColors} selectionColors={selectionColorKeys} selectionCount={movementIds.length} busy={busy} onApply={(p,c,sc)=>void recolor(p,c,sc)} onSelectColor={selectColor}/>{movementIds.length>1&&<div className="studio-selection-docked" role="group" aria-label="Multiple object actions"><span className="studio-selection-name">{movementIds.length} objects selected</span><button onClick={fitSelection}><Maximize size={16}/> Focus</button><button disabled={busy} onClick={()=>scaleSelectedObjects(.9)}>− Size</button><button disabled={busy} onClick={()=>scaleSelectedObjects(1.1)}>+ Size</button><button onClick={()=>{showInspector(true);setInspectorTab('transform')}}><Move size={16}/> Position</button>{canvasMode==='select'&&selectionIds.length>1&&<button disabled={busy} onClick={async()=>{const result=await edit('set_artwork_group',{uids:selectionIds,group:true});if(result.plan){setActiveGroup(null);setCanvasMode('design');setMulti([])}}}><Group size={16}/> Group</button>}{canvasMode==='design'&&activeGroup&&<button disabled={busy} onClick={async()=>{const result=await edit('set_artwork_group',{uids:movementIds,group:false});if(result.plan){setActiveGroup(null);setCanvasMode('select');setMulti([])}}}>Ungroup</button>}<details className="studio-selection-more"><summary>Align</summary><div className="studio-selection-more-actions">{[{mode:'center_x',label:'Align horizontal centers'},{mode:'center_y',label:'Align vertical centers'},{mode:'distribute_x',label:'Distribute horizontally'},{mode:'distribute_y',label:'Distribute vertically'}].map(a=><button key={a.mode} disabled={busy||movementIds.length<(a.mode.startsWith('distribute')?3:2)} onClick={()=>void edit('align_artwork_objects',{uids:movementIds,mode:a.mode})}>{a.label}</button>)}</div></details></div>}{movementIds.length>0&&<button disabled={busy} onClick={()=>openSelectedSolid()}
   title="Preview the selected artwork as a solid fill">Make selection solid</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" role="group" aria-label="Selected object actions">
   <button title="Zoom to selected artwork" aria-label="Zoom to selected artwork" onClick={fitSelection}><Maximize size={16}/> Focus</button><span className="studio-selection-name" title={selected.label||'Object '+selected.uid}>{selected.label||'Object '+selected.uid}</span>
   {selected.bounds&&<span className="studio-selection-size" title="Selected object dimensions">{(selected.bounds[2]/25.4).toFixed(2)} × {(selected.bounds[3]/25.4).toFixed(2)} in</span>}
@@ -2008,6 +2058,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={16}/></button>
 </div>}</div>}
 <svg aria-label="Stitch preview; drag empty space to select objects in Objects mode, or use Pan to move the canvas" data-mode={drawing.tool?'draw':canvasMode}
+ onDoubleClick={e=>{if(e.target!==e.currentTarget||busy)return;const hit=document.elementsFromPoint(e.clientX,e.clientY).map(el=>el.getAttribute('data-artwork-uid')).find(v=>v!==null);const object=hit==null?undefined:objects.find(o=>String(o.uid)===hit);if(object&&!object.hidden)openObjectEditor(object,e.clientX,e.clientY)}}
  onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerLeave={()=>setHoverUid(null)}
  onPointerUp={event=>finishCanvasGesture(event,true)}
  onPointerCancel={event=>finishCanvasGesture(event,false)}
@@ -2036,7 +2087,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
 {snap&&<g pointerEvents="none" stroke="#a84bc5" strokeDasharray="4 3" strokeWidth="1" vectorEffect="non-scaling-stroke">{guides.x!==null&&<line x1={guides.x} x2={guides.x} y1={-height/2} y2={height/2} vectorEffect="non-scaling-stroke"/>}{guides.y!==null&&<line x1={-width/2} x2={width/2} y1={guides.y} y2={guides.y} vectorEffect="non-scaling-stroke"/>}</g>}
 {canvasMode==='select'&&stitchIndex===points.length&&<g className="studio-hit-targets">
  {objects.filter(object=>object.path&&!lockedObjects.includes(object.uid)).map(object=><path key={object.uid} d={object.path}
-   data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();if(busy||lockedObjects.includes(object.uid))return;const surface=canvasSurface.current?.getBoundingClientRect();if(!surface)return;dismissWordReview();const request=selectionRequest.current;const left=Math.max(8,Math.min(e.clientX-surface.left,surface.width-300)),top=Math.max(8,Math.min(e.clientY-surface.top,surface.height-260));void invoke<Record<string,unknown>|null>('lettering_settings',{uid:object.uid}).then(settings=>{if(selectionRequest.current!==request)return;if(!settings){selectObject(object,true,true);return;}setSelectedObject(object.uid);setCanvasEditTarget({uid:object.uid,settings});setCanvasTextValue(String(settings.text??''));setCanvasLetterFont(String(settings.font??''));setCanvasLetterHeight(Number(settings.size??12));setCanvasLetterSpacing(Number(settings.spacing??.4));setCanvasLetterBold(Boolean(settings.bold));setCanvasLetterItalic(Boolean(settings.italic));if(Array.isArray(settings.color))setCanvasLetterColor('#'+settings.color.map(v=>Number(v).toString(16).padStart(2,'0')).join(''));setCanvasTextError('');setCanvasTyping(false);setCanvasText({point:[0,0],left,top});}).catch(error=>{if(selectionRequest.current===request)setMessage(String(error))})}} fill={object.fill_rule?'transparent':'none'}
+   data-artwork-uid={object.uid} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!busy){selectObject(object);setContext({uid:object.uid,x:e.clientX,y:e.clientY})}}} onDoubleClick={e=>{e.stopPropagation();openObjectEditor(object,e.clientX,e.clientY)}} fill={object.fill_rule?'transparent':'none'}
    fillRule={object.fill_rule} stroke={object.fill_rule?'none':'transparent'}
    strokeWidth={object.stroke_width} pointerEvents={object.fill_rule?'fill':'stroke'}/>)}
  {objects.filter(o=>o.path&&o.bounds&&!lockedObjects.includes(o.uid)&&Math.min(o.bounds[2],o.bounds[3])<2).map(o=><path key={'wide-hit-'+o.uid} d={o.path} data-artwork-uid={o.uid} fill="none" stroke="transparent" strokeWidth="12" vectorEffect="non-scaling-stroke" pointerEvents="stroke" style={{cursor:'move'}}/>)}
