@@ -59,6 +59,8 @@ export const templateCatalog:TemplateEntry[]=[
  ...expandedManifest.flatMap(m=>{
   // Archive unreviewed traced artwork and rejected redraws; never expose them as production templates.
   if(m.collection==='Curated heirloom'||m.draft)return [];
+  // Retire the weak icon variants identified in the editor review, without deleting source files.
+  if(/^(?:Buck|Buck Front|Leaping Bass|Pony Rocker|Rocking Horse|Mountain Mini|Mountain Pines|Open Mountain|Country Club Crest|Crossed Clubs|Football Initial|Baseball Bats|Country Chapel|Draped Cross|Church|Christmas Tree|Pumpkin Pair|Teddy Balloon|Stork|Tennis Club|Golf Club)$/i.test(m.name))return [];
   const svg=expandedFiles['./bundled-artwork/expanded/'+m.path];
   if(import.meta.env&&svg===undefined)return [];
   return [{id:m.id,name:m.name,file:m.id+'.svg',svg:svg??'',group:m.category,collection:m.collection,tags:m.tags,colors:m.colors,complexity:m.complexity,draft:m.draft}];
