@@ -131,24 +131,23 @@ Open a design and choose the shirt icon in the editor toolbar. Choose a T-shirt,
 ## Browse and reuse designs
 
 - **Template Library** includes built-in bow, sports, botanical, animal, monogram and patch artwork. Filter by category, favorites or recent designs. Licensed character and seasonal templates carry source credits in the preview. **Preview design** generates a stitch preview before you open the template.
-- **Design Library** includes 19 original machine-readable DST designs with matching thread colors in the app. It also imports compatible embroidery files or scans a folder for editable Stitch Studio projects. Search for a machine file and choose **Insert design** to add its stitch paths to the workspace.
+- **Design Library** imports compatible embroidery files and scans folders for editable Stitch Studio projects. Search for a machine file and choose **Insert design** to add its stitch paths to the workspace.
 - Choose disk files or a folder that you have permission to use. Keep original machine files for reference. Imported needle paths stay as manual stitches and editable artwork remains in the project. Use **Design Library → Import ZIP** to add DST, PES, PEC, EXP, or JEF files, including files in nested folders. To reuse a full, editable layout, save it as a .stitchstudio project and include it in a ZIP. Open **Template Library → My editable templates → Import template ZIP**, preview the layout, and choose **Use as new design**. Save the new design under its own filename.
+- For vector artwork saved in nested folders, use **Design Library → Artwork → Import SVG ZIP**. Search for an imported filename under **My imported artwork** and choose **Digitize**. Set the real sewing width and fabric, inspect the stitch preview, and open it in Studio to customize. To add artwork to a project already in Studio, use **Insert design → Artwork** and choose where it goes on the hoop.
 - In the editor, open **Workspace options** to adjust the Layers and Inspector widths. The workspace remembers both widths. Use the top toolbar to toggle either panel. Press **F11** or choose **Focus canvas** to enter full-screen editing. Press **Esc** to return. In the Inspector, choose **Hoop**, **Stitches**, or **Size** for the task at hand.
 
 ## Find commands and fonts
 
 Press **Ctrl+K** or **Cmd+K** to search pages and available editing actions. Type part of a name, then press **Enter** to run the first result. Font Manager and the lettering font picker show short pages of results. Where a name includes inches, centimeters, or millimeters, versions in the same family are sorted by physical size. Font Manager also filters by format and favorites. Template, project, character, profile, and thread lists use the same page controls.
 
-## Design assistant
+## Edit lettering in place
 
-The Windows and macOS installers include the rule-based offline assistant. It handles supported design commands and previews changes before applying them. You can connect your own local MCP client from **Settings → Design assistant**.
-
-To decorate an existing design, select an object and try “Add lavender bows on both sides of the selection” or “Add a 1-inch heart below the design as appliqué.” For a blank hoop, try “Add a small bow at the hoop center.” The proposal compares the original and generated stitch plans. Apply the change to keep each motif editable, or undo the insertion in one step. Imported character artwork can be added by its library name after importing it in **Design Library → Artwork**. Appliqué uses the largest closed area as the fabric piece and keeps the other details as embroidery. Test sew and verify machine pauses before production.
-
-To create a complete design in Studio, open the sparkles menu and try “Create a 4-inch patch with "Little Seed", a lavender bow above it, and a scalloped border.” Use quotation marks for the lettering and name the motifs and border in the same request. The assistant builds editable lettering, library motifs, basic shapes, and stitched frames offline. Review the proposed stitches before applying. When there is an existing design, Stitch Studio looks for clear space beside it. If there is no room, use a smaller width or start with an empty workspace.
-
-
-To use Codex CLI or Claude Code, choose **Settings → Design assistant → Start agent connection**, select the client, and copy its setup command. Run that command on the computer running Stitch Studio. The optional connection is available over MCP on loopback and shares a limited design summary. An external agent can queue one edit, which appears under **Review agent edit** in the Studio assistant. The connection address changes after the app or connection restarts. Remove a stale client entry before registering the new address if your client requires it.
+Select editable lettering in Studio and choose **Edit text** above the canvas.
+Type a replacement, choose a font, or adjust spacing and thread color. Review
+the live stitch preview and apply the edit. Use the Text inspector for curves,
+stitch effects, and custom baselines. For traced
+lettering, use **Recognize selected word** from the Inspector or command palette
+and compare the original and editable stitch paths before applying.
 
 ## Developer checks
 

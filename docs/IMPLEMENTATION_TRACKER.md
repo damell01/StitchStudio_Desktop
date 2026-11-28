@@ -2,6 +2,29 @@
 
 Baseline `Dev` commit `4075876`. The checkout contains a shared Rust engine, a legacy egui application, and the React/Tauri desktop target. Native and browser tests exercise different boundaries. See [desktop setup and commands](DESKTOP.md), [competitor research](COMPETITORS.md) and [physical testing](SEW_OUT.md).
 
+## Production-readiness batch (November 28, 2026)
+
+| Brief priority | Integrated change | Acceptance still open |
+| --- | --- | --- |
+| Editor usability and lettering | The selection toolbar opens inline lettering with live stitch previews and controls for font, spacing, and thread color. Advanced lettering settings remain in the Text inspector. | Full visual and accessibility audit, nested semantic grouping, varied real-logo OCR and performance on Windows and Intel Mac. |
+| Stitch generation and quality | Check the path to a pinned fill exit. Use a covered detour within the travel limit or retain the last stitch and flag the exit for review. | Per-fabric and size validation, representative logo benchmarks and machine sew-outs. |
+| Premium library and import | A shared authored catalog supplies gallery art, native preview, opening and insertion. The Premium artwork filter exposes grouped boutique designs. Nested SVG ZIP import keeps source artwork and reports duplicate and skipped members. | Visual review of older templates, more original collections and physical template approval. |
+| Export and production | Authored templates generate stitches that can be encoded and read back as DST and PES. The sew-out guide includes a controlled comparison of original and optimized plans. | Installer and native desktop checks for this batch, controlled Poolin sew-outs for lettering, foam and appliqué, and updater verification. |
+
+The grouped boutique samples were planned at nominal template widths of 55 and
+80 mm. This is a digital planning check. Stitch counts refer to planned needle
+points and trims refer to the plan. Physical trim behavior depends on the machine.
+
+| Template | Points at 55 / 80 mm | Planned trims at 55 / 80 mm |
+| --- | ---: | ---: |
+| Vintage game day ribbon trio | 1,896 / 3,532 | 12 / 14 |
+| Heirloom rocking horse and ribbon | 2,524 / 5,156 | 7 / 12 |
+| Heirloom goose ribbon crest | 2,075 / 5,572 | 12 / 17 |
+
+The release backlog continues to include advanced specialty stitch validation,
+broader library approval, project and recovery stress tests, pricing presets,
+and a separate review of the optional assistant.
+
 ## Advanced lettering effects audit (November 26, 2026)
 
 The React/Tauri editor and shared Rust planner now have **committed** source paths for the following effects on branch `Dev`. They are **not yet qualified** by green CI or machine sew-outs:

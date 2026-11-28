@@ -46,3 +46,39 @@ test('types lettering at the clicked design coordinates and preserves existing s
   expect((call.placement as number[])[0]).toBeCloseTo(12,0);
   expect((call.placement as number[])[1]).toBeCloseTo(-13,0);
 });
+test('opens contextual lettering tools on the canvas and preserves advanced settings',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});
+  await page.addInitScript(()=>{
+    localStorage.setItem('studio-tour-seen','1');
+    localStorage.setItem('studio-review-lettering','0');
+    const color=[105,69,162];
+    const plan={name:'Lettering design',stitches:4,trims:0,blocks:[{color,runs:[[[-10,-4],[10,-4],[10,4],[-10,4]]]}]};
+    const object={uid:7,label:'Little Seed',kind:'fill',bounds:[-10,-4,20,8],path:'M-10 -4H10V4H-10Z',fill_rule:'nonzero',color};
+    const settings={text:'Little Seed',font:'Arial',size:12,spacing:.4,arc:0,bold:true,italic:false,color,align:'right',kind:'satin',h_scale:96,kern:[[0,1],[8,.5]]};
+    const calls:Record<string,unknown>[]=[];
+    Object.assign(window,{letteringEditCalls:calls,__TAURI_INTERNALS__:{async invoke(command:string,args:Record<string,unknown>){
+      if(command==='workspace_overview')return {current:plan.name,recovery:false};
+      if(command==='current_preview')return plan;
+      if(command==='editable_objects')return [object];
+      if(command==='object_stitch_guides')return {textForm:'text',order:[],center:null,entry:null,exit:null,rails:[]};
+      if(command==='lettering_settings')return settings;
+      if(command==='lettering_fonts')return ['Arial','Georgia'];
+      if(command==='update_lettering'){calls.push(args);return true;}
+      return null;
+    }}});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:/Continue current design/}).click();
+  await page.locator('.design-canvas [data-artwork-uid="7"]').click();
+  const actions=page.getByRole('group',{name:'Selected object actions'});
+  await actions.getByRole('button',{name:'Edit text',exact:true}).click();
+  const form=page.getByRole('form',{name:'Canvas lettering'});
+  const text=form.getByRole('textbox',{name:'Canvas lettering'});
+  await expect(text).toHaveValue('Little Seed');
+  await text.fill('Seed');
+  await form.getByRole('combobox',{name:'Font',exact:true}).selectOption('Georgia');
+  await form.getByRole('button',{name:'Apply',exact:true}).click();
+  await expect(form).toBeHidden();
+  const [call]=await page.evaluate(()=>(window as unknown as {letteringEditCalls:Record<string,unknown>[]}).letteringEditCalls);
+  expect(call).toMatchObject({uid:7,settings:{text:'Seed',font:'Georgia',arc:0,align:'right',kind:'satin',h_scale:96,kern:[[0,1]]}});
+});

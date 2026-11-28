@@ -326,13 +326,27 @@ function toggleCanvasTyping(){
 }
 const [inlineLetterPreview,setInlineLetterPreview]=useState<Plan|null>(null);
 const [inlineLetterPreviewStatus,setInlineLetterPreviewStatus]=useState('');
+function canvasLetteringSettings(font:string){
+  const existing=canvasEditTarget?.settings;
+  const text=canvasTextValue.trim();
+  const characterCount=Array.from(text).length;
+  const kern=Array.isArray(existing?.kern)
+    ? existing.kern.filter(([index])=>index<characterCount)
+    : undefined;
+  return {
+    ...existing,text,font,kern,size:canvasLetterHeight,spacing:canvasLetterSpacing,
+    arc:existing?.arc??0,bold:canvasLetterBold,italic:canvasLetterItalic,
+    color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),
+    align:existing?.align??'center',
+  };
+}
 useEffect(()=>{
   setInlineLetterPreview(null);setInlineLetterPreviewStatus('');
   if(!canvasText||busy||!canvasTextValue.trim()||!canvasLetterFont||!Number.isFinite(canvasLetterHeight)||canvasLetterHeight<.5||canvasLetterHeight>80||!Number.isFinite(canvasLetterSpacing)||canvasLetterSpacing<0||canvasLetterSpacing>5)return;
   let active=true;
   setInlineLetterPreviewStatus('Preparing stitch preview…');
   const timer=window.setTimeout(()=>{
-    const settings={...canvasEditTarget?.settings,text:canvasTextValue.trim(),font:canvasLetterFont,size:canvasLetterHeight,spacing:canvasLetterSpacing,arc:canvasEditTarget?.settings.arc??0,bold:canvasLetterBold,italic:canvasLetterItalic,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:canvasEditTarget?.settings.align??'center'};
+    const settings=canvasLetteringSettings(canvasLetterFont);
     void invoke<Plan>('preview_lettering',{settings}).then(next=>{if(active){setInlineLetterPreview(next);setInlineLetterPreviewStatus('')}}).catch(()=>{if(active)setInlineLetterPreviewStatus('Stitch preview unavailable')});
   },450);
   return()=>{active=false;window.clearTimeout(timer)};
@@ -348,9 +362,7 @@ async function addCanvasText(){
     const fonts=await invoke<string[]>('lettering_fonts');
     const font=fonts.includes(canvasLetterFont)?canvasLetterFont:['Arial','Helvetica','DejaVu Sans'].find(name=>fonts.includes(name))??fonts[0];
     if(!font)throw new Error('Install a font in the Font Library to add lettering.');
-    const settings={...canvasEditTarget?.settings,
-      text:canvasTextValue.trim(),font,size:canvasLetterHeight,spacing:canvasLetterSpacing,arc:canvasEditTarget?.settings.arc??0,bold:canvasLetterBold,italic:canvasLetterItalic,color:[1,3,5].map(i=>parseInt(canvasLetterColor.slice(i,i+2),16)),align:canvasEditTarget?.settings.align??'center',
-    };
+    const settings=canvasLetteringSettings(font);
     let next:Plan|null;
     if(canvasEditTarget){
       if(lockedObjects.includes(canvasEditTarget.uid))throw new Error('Unlock this lettering before editing.');
@@ -2049,7 +2061,10 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   title="Preview the selected artwork as a solid fill">Solid fill</button>}{selected&&canvasMode==='select'&&<div className="studio-selection-docked" role="group" aria-label="Selected object actions">
   <button title="Zoom to selected artwork" aria-label="Zoom to selected artwork" onClick={fitSelection}><Maximize size={16}/> Focus</button><span className="studio-selection-name" title={selected.label||'Object '+selected.uid}>{selected.label||'Object '+selected.uid}</span>
   {selected.bounds&&<span className="studio-selection-size" title="Selected object dimensions">{(selected.bounds[2]/25.4).toFixed(2)} × {(selected.bounds[3]/25.4).toFixed(2)} in</span>}
-  {stitchGuides.data?.textForm==='text'&&<button disabled={busy||lockedObjects.includes(selected.uid)} onClick={()=>openText(selected.uid)} title="Edit font, lettering, spacing and effects"><Type size={16}/> Edit text</button>}
+  {stitchGuides.data?.textForm==='text'&&<button disabled={busy||lockedObjects.includes(selected.uid)} onClick={()=>{
+    const canvas=canvasSurface.current?.getBoundingClientRect();
+    if(canvas)openObjectEditor(selected,canvas.left+16,canvas.top+16);
+  }} title="Edit text directly on the canvas"><Type size={16}/> Edit text</button>}
   {canRecognizeSelection&&<button disabled={busy||recognizingWord} onClick={recognizeSelection} title="Recognize imported lettering and preview an editable replacement"><Type size={16}/> {recognizingWord?'Recognizing…':'Edit embedded text'}</button>}
   <button onClick={()=>{showInspector(true);setInspectorTab('threads')}} title="Change thread colors"><Palette size={16}/> Colors</button><button disabled={busy||!selected.bounds} onClick={selectVisualElement} title="Select overlapping regions of this illustration"><Group size={16}/> Select element</button><button disabled={busy} title="Select all unlocked regions with this thread color" onClick={()=>{const ids=objects.filter(o=>!o.hidden&&!o.locked&&!lockedObjects.includes(o.uid)&&o.color.join(',')===selected.color.join(',')).map(o=>o.uid);dismissWordReview();setCanvasText(null);setCanvasEditTarget(null);setActiveGroup(null);setSelectedObject(null);setMulti(ids);setCanvasMode('select');showInspector(true);setInspectorTab('threads');setMessage(ids.length+' matching color regions selected.')}}><Palette size={16}/> Same color</button>
   <button onClick={()=>{showInspector(true);setInspectorTab('transform')}} title="Dimensions and alignment"><Move size={16}/> Position</button>
