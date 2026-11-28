@@ -105,7 +105,9 @@ const SAMPLES: &[Sample] = &[
 ];
 
 pub(super) fn names() -> impl Iterator<Item = &'static str> {
-    SAMPLES.iter().map(|sample| sample.name)
+    // Retain legacy sample lookup for compatibility, but do not advertise the
+    // retired starter collection in the personal embroidery library.
+    std::iter::empty::<&'static str>()
 }
 
 pub(super) fn open(name: &str) -> Option<Result<StitchFile, String>> {
@@ -124,6 +126,11 @@ pub(super) fn open(name: &str) -> Option<Result<StitchFile, String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retired_samples_are_not_listed() {
+        assert_eq!(names().count(), 0);
+    }
 
     #[test]
     fn starter_dst_files_have_real_stitches_and_match_their_thread_charts() {
