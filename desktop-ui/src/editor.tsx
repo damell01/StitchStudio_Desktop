@@ -65,10 +65,11 @@ const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
 const dockBreakpoint=1100;
 const [left,setLeft]=useState(()=>localStorage.getItem('studio-layers-open')==='1'),[right,setRight]=useState(()=>localStorage.getItem('studio-inspector-open')==='1'),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",216,180,320)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,220,360));
 function openCreate(tab:CreateTab){
-  insertDialog.current?.close();
-  if(left&&layerTab===tab){showLayers(false);return;}
-  setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);drawing.pick(null);
-  setLayerTab(tab);showLayers(true);
+  if(busy)return;
+  setLayerTab('objects');
+  if(tab==='uploads'){uploadInput.current?.click();return;}
+  if(tab==='text'){openText();return;}
+  openInsertDialog();
 }
 async function insertCatalogArtwork(id:string,xMm:number,yMm:number){
   const entry=catalogEntry(id);
@@ -1742,7 +1743,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button title="Type on canvas" aria-label="Type on canvas" aria-pressed={canvasTyping} disabled={busy} onClick={toggleCanvasTyping}><Type size={16}/> Type on canvas</button>
   </div></details>
   <div className="studio-command-group studio-view-tools" role="group" aria-label="Workspace view">
-    <button className="studio-tool-icon" title="Layers" aria-label="Layers" aria-pressed={left} onClick={()=>showLayers(!left)}><PanelLeft size={18}/></button>
+    <button className="studio-tool-icon" title="Layers" aria-label="Layers" aria-pressed={left} onClick={()=>{setLayerTab('objects');showLayers(!left)}}><PanelLeft size={18}/></button>
     <button className="studio-tool-icon" title="Inspector" aria-label="Inspector" aria-pressed={right} onClick={()=>showInspector(!right)}><PanelRight size={18}/></button>
     <button className="studio-tool-icon" title="Inspect stitch coverage and density" aria-label="Inspect stitch quality"
       aria-pressed={right&&inspectorTab==='quality'} disabled={busy||!plan?.stitches} onClick={()=>openQuality()}><ScanLine size={18}/></button>
