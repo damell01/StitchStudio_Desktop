@@ -1823,7 +1823,7 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
             // must independently pass the original-design quality guard.
             // Revisit expensive overlap first, then fill economy; stop at
             // the requested goals or the existing cooperative deadline.
-            for stage in 0..4 {
+            for stage in 0..5 {
                 if options.exhausted(){break}
                 if stitch_goal.is_some_and(|n|design.stitch_count()<=n)
                     &&target.is_none_or(|t|seconds(&design)<=t){break}
@@ -1831,7 +1831,10 @@ fn choose_simplification(source:&zigzag::document::Document,original:&Design,str
                     0=>remove_covered_fill_candidate(&doc,uids,options),
                     1=>economical_fill_candidate(&doc,&design,uids,4,0.),
                     2=>narrow_artwork_candidate(&doc,&design,uids,options),
-                    _=>economical_fill_candidate(&doc,&design,uids,3,0.),
+                    3=>economical_fill_candidate(&doc,&design,uids,3,0.),
+                    // When widening the rows would lose coverage, try longer
+                    // stitches along the current rows before ending the search.
+                    _=>length_only_candidate(&doc,&design,uids,3),
                 };
                 let Some((next_doc,next_plan))=candidate else {continue};
                 if next_plan.stitch_count()>design.stitch_count()||next_plan.trim_count()>design.trim_count()
