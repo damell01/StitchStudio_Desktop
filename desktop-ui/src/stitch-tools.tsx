@@ -1,6 +1,7 @@
-import {useEffect,useState,useMemo} from 'react';
+import {useEffect,useState,useMemo,useRef} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {InspectorDialog} from './workspace-inspector';
+import './ui-polish.css';
 
 type Issue = {uid:number|null;label:string|null;severity:'info'|'warning'|'error';message:string};
 type Hoop = {width:number;height:number};
@@ -46,6 +47,8 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,onAppl
   const [message,setMessage]=useState('');
   const current=review && review.revision===revision ? review.result : null;
   const improvesQuality=!!current&&current.warnings_after<=current.warnings_before&&current.lettering_after<=current.lettering_before&&(current.warnings_after<current.warnings_before||current.lettering_after<current.lettering_before);
+  const repairDialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{const dialog=repairDialog.current;if(current&&dialog&&!dialog.open)dialog.showModal();else if(!current&&dialog?.open)dialog.close();},[current]);
   const comparisonPaths=useMemo(()=>current?[current.before,current.after].map(p=>p.blocks.map(b=>({color:'rgb('+b.color.join(',')+')',runs:b.runs.map(r=>r.map(point=>point.join(',')).join(' '))}))):[],[current]);
   const [sewout,setSewout]=useState(true);
   const [previewWidth,setPreviewWidth]=useState(.40);
@@ -78,23 +81,23 @@ export function QualityInspector({width,height,revision,onLocate,onRepair,onAppl
     <IssueList width={width} height={height} onLocate={onLocate} revision={revision} scan={scan}/>
     <div className="inspector-actions"><button disabled={disabled||working} onClick={()=>setScan(n=>n+1)}>Refresh inspection</button><button disabled={disabled||working} onClick={()=>void inspectRepair(false)}>{working?'Checking repairs…':'Preview coverage repair'}</button><button disabled={disabled||working} onClick={()=>void inspectRepair(true)}>Preview lettering balance</button></div>
     {message&&<p role="status">{message}</p>}
-    {current&&<div className="workspace-stack">
-      <strong>Proposed quality repair</strong>
+    <dialog ref={repairDialog} className="quality-repair-workspace" aria-label="Compare quality repair" onCancel={e=>{e.preventDefault();if(!working)setReview(null)}}>{current&&<div className="workspace-stack">
+      <div className="studio-modal-heading"><h2>Compare quality repair</h2><button disabled={working} onClick={()=>setReview(null)}>Close</button></div>
       <div className="inspector-actions"><button aria-pressed={sewout} onClick={()=>setSewout(true)}>Sew-out</button><button aria-pressed={!sewout} onClick={()=>setSewout(false)}>Stitch paths</button></div>
       <label>Comparison zoom · {detailZoom}×<input type="range" min="1" max="8" step="1" value={detailZoom} onChange={e=>{setDetailZoom(Number(e.target.value));setDetailX(0);setDetailY(0)}}/></label>
       {detailZoom>1&&<><label>Horizontal position<input type="range" min={-width/2+width/(2*detailZoom)} max={width/2-width/(2*detailZoom)} step=".5" value={detailX} onChange={e=>setDetailX(Number(e.target.value))}/></label><label>Vertical position<input type="range" min={-height/2+height/(2*detailZoom)} max={height/2-height/(2*detailZoom)} step=".5" value={detailY} onChange={e=>setDetailY(Number(e.target.value))}/></label></>}
       <button onClick={()=>{setDetailZoom(1);setDetailX(0);setDetailY(0)}} disabled={detailZoom===1&&detailX===0&&detailY===0}>Fit comparison to hoop</button>
       {sewout&&<label>Visual thread width · {previewWidth.toFixed(2)} mm<input type="range" min=".15" max=".60" step=".05" value={previewWidth} onChange={e=>setPreviewWidth(Number(e.target.value))}/></label>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:6}}>{[current.before,current.after].map((p,i)=><div key={i}><small>{i?'Repaired':'Original'}</small><svg viewBox={view} style={{width:'100%',background:'#faf7f0'}} aria-label={i?'Repaired stitch preview':'Original stitch preview'}>{p.blocks.map((b,j)=><g key={j} fill="none" strokeLinecap="round" strokeLinejoin="round">{b.runs.map((_r,k)=>{const points=comparisonPaths[i][j].runs[k];if(!points)return null;const color=comparisonPaths[i][j].color;return sewout?<g key={k}><polyline points={points} stroke="#211b17" opacity=".28" strokeWidth={previewWidth*1.18} transform="translate(.045 .065)"/><polyline points={points} stroke={color} strokeWidth={previewWidth}/><polyline points={points} stroke="white" opacity=".24" strokeWidth={previewWidth*.27} transform={`translate(${-previewWidth*.18} ${-previewWidth*.18})`}/></g>:<polyline key={k} points={points} stroke={color} strokeWidth=".12"/>})}</g>)}</svg><small>{p.stitches.toLocaleString()} points · {p.trims} trims</small></div>)}</div>
+      <div className="quality-repair-previews">{[current.before,current.after].map((p,i)=><div key={i}><small>{i?'Repaired':'Original'}</small><svg viewBox={view} style={{width:'100%',background:'#faf7f0'}} aria-label={i?'Repaired stitch preview':'Original stitch preview'}>{p.blocks.map((b,j)=><g key={j} fill="none" strokeLinecap="round" strokeLinejoin="round">{b.runs.map((_r,k)=>{const points=comparisonPaths[i][j].runs[k];if(!points)return null;const color=comparisonPaths[i][j].color;return sewout?<g key={k}><polyline points={points} stroke="#211b17" opacity=".28" strokeWidth={previewWidth*1.18} transform="translate(.045 .065)"/><polyline points={points} stroke={color} strokeWidth={previewWidth}/><polyline points={points} stroke="white" opacity=".24" strokeWidth={previewWidth*.27} transform={`translate(${-previewWidth*.18} ${-previewWidth*.18})`}/></g>:<polyline key={k} points={points} stroke={color} strokeWidth=".12"/>})}</g>)}</svg><small>{p.stitches.toLocaleString()} points · {p.trims} trims</small></div>)}</div>
       <small>Both previews share the same zoom, position and visual thread width. This is a rendering estimate, not a physical sew-out.</small>
       <small>Flagged coverage objects: {current.warnings_before} → {current.warnings_after}</small>
       <small>Lettering consistency warnings: {current.lettering_before} → {current.lettering_after}</small>
       <small>Estimated sewing time: {estimate(current.before).toFixed(1)} → {estimate(current.after).toFixed(1)} min</small>
       <small>Stitch change: {((current.after.stitches-current.before.stitches)/Math.max(1,current.before.stitches)*100).toFixed(1)}% · {speed} points/min</small>
       <p role="status">{improvesQuality?"Fewer measured quality warnings without increasing either warning category. Inspect both previews before applying.":"No measured improvement, or a warning category worsened. Keep the original design."}</p>
-      <button disabled={disabled||working||!improvesQuality} onClick={()=>void applyPreview()}>Apply quality repair</button><button onClick={()=>setReview(null)}>Keep original</button>
+      <button disabled={disabled||working||!improvesQuality} onClick={()=>void applyPreview()}>Apply quality repair</button><button disabled={working} onClick={()=>setReview(null)}>Keep original</button>
       <small>Applies the shown stitch plan. Undo is available.</small>
-    </div>}
+    </div>}</dialog>
     <button disabled={disabled||working} onClick={onRepair}>Try general repair</button>
   </section>;
 }
