@@ -81,3 +81,12 @@ dialog.expanded-digitizer[open]{display:flex;flex-direction:column;gap:8px;}
 .expanded-digitizer .digitizer-variant-card svg{width:100%;height:clamp(120px,22vh,240px);max-height:none;}
 .expanded-digitizer .digitizer-review-actions{display:flex;flex-wrap:wrap;gap:6px;}
 @media(max-width:760px){.expanded-digitizer .digitizer-layout{display:block;overflow-y:auto;}.expanded-digitizer .digitizer-controls,.expanded-digitizer .artwork-preview{overflow:visible;}}
+
+/* Quality repair comparison belongs in a dedicated workspace, not the inspector. */
+dialog.quality-repair-workspace{width:min(94vw,1400px);max-width:94vw;max-height:92dvh;overflow:auto;padding:18px;box-sizing:border-box;border-radius:12px;color:inherit;background:var(--surface,#fff);border:1px solid var(--border,#ccc);}
+dialog.quality-repair-workspace::backdrop{background:rgba(20,16,32,.55);}
+.quality-repair-workspace .workspace-stack{display:flex;flex-direction:column;gap:10px;}
+.quality-repair-workspace .quality-repair-previews{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.quality-repair-workspace .quality-repair-previews>div{display:flex;flex-direction:column;gap:5px;min-width:0;}
+.quality-repair-workspace .quality-repair-previews svg{height:clamp(180px,43vh,520px);max-height:none;border-radius:8px;}
+.quality-repair-workspace .studio-modal-heading{display:flex;justify-content:space-between;align-items:center;}
