@@ -568,3 +568,8 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .editor-workspace .studio-inspector-dock .quality-counts{grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;}
 .editor-workspace .studio-inspector-dock .quality-counts button{padding:5px 1px;}
 .editor-workspace .studio-inspector-dock .quality-counts button small{font-size:9px;}
+
+.compact-nudge{display:flex;align-items:end;gap:6px;flex-wrap:wrap;}
+.compact-nudge label{flex:1 1 64px;min-width:0;}
+.compact-nudge-buttons{display:flex;gap:3px;}
+.compact-nudge-buttons button{display:grid;place-items:center;min-width:28px;min-height:30px;padding:3px;}
