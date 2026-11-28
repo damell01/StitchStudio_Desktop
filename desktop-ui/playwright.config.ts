@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: './tests',
   use: {
     baseURL: 'http://127.0.0.1:4173',
+    // Most workflow tests drive power-user commands; simple mode has its own spec.
+    storageState: 'tests/all-tools.storage.json',
     launchOptions: { executablePath: process.env.STITCH_TEST_CHROMIUM },
   },
   webServer: {

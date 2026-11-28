@@ -1,0 +1,54 @@
+/* Simple mode (default): the command bar shows only everyday actions, with words.
+   "More tools" reveals everything; the choice is remembered. Nothing is removed:
+   every command stays reachable there, in the left rail, the mode switch or search. */
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-simple-tools :is(
+  [aria-label="Editor guides"],
+  [aria-label="Import image and digitize"],
+  [aria-label="Open artwork"],
+  [aria-label="Center design in hoop"],
+  [aria-label="Duplicate selection"],
+  [aria-label="Maximize design in hoop"],
+  .studio-create-menu,
+  .studio-view-tools,
+  .command-launch,
+  .workspace-options:not(.studio-create-menu),
+  [aria-label="Garment mockup"],
+  [aria-label="Thread order"],
+  .studio-price-job
+){display:none!important}
+
+/* Everyday actions carry words, not just icons. */
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-tool-label{display:none}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-simple-tools [aria-label="Add editable text"]{display:inline-flex!important;flex-direction:row!important;align-items:center;width:auto!important;padding:0 11px!important;gap:6px;color:var(--text)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-simple-tools [aria-label="Add editable text"] .studio-tool-label{display:inline;font-size:13px;font-weight:600}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-simple-tools .studio-insert-action{color:var(--text)!important;gap:6px}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-simple-tools .studio-insert-action span{display:inline!important;font-size:13px;font-weight:600}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-simple-tools [aria-label="Delete selection"]{font-size:13px!important;width:auto!important;padding:0 11px!important;gap:6px!important}
+
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-more-toggle{
+ height:34px;min-height:0;margin:0 2px;padding:0 11px;gap:6px;border:1px dashed var(--line-strong);border-radius:9px;background:transparent;color:var(--muted);font-size:12.5px;font-weight:600;white-space:nowrap}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-more-toggle:hover{background:var(--surface-2);color:var(--text)}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-more-toggle[aria-pressed=true]{border-style:solid;background:var(--brand-soft);color:var(--brand-ink)}
+
+/* Left rail in simple mode: creation tools and layers. Design/Quality/Preview/Stitches
+   are in the floating mode switch, and Hoop is on the canvas toolbar. */
+html[data-palette][data-theme] .editor-workspace:has(.studio-simple-tools) .editor-toolrail :is(
+  [title="Design workspace"],[aria-label="Quality panel"],[aria-label="Sew-out preview"],[aria-label="Stitch settings panel"],[aria-label="Hoop settings"]
+){display:none!important}
+html[data-palette][data-theme] .editor-workspace:has(.studio-simple-tools) .editor-toolrail>button[aria-label="Layers panel"]{margin-top:6px}
+
+/* With every tool showing, the toggle shrinks to an icon so Export stays on screen. */
+@media(max-width:1480px){
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-all-tools .studio-more-toggle{font-size:0;gap:0;width:34px;padding:0;justify-content:center}
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-all-tools .studio-price-job{display:none}
+}
+@media(max-width:1180px){
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar .studio-more-toggle{font-size:0;gap:0;width:34px;padding:0;justify-content:center}
+}
+/* All tools on a small laptop: help and search stay on F1-style menus / Ctrl+K. */
+@media(max-width:1100px){
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-all-tools :is([aria-label="Editor guides"],.command-launch){display:none!important}
+}
+@media(max-width:1100px){
+ html[data-palette][data-theme] .editor-workspace .studio-edit-bar.studio-all-tools{flex-wrap:wrap;height:auto!important;min-height:46px;row-gap:2px;padding-block:3px}
+}

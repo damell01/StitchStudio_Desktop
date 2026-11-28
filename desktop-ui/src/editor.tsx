@@ -19,6 +19,7 @@ import {FabricPicker} from './fabric-picker';
 import {LayerDialog,SavedThreadDialog} from './layer-dialogs';
 import {InspectorDialog,StitchLengthReport} from './workspace-inspector';
 import './editor-frame.css';
+import './simple-mode.css';
 import {ListNavigation,matchesName,usePagedList} from './list-navigation';
 import {CommandPalette,type Command} from './command-palette';
 import {InsertDesignDialog} from './insert-design-dialog';
@@ -63,6 +64,9 @@ const fullscreenRequested=useRef(false);
 useEffect(()=>()=>{if(fullscreenRequested.current&&isTauri())void invoke('set_canvas_fullscreen',{fullscreen:false}).catch(()=>{});},[]);
 const panelsBeforeFocus=useRef<{left:boolean;right:boolean}|null>(null);
 const dockBreakpoint=1100;
+// Simple mode shows the everyday actions; More tools reveals everything (remembered per device).
+const [allTools,setAllTools]=useState(()=>{try{return localStorage.getItem('studio-all-tools')==='1'}catch{return false}});
+useEffect(()=>{try{localStorage.setItem('studio-all-tools',allTools?'1':'0')}catch{/* optional */}},[allTools]);
 const [left,setLeft]=useState(()=>localStorage.getItem('studio-layers-open')==='1'),[right,setRight]=useState(()=>localStorage.getItem('studio-inspector-open')==='1'),[leftWidth,setLeftWidth]=useState(()=>panelWidth("studio-layers-width",216,180,320)),[rightWidth,setRightWidth]=useState(()=>panelWidth("studio-properties-width",260,220,360));
 function openCreate(tab:CreateTab){
   if(busy)return;
@@ -1714,7 +1718,7 @@ if(e.key==='Delete'||e.key==='Backspace'){if(deletionTarget()){e.preventDefault(
 if(!selectionIds.length&&selectedObject!==null&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();editSelection({kind:'duplicate'});return;}
 if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan)void projectSave()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="z"){e.preventDefault();if(plan)void edit("history_step",{redo:e.shiftKey})}else if(e.key==="Escape"){setContext(null);setMulti([]);setSelectedObject(null);setActiveGroup(null);dismissWordReview();setExportOpen(false);setDrag(null)}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[plan,busy,width,height,format,focusCanvas,selectedObject,left,right,multi,activeGroup,canvasMode,objects,nudgeStep,lockedObjects,canvasTyping,drawing.tool,baselinePicking]);return <><InsertDesignDialog<Plan> dialogRef={insertDialog} editorBusy={busy} anchorBounds={movementBounds??(()=>{const b=objects.filter(o=>!o.hidden&&o.bounds).map(o=>o.bounds!);if(!b.length)return null;const x=Math.min(...b.map(v=>v[0])),y=Math.min(...b.map(v=>v[1]));return [x,y,Math.max(...b.map(v=>v[0]+v[2]))-x,Math.max(...b.map(v=>v[1]+v[3]))-y]})()} onInsert={result=>{
   setThreadAssignments({});setPlan(result);setPlayhead(null);setPlaying(false);setHidden([]);setMessage('');
-}}/><div className={`studio-edit-bar ${focusCanvas?'studio-focus-active':''}`} role="group" aria-label="Design commands">
+}}/><div className={`studio-edit-bar ${focusCanvas?'studio-focus-active':''} ${allTools?'studio-all-tools':'studio-simple-tools'}`} role="group" aria-label="Design commands">
   {focusCanvas&&<button className="studio-exit-focus" onClick={()=>changeFocus(false)}><Minimize size={16}/> Exit focus</button>}
   <div className="studio-document">
     <Layers3 size={17} aria-hidden="true"/>
@@ -1736,7 +1740,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
     <button className="studio-tool-icon" title={historyLabels[1].length?"Redo: "+historyLabels[1].at(-1):"Redo"} aria-label="Redo" disabled={!historyLabels[1].length||busy} onClick={()=>edit('history_step',{redo:true})}><Redo2 size={17}/></button>
   </div>
   <div className="studio-command-group studio-quick-edit" role="group" aria-label="Common editing actions">
-    <button className="studio-tool-icon" title="Add editable text" aria-label="Add editable text" disabled={busy} onClick={()=>openText()}><Type size={17}/></button>
+    <button className="studio-tool-icon" title="Add editable text" aria-label="Add editable text" disabled={busy} onClick={()=>openText()}><Type size={17}/><span className="studio-tool-label">Text</span></button>
     <button className="studio-tool-icon" title="Center design in hoop" aria-label="Center design in hoop" disabled={!plan||busy} onClick={()=>edit('center_design',{})}><Scan size={17}/></button>
     <button className="studio-tool-icon" title="Duplicate selection" aria-label="Duplicate selection" disabled={!selected||busy} onClick={()=>editSelection({kind:'duplicate'})}><Copy size={17}/></button>
   </div>
@@ -1802,7 +1806,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </details>
   {plan&&<GarmentPreview blocks={plan.blocks}/>}
   {plan&&<ThreadOrder assignments={threadAssignments} onAssign={(index,value)=>setThreadAssignments(old=>({...old,[index]:value}))} blocks={plan.blocks} format={format} machine={machines.find(profile=>profile.id===machine)?.name??''}/>}
-  <button title="Delete selected design or objects (Delete)" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={17}/> Delete</button><button className="studio-price-job" title="Calculate pricing using current stitches and sewing time" disabled={!plan||busy} onClick={()=>setPricingOpen(true)}>Price job</button><button className="studio-save-design" title="Save editable Stitch Studio project (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={17}/> Save design</button><button className="primary studio-export" disabled={!plan?.stitches||outside||busy||machineExceeded||incompatibleHoop||invalidField} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
+  <button className="studio-more-toggle" aria-pressed={allTools} title={allTools?"Show only the everyday tools":"Show every editing tool"} onClick={()=>setAllTools(v=>!v)}><SlidersHorizontal size={16}/> {allTools?"Fewer tools":"More tools"}</button><button title="Delete selected design or objects (Delete)" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={17}/> Delete</button><button className="studio-price-job" title="Calculate pricing using current stitches and sewing time" disabled={!plan||busy} onClick={()=>setPricingOpen(true)}>Price job</button><button className="studio-save-design" title="Save editable Stitch Studio project (Ctrl+S or Cmd+S)" disabled={!plan||busy} onClick={projectSave}><Save size={17}/> Save design</button><button className="primary studio-export" disabled={!plan?.stitches||outside||busy||machineExceeded||incompatibleHoop||invalidField} onClick={()=>setExportOpen(true)}><Download size={16}/> Export design</button>
 </div>
 {context&&<div className="studio-context-menu" style={{left:Math.max(8,Math.min(context.x,window.innerWidth-190)),top:Math.max(8,Math.min(context.y,window.innerHeight-270))}} role="group" aria-label="Object actions"><button disabled={busy} onClick={()=>selectArtworkGroup(context.uid)}>Select entire artwork group</button><button disabled={busy} onClick={()=>selectArtworkGroup(context.uid,true)}>Edit artwork group colors</button><button onClick={()=>{const uid=context.uid;setContext(null);void invoke<unknown>('lettering_settings',{uid}).then(s=>{if(s)openText(uid);else{showInspector(true);setInspectorTab('transform')}}).catch(e=>setMessage(String(e)))}}>Object properties</button><button disabled={!canCopyStitchSettings} onClick={()=>{setContext(null);void copyStitchSettings()}}>Copy stitch settings</button><button onClick={()=>{setContext(null);drawing.pick(null);stitchGuides.setVisible(true)}}>Show stitch guides</button><button onClick={()=>{editSelection({kind:'duplicate'},context.uid);setContext(null)}}>Duplicate</button><button onClick={()=>{editSelection({kind:'rotate'},context.uid);setContext(null)}}>Rotate 90°</button><button onClick={()=>{editSelection({kind:'delete'},context.uid);setContext(null)}}>Delete object</button><button onClick={()=>setContext(null)}>Close menu</button></div>}{busy&&!inlineWork&&<div className="processing-overlay"><section className="processing-card" role="status"><div className="studio-spinner"/><h2>Working on your design</h2><progress aria-label="Processing"/></section></div>}<div className={`editor-grid studio-canvas-layout ${focusCanvas?'canvas-focus':''} ${left?'':'hide-left'} ${right?'':'hide-right'} ${left&&isCreateTab(layerTab)?'create-open':''}`} style={{'--studio-layers-width':`${leftWidth}px`,'--studio-inspector-width':`${rightWidth}px`} as CSSProperties}>
 <div className="editor-toolrail" role="group" aria-label="Editor tools">
