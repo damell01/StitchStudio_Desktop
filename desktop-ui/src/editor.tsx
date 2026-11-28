@@ -2172,11 +2172,16 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   </div>
   {selected&&<div className="studio-property-context"><strong title={selected.label}>{selected.label||'Object '+selected.uid}</strong><small>{selected.bounds?(selected.bounds[2]/25.4).toFixed(2)+' × '+(selected.bounds[3]/25.4).toFixed(2)+' in':'Selected object'}</small></div>}
   {!selected&&<div className="studio-property-context"><strong>{movementIds.length>1?movementIds.length+' objects selected':plan?'Entire design':'No design selected'}</strong><small>{movementIds.length>1?'Group editing':''}</small></div>}
-  <div className="workspace-segments" role="group" aria-label="Inspector">
+  <div className="workspace-segments studio-property-tabs" role="group" aria-label="Inspector">
+    <button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={15}/>Edit</button>
+    <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={15}/>Text</button>
+    <button aria-pressed={inspectorTab==='threads'} onClick={()=>setInspectorTab('threads')}><Palette size={15}/>Colors</button>
+    <button aria-pressed={inspectorTab==='quality'} onClick={()=>setInspectorTab('quality')}>Quality</button>
+  </div>
+  <div className="studio-secondary-properties" role="group" aria-label="Embroidery settings">
     <button aria-pressed={inspectorTab==='hoop'} onClick={()=>setInspectorTab('hoop')}><SquareDashed size={15}/>Hoop</button>
-    <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={15}/>Sequence</button>
-    <button aria-pressed={inspectorTab==='threads'} onClick={()=>setInspectorTab('threads')}><Palette size={15}/>Threads</button>
-    <button aria-pressed={inspectorTab==='text'} onClick={()=>openText(selectedObject)}><Type size={15}/>Text</button><button aria-pressed={inspectorTab==='transform'} onClick={()=>setInspectorTab('transform')}><Move size={15}/>Edit</button><button aria-pressed={inspectorTab==='stitches'} onClick={()=>setInspectorTab('stitches')}><Scissors size={15}/>Stitches</button><button aria-pressed={inspectorTab==='quality'} onClick={()=>setInspectorTab('quality')}>Quality</button>
+    <button aria-pressed={inspectorTab==='sequence'} onClick={()=>setInspectorTab('sequence')}><Waypoints size={15}/>Order</button>
+    <button aria-pressed={inspectorTab==='stitches'} onClick={()=>setInspectorTab('stitches')}><Scissors size={15}/>Stitches</button>
   </div>
 </div>
 
