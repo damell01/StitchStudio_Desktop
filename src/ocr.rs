@@ -104,6 +104,59 @@ fn group_lines(mut input: Vec<RecognizedLine>) -> Vec<RecognizedLine> {
 // modest tracking differences without requiring a cloud model.
 const MASK_W:usize=64;
 const MASK_H:usize=24;
+
+/// The visible "ink" of shapes, rasterized to `w`×`h` cells over `bounds`
+/// (design units): fills by their area; strokes, including the needle paths
+/// of stitched (machine file) objects, as lines one thread wide or their own
+/// stroke width. Stitched satin lettering then reads as solid letters.
+pub fn ink_raster(shapes: &[&crate::svg::Shape], bounds: crate::geom::Bounds, w: usize, h: usize) -> Vec<bool> {
+    use crate::{geom::P, svg::Geometry};
+    let mut ink = vec![false; w * h];
+    if w == 0 || h == 0 || bounds.is_empty() || bounds.width() <= 0.0 || bounds.height() <= 0.0 { return ink; }
+    let (sx, sy) = (w as f64 / bounds.width(), h as f64 / bounds.height());
+    for shape in shapes {
+        match &shape.geometry {
+            Geometry::Fill { rings, rule } => {
+                let b = crate::svg::shapes_bounds(std::slice::from_ref(*shape));
+                if b.is_empty() { continue; }
+                let x0 = (((b.min.x - bounds.min.x) * sx).floor().max(0.0)) as usize;
+                let x1 = (((b.max.x - bounds.min.x) * sx).ceil() as usize).min(w);
+                let y0 = (((b.min.y - bounds.min.y) * sy).floor().max(0.0)) as usize;
+                let y1 = (((b.max.y - bounds.min.y) * sy).ceil() as usize).min(h);
+                for y in y0..y1 { for x in x0..x1 {
+                    let p = P::new(bounds.min.x + (x as f64 + 0.5) / sx, bounds.min.y + (y as f64 + 0.5) / sy);
+                    if crate::geom::point_inside(rings, *rule, p) { ink[y * w + x] = true; }
+                }}
+            }
+            Geometry::Stroke { lines, width } => {
+                // A sewn thread is about 0.4 mm wide.
+                let half = (width.max(4.0)) / 2.0;
+                let (rx, ry) = ((half * sx).max(0.6), (half * sy).max(0.6));
+                let step = 0.5 / sx.max(sy);
+                let mut stamp = |p: P| {
+                    let cx = (p.x - bounds.min.x) * sx; let cy = (p.y - bounds.min.y) * sy;
+                    let (xa, xb) = ((cx - rx).floor().max(0.0) as usize, ((cx + rx).ceil().max(0.0) as usize).min(w));
+                    let (ya, yb) = ((cy - ry).floor().max(0.0) as usize, ((cy + ry).ceil().max(0.0) as usize).min(h));
+                    for y in ya..yb { for x in xa..xb {
+                        let (dx, dy) = ((x as f64 + 0.5 - cx) / rx, (y as f64 + 0.5 - cy) / ry);
+                        if dx * dx + dy * dy <= 1.0 { ink[y * w + x] = true; }
+                    }}
+                };
+                for (line, closed) in lines {
+                    let n = line.len();
+                    let segments = if *closed && n > 2 { n } else { n.saturating_sub(1) };
+                    if n == 1 { stamp(line[0]); }
+                    for i in 0..segments {
+                        let (a, b) = (line[i], line[(i + 1) % n]);
+                        let k = (a.dist(b) / step).ceil().max(1.0) as usize;
+                        for j in 0..=k { stamp(a.lerp(b, j as f64 / k as f64)); }
+                    }
+                }
+            }
+        }
+    }
+    ink
+}
 fn source_mask(rect:[f64;4],w:u32,h:u32,rgb:&[u8])->Vec<f64>{
     let mut mask=vec![0.0;MASK_W*MASK_H];
     if w==0||h==0{return mask}
@@ -243,16 +296,8 @@ pub fn replace_lettering(doc: &mut crate::document::Document, lines: &[Recognize
         // Compare the traced and reconstructed outline topology using the
         // same normalized sampling grid as font recommendation.
         let outline_mask=|doc:&crate::document::Document, ids:&[usize], bounds:crate::geom::Bounds|{
-            let mut mask=vec![0.0;MASK_W*MASK_H];
-            for y in 0..MASK_H {for x in 0..MASK_W {
-                let p=crate::geom::P::new(bounds.min.x+(x as f64+0.5)*bounds.width()/MASK_W as f64,
-                    bounds.min.y+(y as f64+0.5)*bounds.height()/MASK_H as f64);
-                if ids.iter().any(|&j|match &doc.shapes[j].geometry {
-                    crate::svg::Geometry::Fill{rings,rule}=>crate::geom::point_inside(rings,*rule,p),
-                    _=>false,
-                }) {mask[y*MASK_W+x]=1.0;}
-            }}
-            mask
+            let shapes:Vec<_>=ids.iter().map(|&j|&doc.shapes[j]).collect();
+            ink_raster(&shapes,bounds,MASK_W,MASK_H).into_iter().map(|v|if v {1.0} else {0.0}).collect::<Vec<f64>>()
         };
         let original_openings=enclosed_openings(&outline_mask(&candidate,&indices,ink.clone()));
         let color = candidate.shapes[indices[0]].color;

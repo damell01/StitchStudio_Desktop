@@ -548,20 +548,19 @@ impl TextSpec {
             "#{:02x}{:02x}{:02x}",
             self.color[0], self.color[1], self.color[2]
         );
-        let t = transform
-            .map(|t| format!(" transform=\"{}\"", xml_escape(t)))
-            .unwrap_or_default();
         // Horizontal and vertical scale: the glyphs scaled about the origin
-        // (the scale sits inside the object's own transform).
+        // (the scale sits inside the object's own transform). One transform
+        // attribute carries both: an element may only have one.
         let scaled = self.h_scale != 100.0 || self.v_scale != 100.0;
-        let scale_attr = if scaled {
-            format!(
-                " transform=\"scale({} {})\"",
-                n(self.h_scale / 100.0),
-                n(self.v_scale / 100.0)
-            )
-        } else {
-            String::new()
+        let scale = scaled.then(|| format!("scale({} {})", n(self.h_scale / 100.0), n(self.v_scale / 100.0)));
+        let t = match (transform, &scale) {
+            (Some(t), Some(sc)) => format!(" transform=\"{} {}\"", xml_escape(t), sc),
+            (Some(t), None) => format!(" transform=\"{}\"", xml_escape(t)),
+            _ => String::new(),
+        };
+        let scale_attr = match (transform, scale) {
+            (None, Some(sc)) => format!(" transform=\"{sc}\""),
+            _ => String::new(),
         };
         let common = format!(
             "id=\"{}\"{t} data-tl-lettering=\"{}\" {} font-size=\"{}\" letter-spacing=\"{}\"{} fill=\"{fill}\" text-anchor=\"{}\"",

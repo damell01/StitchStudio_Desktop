@@ -1159,7 +1159,8 @@ useEffect(()=>{
   if(busy)return;
   setDetectedText([]);setAutoTextStatus('');
   if(!autoDetectText||!objects.length)return;
-  const candidates=objects.filter(o=>o.bounds&&o.fill_rule&&!o.hidden&&!o.locked&&o.kind!=='manual'&&!o.groups?.some(g=>g.startsWith('tl-lettering-')));
+  // Traced fills and already-stitched letters (fixed stitches from a machine file) can both be words.
+  const candidates=objects.filter(o=>o.bounds&&(o.fill_rule||o.kind==='manual')&&!o.hidden&&!o.locked&&!o.groups?.some(g=>g.startsWith('tl-lettering-')));
   const rows:EditableObject[][]=[];
   for(const object of candidates.slice(0,400).sort((a,b)=>a.bounds![1]-b.bounds![1])){
     const [,y,w,h]=object.bounds!;
@@ -1176,7 +1177,10 @@ useEffect(()=>{
       else word.push(object);
     }
     return words;
-  }).filter(row=>row.length>=2&&row.length<=128).sort((a,b)=>b.length-a.length).slice(0,12);
+  }).filter(row=>row.length>=2&&row.length<=128)
+    // A machine file may sew a whole word as one connected run.
+    .concat(candidates.filter(o=>o.kind==='manual'&&o.bounds![3]>=3&&o.bounds![2]>=o.bounds![3]*1.8&&o.bounds![2]<=o.bounds![3]*14).map(o=>[o]))
+    .sort((a,b)=>b.length-a.length).slice(0,12);
   // A second, bounded pass follows adjacent glyphs along gently curved baselines.
   const seen=new Set(groups.map(row=>row.map(o=>o.uid).sort((a,b)=>a-b).join(',')));
   const glyphs=candidates.filter(o=>{const [,,w,h]=o.bounds!;return h>=1&&w>0&&w<=h*2.5}).slice(0,400).sort((a,b)=>a.bounds![0]-b.bounds![0]);
@@ -1226,7 +1230,7 @@ useEffect(()=>{
 function recognizeSelection(){
   if(movementIds.length===1){const object=objects.find(o=>o.uid===movementIds[0]);if(object){selectObject(object,true,true);return;}}
   dismissWordReview();
-  void recognizeWord(objects.filter(o=>movementIds.includes(o.uid)&&o.fill_rule&&o.kind!=='manual'),selectionRequest.current,true);
+  void recognizeWord(objects.filter(o=>movementIds.includes(o.uid)&&(o.fill_rule||o.kind==='manual')),selectionRequest.current,true);
 }
 function selectObject(object:EditableObject|null,inspectLettering=true,forceWord=false){
   if(object&&lockedObjects.includes(object.uid))return;
@@ -1621,7 +1625,7 @@ const qualityDensity=useMemo(()=>{
 function openQuality(overlay:'coverage'|'density'='coverage'){
   insertDialog.current?.close();drawing.pick(null);setCanvasTyping(false);setCanvasText(null);setCanvasEditTarget(null);setRealistic(false);setPlaying(false);setPlayhead(null);dismissWordReview();showInspector(true);setInspectorTab('quality');setQualityOverlay(overlay);
 }
-const canRecognizeSelection=objects.some(o=>movementIds.includes(o.uid)&&o.fill_rule&&o.kind!=='manual');
+const canRecognizeSelection=objects.some(o=>movementIds.includes(o.uid)&&(o.fill_rule||o.kind==='manual'));
 const focusedDensityObjects=densityFocus?objects.filter(o=>{
   if(!o.bounds||!o.fill_rule||o.hidden||o.locked||o.kind!=='fill')return false;
   const [x,y,w,h]=o.bounds;
@@ -2058,7 +2062,11 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   <button className="studio-tool-icon" title="Delete selection" aria-label="Delete selection" disabled={busy||!deletionTarget()} onClick={()=>void deleteDesign()}><Trash2 size={16}/></button>
 </div>}</div>}
 <svg aria-label="Stitch preview; drag empty space to select objects in Objects mode, or use Pan to move the canvas" data-mode={drawing.tool?'draw':canvasMode}
- onDoubleClick={e=>{if(e.target!==e.currentTarget||busy)return;const hit=document.elementsFromPoint(e.clientX,e.clientY).map(el=>el.getAttribute('data-artwork-uid')).find(v=>v!==null);const object=hit==null?undefined:objects.find(o=>String(o.uid)===hit);if(object&&!object.hidden)openObjectEditor(object,e.clientX,e.clientY)}}
+ onDoubleClick={e=>{if(e.target!==e.currentTarget||busy)return;const hit=document.elementsFromPoint(e.clientX,e.clientY).map(el=>el.getAttribute('data-artwork-uid')).find(v=>v!==null);let object=hit==null?undefined:objects.find(o=>String(o.uid)===hit);
+  // Thin stitched lettering is easy to miss: fall back to the smallest object whose box holds the click.
+  if(!object){const m=e.currentTarget.getScreenCTM();if(m){const q=new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse());const x=q.x-designOffset[0],y=q.y-designOffset[1];
+    object=objects.filter(o=>o.bounds&&!o.hidden&&x>=o.bounds[0]&&x<=o.bounds[0]+o.bounds[2]&&y>=o.bounds[1]&&y<=o.bounds[1]+o.bounds[3]).sort((a,b)=>a.bounds![2]*a.bounds![3]-b.bounds![2]*b.bounds![3])[0];}}
+  if(object&&!object.hidden)openObjectEditor(object,e.clientX,e.clientY)}}
  onPointerDown={startCanvasGesture} onPointerMove={moveCanvasGesture} onPointerLeave={()=>setHoverUid(null)}
  onPointerUp={event=>finishCanvasGesture(event,true)}
  onPointerCancel={event=>finishCanvasGesture(event,false)}

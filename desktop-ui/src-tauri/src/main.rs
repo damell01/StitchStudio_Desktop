@@ -3698,13 +3698,12 @@ async fn recognize_selected_lettering(uids:Vec<usize>,app:tauri::AppHandle)->Res
   let scale=(144.0/bounds.height()).min(1800.0/bounds.width());
   let width=(bounds.width()*scale).ceil() as u32+24;
   let height=(bounds.height()*scale).ceil() as u32+24;
+  // Fills by area; stitched objects (machine files) by their needle paths at thread width.
   let mut rgba=vec![255u8;width as usize*height as usize*4];
-  for y in 0..height{for x in 0..width{
-   let p=zigzag::geom::P::new(bounds.min.x+(x as f64-12.0)/scale,bounds.min.y+(y as f64-12.0)/scale);
-   if shapes.iter().any(|s|match &s.geometry{zigzag::svg::Geometry::Fill{rings,rule}=>zigzag::geom::point_inside(rings,*rule,p),_=>false}){
-    let i=(y as usize*width as usize+x as usize)*4;rgba[i..i+3].fill(0);
-   }
-  }}
+  let mut padded=bounds;padded.min.x-=12.0/scale;padded.min.y-=12.0/scale;padded.max.x=padded.min.x+width as f64/scale;padded.max.y=padded.min.y+height as f64/scale;
+  for (k,ink) in zigzag::ocr::ink_raster(&shapes,padded,width as usize,height as usize).into_iter().enumerate(){
+   if ink{rgba[k*4..k*4+3].fill(0);}
+  }
   let lines=zigzag::ocr::recognize_rgba(width,height,&rgba).map_err(|e|e.to_string())?;
   if !lines.is_empty(){return Ok(lines)}
   // Retry with a slightly expanded ink silhouette for thin traced lettering.
@@ -3743,9 +3742,11 @@ async fn preview_selected_lettering(uids:Vec<usize>,text:String,font:String,repl
   for (index,shape) in doc.shapes.iter().enumerate().filter(|(_,s)|ids.contains(&s.uid)){
    if doc.records_text(index)||shape.params.stop==Some(true)||shape.params.trim==Some(true)
       ||doc.layer_properties(&shape.id).is_some_and(|layer|layer.hidden||layer.locked)
-      ||!matches!(&shape.geometry,zigzag::svg::Geometry::Fill{..})
-      ||matches!(shape.params.kind,Some(zigzag::params::Kind::Manual|zigzag::params::Kind::Applique)){
-    return Err("Select only visible, unlocked traced lettering without special sewing commands.".into())
+      // Traced lettering (fills) or already-stitched lettering from a machine file (fixed stitches).
+      ||!(matches!(&shape.geometry,zigzag::svg::Geometry::Fill{..})
+          ||matches!((&shape.geometry,shape.params.kind),(zigzag::svg::Geometry::Stroke{..},Some(zigzag::params::Kind::Manual))))
+      ||matches!(shape.params.kind,Some(zigzag::params::Kind::Applique)){
+    return Err("Select only visible, unlocked lettering without special sewing commands.".into())
    }
    found+=1;
    let b=zigzag::svg::shapes_bounds(std::slice::from_ref(shape));
