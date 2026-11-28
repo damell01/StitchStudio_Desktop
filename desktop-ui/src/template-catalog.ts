@@ -57,6 +57,9 @@ export const templateCatalog:TemplateEntry[]=[
  ...bundledArtwork.map(a=>legacy(a,'Classic collection')),
  ...sportsArtwork.map(a=>legacy(a,'Sports pack')),
  ...expandedManifest.flatMap(m=>{
+  // Keep traced watercolor and unreviewed drafts out of the production library.
+  // Source assets remain available for future clean vector redraws.
+  if(m.collection==='Curated heirloom'||m.draft)return [];
   const svg=expandedFiles['./bundled-artwork/expanded/'+m.path];
   if(import.meta.env&&svg===undefined)return [];
   return [{id:m.id,name:m.name,file:m.id+'.svg',svg:svg??'',group:m.category,collection:m.collection,tags:m.tags,colors:m.colors,complexity:m.complexity,draft:m.draft}];
