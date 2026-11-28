@@ -6,6 +6,9 @@
 // Output goes to src/bundled-artwork/expanded/<collection>/<file>.svg plus
 // src/bundled-artwork/expanded-manifest.ts (names, categories, tags, colors, complexity).
 //
+// After this script, clean fragmented fills for embroidery (fewer trims):
+//   cargo run --release --example tidy_svg_files -- $(find src/bundled-artwork/expanded -name "*.svg")
+//   python3 scripts/compact-svg-paths.py <changed files>
 // Cleanup is conservative and embroidery-oriented:
 //  * Traced polygon artwork (fill-rule evenodd, M/L/Z rings): removes speckles and
 //    pin-holes too small to stitch, and drops small fragments clipped at the frame edge

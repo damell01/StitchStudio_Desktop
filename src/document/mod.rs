@@ -20,7 +20,7 @@ mod layers;
 mod paths;
 mod swatches;
 pub use swatches::{SwatchSetting, swatch_values};
-pub use cleanup::{CleanUp, CleanUpReport};
+pub use cleanup::{CleanUp, CleanUpReport, TidyIslands, tidy_rings};
 pub use edit::Fragment;
 pub use glyphs::{Carets, GlyphBox};
 pub use layers::LayerProperties;

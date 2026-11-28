@@ -47,6 +47,57 @@ impl CleanUpReport {
 /// Points closer than this (design units, 0.005 mm) are one point.
 const SAME_POINT: f64 = 0.05;
 
+/// How firmly [`Document::tidy_islands`] cleans fragmented fills.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TidyIslands {
+    /// Gaps narrower than twice this (design units) between parts of one fill
+    /// are closed (grow, then shrink back).
+    pub close: f64,
+    /// Parts of a fill smaller than this (square design units) are dropped;
+    /// holes smaller than half of it are filled.
+    pub min_area: f64,
+    /// Only fills split into at least this many outlines are touched, so
+    /// clean vector shapes (an i's dot, a logo) are left as drawn.
+    pub min_parts: usize,
+}
+
+impl TidyIslands {
+    /// 0.5 mm gaps closed, parts under 1.5 mm² dropped.
+    pub const GENTLE: TidyIslands = TidyIslands { close: 5.0, min_area: 150.0, min_parts: 8 };
+    /// 0.6 mm gaps closed, parts under 2 mm² dropped.
+    pub const BALANCED: TidyIslands = TidyIslands { close: 6.0, min_area: 200.0, min_parts: 8 };
+}
+
+fn signed_area(r: &[crate::geom::P]) -> f64 {
+    let n = r.len();
+    (0..n).map(|i| crate::geom::cross(r[i], r[(i + 1) % n])).sum::<f64>() * 0.5
+}
+
+/// The fill `rings` with hairline gaps closed and unstitchable specks and
+/// pinholes removed. Outlines come back normalized (no overlaps).
+pub fn tidy_rings(
+    rings: &[crate::geom::Polyline],
+    rule: crate::geom::FillRule,
+    opt: &TidyIslands,
+) -> Vec<crate::geom::Polyline> {
+    use crate::{boolean, geom::FillRule};
+    let grown = boolean::offset(rings, rule, opt.close);
+    let closed = boolean::offset(&grown, FillRule::NonZero, -opt.close);
+    // The largest outline sets which winding is an outer edge.
+    let outer = closed
+        .iter()
+        .map(|r| signed_area(r))
+        .fold(0.0f64, |a, s| if s.abs() > a.abs() { s } else { a })
+        .signum();
+    closed
+        .into_iter()
+        .filter(|r| {
+            let s = signed_area(r);
+            if s.signum() == outer { s.abs() >= opt.min_area } else { s.abs() >= opt.min_area * 0.5 }
+        })
+        .collect()
+}
+
 impl Document {
     /// The objects at `indices` (one per SVG element, lettering left out),
     /// by uid, so the list survives edits that renumber them.
@@ -160,6 +211,48 @@ impl Document {
         self.set_paths(&edits)?;
         self.delete_elements(&gone)?;
         Ok(report)
+    }
+
+    /// Tidy fragmented fills, as traced or painterly artwork has: close
+    /// hairline gaps between parts of the same fill and drop parts too small
+    /// to stitch. Each removed part is a start, a few stitches and a trim, so
+    /// this mostly saves trims. Lettering, locked and hidden layers, and
+    /// non-fill stitch types are left alone. Returns the objects changed.
+    pub fn tidy_islands(&mut self, uids: Option<&[usize]>, opt: &TidyIslands) -> Result<usize> {
+        use crate::bezier::{Anchor, SubPath};
+        use crate::params::Kind;
+        use crate::svg::Geometry;
+        self.sync()?;
+        let mut edits = Vec::new();
+        for (i, s) in self.shapes.iter().enumerate() {
+            if uids.is_some_and(|u| !u.contains(&s.uid))
+                || self.records_text(i)
+                || s.groups.iter().any(|g| g.starts_with("tl-lettering-") || g == "tl-small-ink-detail")
+                || self.layer_properties(&s.id).is_some_and(|l| l.locked || l.hidden)
+                || s.params.kind.unwrap_or(Kind::Fill) != Kind::Fill
+                || s.params.stop == Some(true)
+                || s.params.trim == Some(true)
+            {
+                continue;
+            }
+            let Geometry::Fill { rings, rule } = &s.geometry else { continue };
+            if rings.len() < opt.min_parts {
+                continue;
+            }
+            let tidy = tidy_rings(rings, *rule, opt);
+            if tidy.is_empty() || tidy.len() >= rings.len() {
+                continue;
+            }
+            let path: BezPath = tidy
+                .into_iter()
+                .filter(|r| r.len() >= 3)
+                .map(|r| SubPath { anchors: r.into_iter().map(Anchor::corner).collect(), closed: true })
+                .collect();
+            edits.push((i, path));
+        }
+        let changed = edits.len();
+        self.set_paths(&edits)?;
+        Ok(changed)
     }
 
     /// Join two open ends: end `a_end` of object `a` and `b_end` of object

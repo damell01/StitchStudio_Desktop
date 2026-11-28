@@ -693,6 +693,14 @@ fn simplify_design_candidate(source:&zigzag::document::Document,original:&Design
             }))
         });
         if !paths.is_empty()&&next.set_paths(&paths).is_err(){continue}
+        // Fragmented (traced or painterly) fills: close hairline gaps and drop
+        // unstitchable specks. Each removed island is a start, a few stitches
+        // and a trim, so this mostly saves trims and sewing time.
+        if strength>=2{
+            let tidy=if strength>=3{zigzag::document::TidyIslands::BALANCED}else{zigzag::document::TidyIslands::GENTLE};
+            let ids:Option<Vec<usize>>=uids.map(|u|u.iter().copied().filter(|x|!protected.contains(x)).collect());
+            match next.tidy_islands(ids.as_deref(),&tidy){Ok(n)=>changed|=n>0,Err(_)=>continue}
+        }
         if !remove.is_empty(){
             // Path rewrites preserve UIDs; resolve the original identities again.
             let ids:Vec<_>=remove.iter().map(|&i|source.shapes[i].uid).collect();
