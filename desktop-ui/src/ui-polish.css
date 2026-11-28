@@ -52,3 +52,10 @@
 
 /* Template thumbnails were caught by the 14px icon rule for card buttons. */
 .template-grid article>button.template-art-select svg.template-art{flex:none;width:100%!important;height:auto!important;aspect-ratio:1;max-height:120px;padding:6px!important}
+
+/* Editor status bar: zoom stays reachable; secondary details collapse on narrower windows. */
+.editor-workspace .editor-bottom-bar{grid-template-columns:minmax(250px,1.4fr) minmax(0,3fr);container-type:inline-size}
+.editor-workspace .editor-bottom-bar .studio-status-zoom{position:sticky;right:0;z-index:1;padding-left:6px;background:var(--workspace-surface,var(--ui-panel));box-shadow:-10px 0 10px -6px var(--workspace-surface,var(--ui-panel))}
+@media(max-width:1500px){.editor-workspace .editor-bottom-bar .studio-status-view .camera-label{display:none}}
+@media(max-width:1320px){.editor-workspace .editor-bottom-bar .status-blocks{display:none}}
+@media(max-width:1180px){.editor-workspace .editor-bottom-bar .stitch-playhead{display:none}}
