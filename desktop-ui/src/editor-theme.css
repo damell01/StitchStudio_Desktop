@@ -228,3 +228,35 @@ html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera :i
 @media(max-width:1250px){
  html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera .camera-label {display:none}
 }
+
+/* Keep the docked controls and playback within the canvas height budget on short displays. */
+@media (max-height: 720px) {
+  html[data-palette][data-theme] .app.studio-shell:has(.editor-grid.hide-left.hide-right):not(.tour-active) {
+    grid-template-rows: 30px minmax(0, 1fr) !important;
+  }
+  html[data-palette][data-theme] .editor-workspace:has(>.editor-grid.hide-left.hide-right) .studio-edit-bar {
+    height: 35px;
+    min-height: 35px;
+  }
+  html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layout.hide-left.hide-right {
+    padding-block: 1px;
+    row-gap: 0;
+  }
+  html[data-palette][data-theme] .editor-workspace .editor-grid.hide-left.hide-right>.canvas-panel {
+    gap: 0;
+    padding-block: 0;
+  }
+  html[data-palette][data-theme] .editor-workspace .editor-grid.hide-left.hide-right>.canvas-panel>.studio-camera.studio-camera-docked {
+    height: 30px;
+    min-height: 30px;
+    padding-block: 0;
+  }
+  html[data-palette][data-theme] .editor-workspace .editor-grid.hide-left.hide-right>.canvas-panel>.studio-camera :is(button, summary) {
+    height: 28px;
+    min-height: 28px;
+  }
+  html[data-palette][data-theme] .editor-workspace:has(>.editor-grid.hide-left.hide-right) .editor-bottom-bar { height: 30px; }
+  html[data-palette][data-theme] .editor-workspace:has(>.editor-grid.hide-left.hide-right) .editor-bottom-bar>:is(.playback-tools, .workspace-status) {
+    height: 29px;
+  }
+}
