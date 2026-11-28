@@ -58,7 +58,7 @@ function TextTab({busy,hoop,onAddText,onTypeOnHoop}:{busy:boolean;hoop:{width:nu
   {error&&<p className="cp-error" role="alert">{error}</p>}
   <h3>Default text styles</h3>
   <div className="cp-headings">{headings.map(s=><button key={s.id} disabled={busy||fonts===null} onClick={()=>add(s,s.id==='heading'?'Heading':s.id==='subheading'?'Subheading':'Your text here')} aria-label={s.label}>
-   <span style={{...css(s),fontSize:s.id==='heading'?22:s.id==='subheading'?16:13}}>{s.label}</span></button>)}</div>
+   <span style={{...css(s),color:'var(--text)',fontSize:s.id==='heading'?22:s.id==='subheading'?16:13}}>{s.label}</span></button>)}</div>
   <h3>Embroidery lettering styles</h3>
   <div className="cp-styles">{styles.map(s=><button key={s.id} disabled={busy||fonts===null} onClick={()=>add(s)} aria-label={'Add '+s.label} title={s.note}>
    <span className={'cp-style-sample cp-style-'+s.id} style={css(s)}>{s.sample}</span>
