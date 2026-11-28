@@ -521,3 +521,12 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .canvas-type-form .inline-letter-preview small {font-size:11px;color:inherit;}
 .canvas-type-form {max-width:min(320px,90%);max-height:85%;overflow:auto;scrollbar-width:thin;}
 .canvas-type-form input:not([type=color]):not([type=checkbox]),.canvas-type-form select {min-width:0;max-width:100%;}
+
+/* Keep editor docks independently scrollable inside the bounded workspace. */
+.editor-workspace .editor-grid.studio-canvas-layout {min-height:0;grid-template-rows:minmax(0,1fr);}
+.editor-workspace .editor-grid.studio-canvas-layout > .workspace-sidebar {min-height:0;max-height:100%;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;scrollbar-width:auto;align-self:stretch;}
+.editor-workspace .studio-elements-dock {flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;}
+.editor-workspace .studio-elements-dock > * {flex-shrink:0;}
+.editor-workspace .studio-inspector-dock > * {flex-shrink:0;}
+.editor-workspace .inspector-sticky-header {position:sticky;top:0;z-index:3;background:var(--lav-panel,var(--studio-panel,#fff));}
+.editor-workspace .studio-elements-dock .template-elements-grid {padding-bottom:12px;}
