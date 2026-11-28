@@ -52,7 +52,7 @@ function legacy(a:{category:string;id:string;svg:string},collection:string):Temp
  return {id:a.id,name:title(a.id),file:a.id+'.svg',svg:a.svg,group,collection,tags,draft:false,...svgStats(a.svg)};
 }
 
-export const templateCatalog:TemplateEntry[]=[
+const candidateTemplates:TemplateEntry[]=[
  ...bundledArtwork.map(a=>legacy(a,'Classic collection')).filter(a=>a.complexity!=='Simple'||a.group==='Mini & left chest'),
  // Repetitive generated sports badges are archived until individually redesigned.
 
@@ -66,6 +66,19 @@ export const templateCatalog:TemplateEntry[]=[
   return [{id:m.id,name:m.name,file:m.id+'.svg',svg:svg??'',group:m.category,collection:m.collection,tags:m.tags,colors:m.colors,complexity:m.complexity,draft:m.draft}];
  }),
 ];
+
+// Exact artwork duplicates are not useful as separate templates. Prefer the first
+// catalog entry to preserve stable IDs; do not collapse distinct color variants.
+const seenArtwork=new Set<string>();
+export const templateCatalog=candidateTemplates.filter(entry=>{
+ if(!entry.svg)return !import.meta.env;
+ // Exclude embedded raster artwork and texture effects from bundled vectors.
+ if(/<(?:image|filter|pattern|linearGradient|radialGradient)\b/i.test(entry.svg))return false;
+ const key=entry.svg.replace(/<!--[^]*?-->/g,'').replace(/>\s+</g,'><').trim();
+ if(seenArtwork.has(key))return false;
+ seenArtwork.add(key);
+ return true;
+});
 
 export function sortCategories(names:string[]){
  const rank=(n:string)=>{const i=categoryOrder.indexOf(n);return i<0?categoryOrder.length:i};
