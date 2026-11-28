@@ -1242,10 +1242,11 @@ function selectObject(object:EditableObject|null,inspectLettering=true,forceWord
   if(!object)return;
   setLayerTab('objects');setObjectKind(object.kind);
   if(inspectorTab!=='stitches'&&inspectorTab!=='quality'&&inspectorTab!=='threads')setInspectorTab('transform');
+  // Keep a collapsed inspector collapsed; selection updates its context without stealing canvas space.
   if(!inspectLettering)return;
   void invoke<unknown>('lettering_settings',{uid:object.uid}).then(settings=>{
     if(selectionRequest.current!==request)return;
-    if(settings){if(forceWord||(inspectorTab!=='quality'&&inspectorTab!=='stitches'&&inspectorTab!=='threads'))openText(object.uid);return}
+    if(settings){if(forceWord||(right&&inspectorTab!=='quality'&&inspectorTab!=='stitches'&&inspectorTab!=='threads'))openText(object.uid);return}
     if(!object.bounds||!object.fill_rule||object.kind==='manual'){if(forceWord)setMessage('Select digitized filled lettering shapes to reconstruct embedded text.');return;}
     const [,y,,h]=object.bounds;
     if(h<1.8){if(forceWord)return recognizeWord([object],request,true);return;}
@@ -1266,6 +1267,8 @@ function selectObject(object:EditableObject|null,inspectLettering=true,forceWord
     const components=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||letters.some(l=>l.uid===o.uid)||o.color.join(',')!==object.color.join(','))return false;
     const [ox,oy,ow,oh]=o.bounds;return oh>0&&oh<=h*.55&&ow<=h*.55&&ox>=left-h*.12&&ox+ow<=right+h*.12&&oy>=y-h*.45&&oy+oh<=y+h*1.15});
     const wordShapes=[...letters,...components];
+    // Automatic recognition is useful for words, not isolated artwork shapes.
+    if(!forceWord&&letters.length<2)return;
     return recognizeWord(wordShapes,request,forceWord);
   }).catch(()=>{});
 }
