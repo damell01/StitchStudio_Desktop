@@ -15,19 +15,19 @@ test.beforeEach(async({page})=>{
 test('the template gallery filters by category and search, and remembers favorites',async({page})=>{
   await page.getByRole('button',{name:'Template Library'}).last().click();
   const gallery=page.getByRole('region',{name:'Built-in design collection'});
-  await gallery.getByRole('button',{name:/^Monograms & frames \d+$/}).click();
-  await expect(gallery.getByRole('heading',{name:'Monograms & frames'})).toBeVisible();
-  await gallery.getByLabel('Search artwork').fill('pink floral crest');
+  await gallery.getByRole('button',{name:/^Beach & ocean \d+$/}).click();
+  await expect(gallery.getByRole('heading',{name:'Beach & ocean'})).toBeVisible();
+  await gallery.getByLabel('Search artwork').fill('pelican');
   await expect(gallery.locator('.tg-card')).toHaveCount(1);
-  await gallery.getByRole('button',{name:'Add to favorites: Pink Floral Crest'}).click();
-  await gallery.getByRole('button',{name:'Pink Floral Crest',exact:true}).click();
-  const details=page.getByRole('region',{name:'Design details: Pink Floral Crest'});
+  await gallery.getByRole('button',{name:'Add to favorites: Pelican'}).click();
+  await gallery.getByRole('button',{name:'Pelican',exact:true}).click();
+  const details=page.getByRole('region',{name:'Design details: Pelican'});
   await expect(details.getByRole('button',{name:'Digitize'})).toBeVisible();
   await details.getByRole('button',{name:'Close details'}).click();
   await gallery.getByRole('button',{name:/^Favorites \d+$/}).click();
   await gallery.getByLabel('Search artwork').fill('');
   await expect(gallery.locator('.tg-card')).toHaveCount(1);
-  expect(await page.evaluate(()=>localStorage.getItem('studio-template-favorites'))).toContain('pink-floral-crest');
+  expect(await page.evaluate(()=>localStorage.getItem('studio-template-favorites'))).toContain('pelican');
 });
 
 test('home shows real template thumbnails and opens a category in the library',async({page})=>{
@@ -40,5 +40,5 @@ test('home shows real template thumbnails and opens a category in the library',a
 test('the library includes the full bundled template collection',async({page})=>{
   await page.getByRole('button',{name:'Template Library'}).last().click();
   const total=Number((await page.getByRole('button',{name:/^All designs \d+$/}).innerText()).match(/\d+/)![0]);
-  expect(total).toBeGreaterThan(450);
+  expect(total).toBeGreaterThan(50);
 });

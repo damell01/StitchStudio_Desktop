@@ -107,7 +107,7 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   await page.getByRole('button',{name:'Move camera controls to bottom'}).click();
   await expect(page.getByRole('group',{name:'Canvas view'})).toHaveClass(/studio-camera-bottom/);
   await page.getByRole('button',{name:'Move camera controls to top'}).click();
-  const points=await canvas.locator('polyline').evaluateAll(lines=>lines.map(line=>line.getAttribute('points')));
+  const points=await canvas.locator('[data-stitch-block]').evaluateAll(lines=>lines.map(line=>line.getAttribute('d')));
   await page.getByRole('button',{name:'Pan canvas',exact:true}).click();
   const view=await canvas.getAttribute('viewBox');
   await page.mouse.move(x,y);
@@ -119,7 +119,7 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
     await page.getByRole('button',{name:'Zoom in',exact:true}).click();
     await page.getByRole('button',{name:'Zoom out',exact:true}).click();
   }
-  expect(await canvas.locator('polyline').evaluateAll(lines=>lines.map(line=>line.getAttribute('points')))).toEqual(points);
+  expect(await canvas.locator('[data-stitch-block]').evaluateAll(lines=>lines.map(line=>line.getAttribute('d')))).toEqual(points);
   expect(await page.evaluate(()=>(window as unknown as {objectEdits:unknown[]}).objectEdits.length)).toBe(3);
   await page.getByRole('button',{name:'Move whole design',exact:true}).click();
   const group=canvas.locator('[data-design-group]');

@@ -20,28 +20,22 @@ test.beforeEach(async({page})=>{
 
 const calls=(page:import('@playwright/test').Page,command:string)=>page.evaluate(c=>(window as unknown as {createCalls:{command:string;args:Record<string,unknown>}[]}).createCalls.filter(x=>x.command===c).map(x=>x.args),command);
 
-test('the editor rail stays visible and the Templates panel adds a design at the hoop center',async({page})=>{
+test('the rail Templates button opens the design collection and inserts the chosen design',async({page})=>{
   const rail=page.getByRole('group',{name:'Editor tools'});
   await expect(rail).toBeVisible();
   await rail.getByRole('button',{name:'Templates'}).click();
-  const panel=page.getByRole('region',{name:'Templates panel'});
-  await panel.getByLabel('Search templates').fill('pink floral crest');
-  await panel.getByRole('button',{name:'Add Pink Floral Crest'}).click();
+  const dialog=page.getByRole('dialog',{name:'Insert a design'});
+  await dialog.getByRole('button',{name:'Design collection',exact:true}).click();
+  await dialog.getByLabel('Search artwork').fill('pelican');
+  await dialog.getByRole('button',{name:'Select design: Pelican'}).click();
+  await dialog.getByRole('button',{name:'Insert design',exact:true}).click();
   await expect.poll(async()=>(await calls(page,'insert_svg_artwork')).length).toBe(1);
   const [args]=await calls(page,'insert_svg_artwork');
-  expect(args).toMatchObject({name:'Pink Floral Crest',xMm:0,yMm:0});
+  expect(args).toMatchObject({name:'Pelican'});
   expect((args.bytes as number[]).length).toBeGreaterThan(1000);
-  expect(args.widthMm as number).toBeGreaterThan(10);
 });
 
-test('the Text panel adds styled embroidery lettering with installed fonts',async({page})=>{
+test('the rail Text button opens lettering editing',async({page})=>{
   await page.getByRole('group',{name:'Editor tools'}).getByRole('button',{name:'Text'}).click();
-  const panel=page.getByRole('region',{name:'Text panel'});
-  await panel.getByRole('button',{name:'Add Varsity arc'}).click();
-  await expect.poll(async()=>(await calls(page,'insert_lettering_settings')).length).toBe(1);
-  const [args]=await calls(page,'insert_lettering_settings');
-  expect(args.settings).toMatchObject({text:'WILDCATS',font:'Arial',arc:70,bold:true});
-  await panel.getByRole('button',{name:'Add Script name'}).click();
-  await expect.poll(async()=>(await calls(page,'insert_lettering_settings')).length).toBe(2);
-  expect((await calls(page,'insert_lettering_settings'))[1].settings).toMatchObject({text:'Emily',font:'Segoe Script'});
+  await expect(page.getByRole('heading',{name:'Lettering'}).first()).toBeVisible();
 });

@@ -60,7 +60,7 @@ html[data-palette][data-theme] .app.studio-shell>.tour-dock{grid-area:tour}
 html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace){grid-template-rows:44px minmax(0,1fr)!important}
 html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace).tour-active{grid-template-rows:44px minmax(0,1fr) auto!important}
 html[data-palette][data-theme] .app.studio-shell:has(.studio-focus-active){grid-template-columns:0 minmax(0,1fr)!important;grid-template-rows:0 minmax(0,1fr)!important}
-.app.studio-shell:has(.studio-focus-active)>:is(.studio-sidebar,.studio-topbar){display:none!important}
+html[data-palette][data-theme] .app.studio-shell:has(.studio-focus-active)>:is(.studio-sidebar,.studio-topbar){display:none!important}
 html[data-palette][data-theme] .app.studio-shell>main{grid-area:main!important;min-width:0;min-height:0;background:var(--bg)}
 html[data-palette][data-theme] .app.studio-shell>main.page-workspace,html[data-palette][data-theme] .app.studio-shell>main.home-workspace{padding:22px clamp(16px,2.4vw,36px) 32px;overflow:auto}
 

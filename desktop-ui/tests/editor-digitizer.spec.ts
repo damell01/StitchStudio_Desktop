@@ -38,7 +38,7 @@ test('canvas drops digitize immediately and add the draft to the open project', 
 
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('heading', {name:'Working design'})).toBeVisible();
-  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(2);
+  await expect.poll(async()=>(await page.locator('.design-canvas [data-stitch-block]').evaluateAll(els=>els.reduce((n,e)=>n+Number(e.getAttribute('data-runs')),0)))).toBe(2);
 });
 
 test('dropping an image on Home starts a digitizer draft', async ({page}) => {

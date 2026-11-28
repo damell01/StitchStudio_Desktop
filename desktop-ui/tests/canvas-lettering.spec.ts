@@ -24,10 +24,11 @@ test('types lettering at the clicked design coordinates and preserves existing s
   await page.goto('/');
   await page.getByRole('button',{name:/Continue current design/}).click();
   const canvas=page.locator('.design-canvas');
-  const existing=canvas.locator('polyline').first();
+  const existing=canvas.locator('[data-stitch-block]').first();
   await expect(existing).toBeVisible();
-  const initial=await existing.getAttribute('points');
+  const initial=await existing.getAttribute('d');
   await page.getByRole('button',{name:'Zoom in',exact:true}).click();
+  await page.locator('summary[aria-label="Create and edit tools"]').click();
   await page.getByRole('button',{name:'Type on canvas',exact:true}).click();
   const point=await canvas.evaluate(element=>{
     const p=new DOMPoint(12,-13).matrixTransform((element as unknown as SVGSVGElement).getScreenCTM()!);
@@ -39,7 +40,7 @@ test('types lettering at the clicked design coordinates and preserves existing s
   await input.fill('New text');
   await input.press('Enter');
   await expect(input).toHaveCount(0);
-  await expect(existing).toHaveAttribute('points',initial!);
+  await expect(existing).toHaveAttribute('d',initial!);
   const [call]=await page.evaluate(()=>(window as unknown as {letteringCalls:Record<string,unknown>[]}).letteringCalls);
   expect(call.settings).toMatchObject({text:'New text',font:'Arial'});
   expect((call.placement as number[])[0]).toBeCloseTo(12,0);

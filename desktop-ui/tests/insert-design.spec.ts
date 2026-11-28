@@ -34,7 +34,7 @@ test.beforeEach(async ({ page }) => {
 test('previews and places a template without leaving the current project', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: 'Insert a design' });
   await dialog.getByRole('textbox', { name: 'Search templates' }).fill('thread spool');
-  await dialog.getByRole('button', { name: 'Preview Thread spool' }).click();
+  await dialog.getByRole('button', { name: 'Select Thread spool' }).click();
   await expect(dialog.getByRole('img', { name: 'Thread spool stitch preview' })).toBeVisible();
   await dialog.getByLabel('Width (in)').fill('2.5');
   await dialog.getByLabel('Offset from hoop center').check();
@@ -43,7 +43,7 @@ test('previews and places a template without leaving the current project', async
   await dialog.getByRole('button', { name: 'Insert design', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Existing design' })).toBeVisible();
-  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(2);
+  await expect.poll(async()=>(await page.locator('.design-canvas [data-stitch-block]').evaluateAll(els=>els.reduce((n,e)=>n+Number(e.getAttribute('data-runs')),0)))).toBe(2);
   const args = await page.evaluate(() =>
     (window as unknown as { insertCalls: { command: string; args: object }[] }).insertCalls
       .find(call => call.command === 'insert_template')?.args);
@@ -61,13 +61,13 @@ test('keeps the saved file selected when insertion fails and allows a retry', as
   await expect(dialog.getByRole('button', { name: 'leaf.dst' })).toHaveAttribute('aria-pressed', 'true');
   await dialog.getByRole('button', { name: 'Insert design', exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(2);
+  await expect.poll(async()=>(await page.locator('.design-canvas [data-stitch-block]').evaluateAll(els=>els.reduce((n,e)=>n+Number(e.getAttribute('data-runs')),0)))).toBe(2);
 });
 
 test('finds published character artwork by tag and shows its license before insertion', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: 'Insert a design' });
   await dialog.getByRole('textbox', { name: 'Search templates' }).fill('technology');
-  await dialog.getByRole('button', { name: 'Preview Robot' }).click();
+  await dialog.getByRole('button', { name: 'Select Robot' }).click();
   await expect(dialog.getByRole('img', { name: 'Robot stitch preview' })).toBeVisible();
   await expect(dialog.getByRole('link', { name: 'Twemoji by Twitter, Inc. and other contributors' }))
     .toHaveAttribute('href', 'https://github.com/twitter/twemoji/blob/7a3dad4a4da30497093dab22eafba135f02308e1/assets/svg/1f916.svg');

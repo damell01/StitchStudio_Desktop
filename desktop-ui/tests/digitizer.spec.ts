@@ -93,8 +93,8 @@ test('an artwork selection generates a draft immediately and only opens it on re
   expect(generationCalls).toBe(2);
   await open.click();
   const canvas = page.locator('.design-canvas');
-  await expect(canvas.locator('polyline').first()).toBeVisible();
-  const stitches = await canvas.locator('polyline').first().getAttribute('points');
+  await expect(canvas.locator('[data-stitch-block]').first()).toBeVisible();
+  const stitches = await canvas.locator('[data-stitch-block]').first().getAttribute('d');
   const originalView = await canvas.getAttribute('viewBox');
   await page.getByTitle('Zoom in', { exact: true }).click();
   await page.getByTitle('Zoom in', { exact: true }).click();
@@ -107,7 +107,7 @@ test('an artwork selection generates a draft immediately and only opens it on re
   await page.mouse.move(bounds.x + bounds.width / 2 + 45, bounds.y + bounds.height / 2 + 30);
   await page.mouse.up();
   await expect(canvas).not.toHaveAttribute('viewBox', zoomed!);
-  await expect(canvas.locator('polyline').first()).toHaveAttribute('points', stitches!);
+  await expect(canvas.locator('[data-stitch-block]').first()).toHaveAttribute('d', stitches!);
   expect(await page.evaluate(() => (window as unknown as { stitchTestCalls: string[] }).stitchTestCalls))
     .not.toContain('transform_design');
 });

@@ -38,12 +38,12 @@ test('the compact template library previews stitches before opening a template',
   await page.getByRole('button', { name: 'Preview Thread spool' }).click();
   await dialog.getByRole('button', { name: 'Open in design studio' }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(1);
+  await expect.poll(async()=>(await page.locator('.design-canvas [data-stitch-block]').evaluateAll(els=>els.reduce((n,e)=>n+Number(e.getAttribute('data-runs')),0)))).toBe(1);
   await page.getByRole('button',{name:'Previous stitch'}).click();
   await expect(page.getByLabel('Planned stitch position')).toHaveValue('1');
   await page.getByRole('button',{name:'Next stitch'}).click();
   await expect(page.getByLabel('Planned stitch position')).toHaveValue('2');
-  const nav = page.locator('.desktop-nav');
+  const nav = page.locator('.studio-topbar');
   await page.getByRole('button', { name: 'Focus canvas' }).click();
   await expect(nav).toBeHidden();
   const canvas = page.locator('.design-canvas');
@@ -54,7 +54,7 @@ test('the compact template library previews stitches before opening a template',
   const inspector = page.getByRole('group', { name: 'Inspector' });
   await inspector.getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByRole('button', { name: 'Maximize in hoop' })).toBeVisible();
-  await inspector.getByRole('button', { name: 'Stitches' }).click();
+  await page.getByRole('group', { name: 'Embroidery settings' }).getByRole('button', { name: 'Stitches' }).click();
   await expect(page.getByRole('button', { name: /audit|check stitch/i })).toBeVisible();
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await page.getByRole('group', { name: 'Layers' }).getByRole('button', { name: 'Blocks' }).click();
@@ -69,5 +69,5 @@ test('the design library finds a personal machine file and inserts it', async ({
   await expect(page.getByText('football.dst')).toBeVisible();
   await expect(page.getByText('star.pes')).toBeHidden();
   await page.getByRole('button', { name: 'Insert football.dst' }).click();
-  await expect(page.locator('.design-canvas polyline:not([opacity])')).toHaveCount(1);
+  await expect.poll(async()=>(await page.locator('.design-canvas [data-stitch-block]').evaluateAll(els=>els.reduce((n,e)=>n+Number(e.getAttribute('data-runs')),0)))).toBe(1);
 });

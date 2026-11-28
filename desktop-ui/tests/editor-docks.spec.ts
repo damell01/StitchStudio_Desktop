@@ -135,8 +135,8 @@ test('the canvas occupies at least three quarters of the window with both docks 
 
   const canvasBox=(await canvas.boundingBox())!;
   expect(canvasBox.width*canvasBox.height/(1280*668)).toBeGreaterThanOrEqual(.75);
-  const stitch=canvas.locator('polyline').first();
-  const originalPoints=await stitch.getAttribute('points');
+  const stitch=canvas.locator('[data-stitch-block]').first();
+  const originalPoints=await stitch.getAttribute('d');
 
   await page.getByRole('button',{name:'Fit hoop view'}).click();
   const hoop=(await canvas.locator('.studio-hoop').boundingBox())!;
@@ -144,5 +144,5 @@ test('the canvas occupies at least three quarters of the window with both docks 
   expect(hoop.y+hoop.height).toBeLessThanOrEqual(canvasBox.y+canvasBox.height);
   await page.getByRole('button',{name:'Fit artwork'}).click();
   await expect(zoom).toHaveText('400%');
-  await expect(stitch).toHaveAttribute('points',originalPoints!);
+  await expect(stitch).toHaveAttribute('d',originalPoints!);
 });

@@ -104,7 +104,7 @@ html[data-palette][data-theme] .editor-workspace .studio-document h1{white-space
 }
 @media(max-width:1180px){
  html[data-palette][data-theme] .editor-workspace .studio-edit-bar :is(.studio-price-job,.studio-save-design,.studio-export){padding:0 10px}
- html[data-palette][data-theme] .editor-workspace .studio-document h1{display:none}
+ html[data-palette][data-theme] .editor-workspace .studio-document h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
  html[data-palette][data-theme] .editor-workspace .studio-edit-bar{gap:1px;padding-left:10px}
 }
 @media(max-width:1100px){
@@ -166,3 +166,9 @@ html[data-palette][data-theme] .editor-workspace .canvas-selection-bar .studio-s
 html[data-palette][data-theme] .editor-workspace .workspace-canvas:has(>.canvas-selection-bar) .studio-view-modes{left:auto;right:12px;top:62px;bottom:auto;transform:none}
 html[data-palette][data-theme] .editor-workspace .workspace-canvas:has(>.canvas-selection-bar) .studio-view-modes>button{padding:0 9px;font-size:12px}
 html[data-palette][data-theme] .editor-workspace .canvas-selection-bar>button{order:5}
+
+/* Shown instead of a blank studio if an editor panel fails to render. */
+.editor-crash{display:grid;place-items:center;align-content:center;gap:10px;height:100%;padding:24px;text-align:center;color:var(--text,#231b2f)}
+.editor-crash h2{margin:0;font-size:18px}
+.editor-crash p{margin:0;max-width:46ch;color:var(--muted,#6c6379)}
+.editor-crash small{max-width:60ch;color:var(--faint,#9a91a8);font-family:ui-monospace,monospace}

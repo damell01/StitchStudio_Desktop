@@ -53,7 +53,7 @@ test('garment choices and placement offsets update the preview without editing d
   });
   await page.goto('/');
   await page.getByRole('button',{name:/Blank design/}).last().click();
-  const original=await page.locator('.design-canvas polyline').first().getAttribute('points');
+  const original=await page.locator('.design-canvas [data-stitch-block]').first().getAttribute('d');
   await page.getByRole('button',{name:'Garment mockup'}).click();
   const dialog=page.getByRole('dialog',{name:'Garment mockup'});
   const image=dialog.locator('canvas');
@@ -79,7 +79,7 @@ test('garment choices and placement offsets update the preview without editing d
   expect(movedProof.pixelHash).not.toEqual(proof.pixelHash);
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
-  await expect(page.locator('.design-canvas polyline').first()).toHaveAttribute('points',original!);
+  await expect(page.locator('.design-canvas [data-stitch-block]').first()).toHaveAttribute('d',original!);
   const changes=await page.evaluate(()=>(window as unknown as {mockupCalls:string[]}).mockupCalls);
   expect(changes).not.toContain('transform_design');
   expect(changes).not.toContain('edit_artwork_object');

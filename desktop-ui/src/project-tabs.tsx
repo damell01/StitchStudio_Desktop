@@ -5,6 +5,7 @@ import {createPortal} from 'react-dom';
 import type {Command} from './command-palette';
 import {confirmAction} from './dialogs';
 import {Editor} from './editor';
+import {EditorBoundary} from './editor-boundary';
 import './project-tabs.css';
 
 export type WorkspaceView = {
@@ -219,8 +220,8 @@ export function StudioWorkspace({navigation,initialAssistant,onAssistantOpened}:
         <p>There are no closed project tabs to recover.</p>}
       {error&&<p role="alert">{error}</p>}
     </dialog>
-    <Editor key={editorKey} initialView={tabId?views.get(tabId):resumedView} tabId={tabId}
+    <EditorBoundary>{attempt=><Editor key={editorKey+':'+attempt} initialView={tabId?views.get(tabId):resumedView} tabId={tabId}
       initialAssistant={initialAssistant} onAssistantOpened={onAssistantOpened}
-      onWorkspaceStatus={updateStatus} navigation={[newTab,restoreTab,...navigation]}/>
+      onWorkspaceStatus={updateStatus} navigation={[newTab,restoreTab,...navigation]}/>}</EditorBoundary>
   </>;
 }
