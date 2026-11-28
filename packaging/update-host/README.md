@@ -1,5 +1,15 @@
 # Private Stitch Studio updates on Hostinger
 
+## Quick setup (one script)
+
+From the repo root in PowerShell on your PC, with Node.js, Git and the GitHub CLI installed (`gh auth login` once):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\update-host\setup-release-keys.ps1
+```
+
+It creates the release keys in `%LOCALAPPDATA%\StitchStudioRelease`, makes a Hostinger deployment SSH key and copies it to your clipboard for hPanel, checks the SSH connection, finds the private feed folder, saves every GitHub secret and variable listed below, and can tag the first release. Back up that folder afterwards. The manual steps below do the same thing by hand.
+
 The Windows and macOS installers are needed once. Install a feed-enabled release, open **Settings → App updates**, and save your update access key. Stitch Studio stores it in Windows Credential Manager or macOS Keychain. The app checks periodically and asks before installing an update or closing your work.
 
 ## Connect the Hostinger account
