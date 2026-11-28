@@ -177,8 +177,7 @@ export function Library({ onDone,onArtwork,onBulkImport,onPrepared,initialTab='e
     {message && <p role="status">{message}</p>}
     {tab === 'embroidery' ? <>
       {files.length === 0 && <>
-        <p>Import machine files in DST, PES, PEC, EXP, JEF or VP3 format to use them here.</p>
-        {onArtwork&&<CharacterGallery onArt={onArtwork} onPrepared={onPrepared}/>}
+        <div className="studio-recent-empty"><span className="studio-home-icon"><FolderOpen size={24}/></span><div><strong>Your embroidery library</strong><p>Import DST, PES, PEC, EXP, JEF or VP3 files, or browse editable artwork to create a new design.</p><button className="primary" disabled={busy} onClick={()=>importDesigns('files')}>Import embroidery files</button>{onArtwork&&<button onClick={()=>{setTab('artwork');setQuery('')}}>Browse artwork</button>}</div></div>
       </>}
       {files.length > 0 && visibleFiles.length === 0 && <p>No files match your search.</p>}
       <div className="font-list">
