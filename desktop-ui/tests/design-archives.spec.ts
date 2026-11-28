@@ -47,6 +47,10 @@ test('the artwork gallery imports SVG ZIPs, filters imported vectors, and opens 
           { group: 'My imported artwork', name: 'Magnolia Leaf', file: 'Magnolia Leaf.svg' },
         ] : [];
         if (command === 'character_image' && args?.group === 'My imported artwork') return bytes;
+        if (command === 'digitize_artwork') {
+          Object.assign(window, { svgZipDigitizingRequest: args });
+          throw new Error('Test digitizing response');
+        }
         if (command === 'personal_designs' || command === 'editable_objects') return [];
         return null;
       },
@@ -62,6 +66,8 @@ test('the artwork gallery imports SVG ZIPs, filters imported vectors, and opens 
   await page.getByRole('textbox', { name: 'Search artwork' }).fill('ribbon');
   await expect(page.getByText('Magnolia Leaf', { exact: true })).toBeHidden();
   await page.getByRole('button', { name: 'Satin Ribbon', exact: true }).click();
-  await page.getByRole('button', { name: 'Digitize', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /digitize/i }).first()).toBeVisible();
+  await page.getByRole('region', { name: 'Artwork library' }).getByRole('button', { name: 'Digitize', exact: true }).click();
+  await expect.poll(() => page.evaluate(() =>
+    (window as unknown as {svgZipDigitizingRequest?: { name: string; mime: string }}).svgZipDigitizingRequest
+  )).toMatchObject({ name: 'Satin Ribbon', mime: 'image/svg+xml' });
 });

@@ -37,14 +37,15 @@ const tips=['Choose Digitize an image for a logo or picture, or Open embroidery 
 const tourPages=['Home','Machine Manager','Hoop Manager','Digitize an image','Blank design','Font Manager','Thread Library','Design Library','Help Center'];
 const tourNotes=['Choose a creation workflow from the home screen.','Add your machine and its supported embroidery field.','Create a hoop with its actual usable dimensions.','Browse an image and follow the digitizing steps.','Explore import, color blocks, hoop settings, simulator and export.','Import fonts from folders and subfolders.','Create your own thread collection and assign colors in the editor.','Scan folders for saved projects and reopen them.','Find stitch guides and appliqué instructions.'];
 function TemplatesPage({onChoose,onOpen,onArtwork,onPrepared}:{onChoose:(id:string)=>void;onOpen:()=>void;onArtwork:(art:Art)=>void;onPrepared:(id:string)=>Promise<void>}) {
- const [source,setSource]=useState<'bundled'|'starter'|'personal'>('bundled');
+ const [source,setSource]=useState<'bundled'|'boutique'|'starter'|'personal'>('bundled');
  return <>
   <div className="page-tabs" role="group" aria-label="Template source">
    <button aria-pressed={source==='bundled'} onClick={()=>setSource('bundled')}>Built-in design collection</button>
+   <button aria-pressed={source==='boutique'} onClick={()=>setSource('boutique')}>Boutique collection</button>
    <button aria-pressed={source==='starter'} onClick={()=>setSource('starter')}>Starter templates</button>
    <button aria-pressed={source==='personal'} onClick={()=>setSource('personal')}>My editable templates</button>
   </div>
-  {source==='bundled'?<CharacterGallery bundledOnly onArt={onArtwork} onPrepared={onPrepared}/>:source==='personal'?<SavedTemplates onOpen={onOpen}/>:<><TemplateLibrary onChoose={onChoose}/><FreeDesigns/></>}
+  {source==='bundled'?<CharacterGallery bundledOnly onArt={onArtwork} onPrepared={onPrepared}/>:source==='personal'?<SavedTemplates onOpen={onOpen}/>:<><TemplateLibrary key={source} onChoose={onChoose} boutiqueOnly={source==='boutique'}/>{source==='starter'&&<FreeDesigns/>}</>}
  </>;
 }
 

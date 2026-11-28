@@ -112,10 +112,11 @@ function TemplatePreview({ template, widthMm, insert, onCancel, onChoose }: {
 type TemplateLibraryProps = {
   selectedId?: string;
   quickInsert?: boolean;
+  boutiqueOnly?: boolean;
 } & ({ onChoose: (id: string) => void; insert?: boolean; widthMm?: number; onPreview?: never } |
      { onPreview: (template: Template) => void; onChoose?: never; insert?: never; widthMm?: never });
 
-export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPreview, selectedId, quickInsert=false }: TemplateLibraryProps) {
+export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPreview, selectedId, quickInsert=false, boutiqueOnly=false }: TemplateLibraryProps) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [favorites, setFavorites] = useState(() => readIds('studio-design-favorites'));
@@ -123,8 +124,10 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   useEffect(()=>{const refresh=()=>setRecent(readIds('studio-design-recent'));window.addEventListener('studio-template-used',refresh);return()=>window.removeEventListener('studio-template-used',refresh)},[]);
   const [selected, setSelected] = useState<Template | null>(null);
 
-  const premiumCount = templates.filter(isPremium).length;
-  const results = templates.filter(template => (
+  const catalogue=boutiqueOnly?templates.filter(isPremium):templates;
+  const premiumCount = !boutiqueOnly && templates.some(isPremium);
+  const categories=[...new Set(catalogue.map(template=>template.category))];
+  const results = catalogue.filter(template => (
     category === 'All' || category === template.category
     || (category === 'Premium artwork' && isPremium(template))
     || (category === 'Favorites' && favorites.includes(template.id))
@@ -148,11 +151,11 @@ export function TemplateLibrary({ onChoose, insert = false, widthMm = 65, onPrev
   }
 
   return <>
-    {(!insert||onPreview)&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All',...(premiumCount?['Premium artwork']:[]),'Favorites','Recent',...new Set(templates.map(t=>t.category))].map(item=><button key={item} aria-pressed={category===item} onClick={()=>{setCategory(item);setLimit(36)}}>{item}</button>)}</div>}
+    {(!insert||onPreview)&&<div className="template-category-strip" role="group" aria-label="Featured categories">{['All',...(premiumCount?['Premium artwork']:[]),'Favorites','Recent',...categories].map(item=><button key={item} aria-pressed={category===item} onClick={()=>{setCategory(item);setLimit(36)}}>{item}</button>)}</div>}
     <div className="library-filters">
       <label className="library-search"><Search size={16} /><input aria-label="Search templates" placeholder="Search templates" value={query} onChange={event => {setQuery(event.target.value);setLimit(36);}} /></label>
       <label>Category <select value={category} onChange={event => {setCategory(event.target.value);setLimit(36);}}>
-        {['All', ...(premiumCount?['Premium artwork']:[]), 'Favorites', 'Recent', ...new Set(templates.map(template => template.category))].map(item => <option key={item}>{item}</option>)}
+        {['All', ...(premiumCount?['Premium artwork']:[]), 'Favorites', 'Recent', ...categories].map(item => <option key={item}>{item}</option>)}
       </select></label>
       <small>{results.length} {results.length === 1 ? 'design' : 'designs'}</small>
     </div>

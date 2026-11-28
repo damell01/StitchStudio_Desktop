@@ -71,3 +71,13 @@ test('the design library finds a personal machine file and inserts it', async ({
   await page.getByRole('button', { name: 'Insert football.dst' }).click();
   await expect.poll(async()=>(await page.locator('.design-canvas [data-stitch-block]').evaluateAll(els=>els.reduce((n,e)=>n+Number(e.getAttribute('data-runs')),0)))).toBe(1);
 });
+test('premium artwork finds the grouped boutique designs and shows the stitch preview', async ({page})=>{
+  await page.getByRole('button',{name:/Template Library/}).last().click();
+  await page.getByRole('button',{name:'Boutique collection',exact:true}).click();
+  const results=page.getByRole('region',{name:'Template results'});
+  await expect(results.getByRole('heading',{name:'Heirloom goose ribbon crest'})).toBeVisible();
+  await expect(results.getByRole('heading',{name:'Thread spool'})).toHaveCount(0);
+  await page.getByRole('textbox',{name:'Search templates'}).fill('goose');
+  await results.getByRole('button',{name:'Preview Heirloom goose ribbon crest'}).click();
+  await expect(page.getByRole('dialog',{name:'Heirloom goose ribbon crest'}).getByLabel('Generated template stitches')).toBeVisible();
+});
