@@ -113,3 +113,16 @@
 .tg-picker .tg-rail-select{display:block}
 .tg-picker .tg-toolbar select:not(.tg-rail-select){max-width:130px}
 [data-reduced=true] .tg *{animation:none!important}
+
+/* Bounded desktop gallery: browse the entire collection without losing filters. */
+.tg:not(.tg-picker){height:calc(100dvh - 180px);min-height:240px;align-items:stretch;gap:12px;grid-template-columns:180px minmax(0,1fr);}
+.tg:not(.tg-picker).tg-has-detail{grid-template-columns:180px minmax(0,1fr) 260px;}
+.tg:not(.tg-picker) .tg-main{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 8px 12px 2px;}
+.tg:not(.tg-picker) .tg-toolbar{position:sticky;top:0;z-index:4;background:var(--tg-panel);padding:8px 2px;}
+.tg:not(.tg-picker) .tg-rail,.tg:not(.tg-picker) .tg-detail{max-height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+.tg-grid{grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px;}
+.tg-thumb{aspect-ratio:4/3;}
+.tg-card-name{white-space:normal;overflow-wrap:anywhere;min-height:2.5em;}
+.tg .tg-fav{opacity:1;}
+@media(max-width:1000px){.tg:not(.tg-picker).tg-has-detail{grid-template-columns:150px minmax(0,1fr);overflow-y:auto;height:calc(100dvh - 180px);}.tg:not(.tg-picker).tg-has-detail .tg-main{overflow:visible;}.tg:not(.tg-picker).tg-has-detail .tg-detail{grid-column:1/-1;}}
+@media(max-width:680px){.tg:not(.tg-picker),.tg:not(.tg-picker).tg-has-detail{grid-template-columns:minmax(0,1fr);}}
