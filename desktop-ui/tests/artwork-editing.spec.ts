@@ -1,3 +1,4 @@
+import {command} from './helpers';
 import { expect, test } from '@playwright/test';
 
 for (const mode of ['selection','oval'] as const) {
@@ -25,7 +26,7 @@ test('solid fill from '+mode+' previews only the chosen artwork until applied', 
   await page.getByRole('button',{name:/Blank design/}).last().click();
   if (mode === 'selection') {
     await page.locator('.design-canvas [data-artwork-uid="10"]').click();
-    await page.getByRole('button',{name:'Make selection solid'}).click();
+    await command(page,'Solid fill');
   } else {
     await page.getByRole('button',{name:'Solid area',exact:true}).click();
     await page.getByRole('button',{name:'Oval',exact:true}).click();
@@ -104,9 +105,11 @@ test('canvas selection edits the chosen vector and the pan tool only changes the
   await page.mouse.move(hx+30,hy+20,{steps:4});
   await page.mouse.up();
   await expect.poll(()=>page.evaluate(()=>(window as unknown as {objectEdits:{operation:{kind:string;sx?:number;sy?:number}}[]}).objectEdits.at(-1)?.operation)).toMatchObject({kind:'resize'});
-  await page.getByRole('button',{name:'Move camera controls to bottom'}).click();
+  // The grip is a drag handle; from the keyboard it toggles top and bottom.
+  await page.getByRole('button',{name:'Move camera controls to top'}).press('Enter');
+  await expect(page.getByRole('group',{name:'Canvas view'})).toHaveClass(/studio-camera-top/);
+  await page.getByRole('button',{name:'Move camera controls to bottom'}).press('Enter');
   await expect(page.getByRole('group',{name:'Canvas view'})).toHaveClass(/studio-camera-bottom/);
-  await page.getByRole('button',{name:'Move camera controls to top'}).click();
   const points=await canvas.locator('[data-stitch-block]').evaluateAll(lines=>lines.map(line=>line.getAttribute('d')));
   await page.getByRole('button',{name:'Pan canvas',exact:true}).click();
   const view=await canvas.getAttribute('viewBox');
@@ -160,7 +163,7 @@ test('stopping deep optimization keeps quick previews and ignores a late result'
   });
   await page.goto('/');
   await page.getByRole('button',{name:/Blank design/}).last().click();
-  await page.getByRole('button',{name:'Simplify',exact:true}).click();
+  await command(page,'Simplify');
   const dialog=page.getByRole('dialog',{name:'Simplify design'});
   await expect(dialog.getByText('2,600 stitches')).toBeVisible();
   await dialog.getByRole('button',{name:'Deep optimization'}).click();
@@ -195,7 +198,7 @@ test('a changed stitch-count goal searches the main modes and can apply a smalle
   });
   await page.goto('/');
   await page.getByRole('button',{name:/Blank design/}).last().click();
-  await page.getByRole('button',{name:'Simplify',exact:true}).click();
+  await command(page,'Simplify');
   const dialog=page.getByRole('dialog',{name:'Simplify design'});
   await expect(dialog.getByText(/changed too much of the visible stitch footprint/)).toBeVisible();
   await dialog.getByRole('group',{name:'Optimization focus'}).getByRole('button',{name:'Stitches',exact:true}).click();
@@ -225,7 +228,7 @@ test('smoothing texture previews a cheaper plan for explicit review', async ({pa
   });
   await page.goto('/');
   await page.getByRole('button',{name:/Blank design/}).last().click();
-  await page.getByRole('button',{name:'Simplify',exact:true}).click();
+  await command(page,'Simplify');
   const dialog=page.getByRole('dialog',{name:'Simplify design'});
   await expect(dialog.getByText(/37 fewer stitches/)).toBeVisible();
   await dialog.getByRole('button',{name:'Aggressive texture reduction'}).click();

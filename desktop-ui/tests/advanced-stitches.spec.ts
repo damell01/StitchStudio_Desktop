@@ -1,3 +1,4 @@
+import {command} from './helpers';
 import {expect,test} from '@playwright/test';
 
 test('applies satin options and picks an open path for new lettering', async ({page})=>{
@@ -34,7 +35,7 @@ test('applies satin options and picks an open path for new lettering', async ({p
   const calls=()=>page.evaluate(()=>(window as unknown as {advancedCalls:{command:string;args:unknown}[]}).advancedCalls);
   await canvas.locator('[data-artwork-uid="4"]').first().waitFor({state:"attached"});
   await selectPath();
-  await page.getByRole('button',{name:'Open object stitch settings',exact:true}).click();
+  await command(page,'Open object stitch settings');
   await page.getByRole('button',{name:'Advanced stitch settings'}).click();
   const detail=page.getByRole('dialog',{name:'Advanced stitch settings'});
   await detail.getByLabel('Pattern').selectOption('s');
@@ -57,8 +58,9 @@ test('applies satin options and picks an open path for new lettering', async ({p
     {uids:[4],action:'add_trim'}, {uids:[4],action:'add_stop'}, {uids:[4],action:'automatic_trim'},
   ]);
 
-  await page.getByRole('button',{name:'Add text',exact:true}).click();
+  await page.getByRole('button',{name:'Add editable text',exact:true}).click();
   const lettering=page.locator('.inline-lettering');
+  await lettering.getByText('Text layout & monograms').click();
   await lettering.getByRole('button',{name:'Pick a baseline on canvas'}).click();
   await selectPath();
   await expect(lettering).toContainText('Baseline from Ribbon path');

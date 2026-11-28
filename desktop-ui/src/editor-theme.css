@@ -34,7 +34,7 @@ html[data-palette][data-theme] .editor-workspace .workspace-options-panel>button
 html[data-palette][data-theme] .editor-workspace .workspace-options-panel>button:hover{background:var(--surface-2)}
 
 /* ---------- Canvas frame ---------- */
-html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layout{background:var(--canvas-bg);padding:10px;gap:10px}
+html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layout{background:var(--canvas-bg);padding:6px;gap:6px}
 html[data-palette][data-theme] .editor-workspace .canvas-panel{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--canvas-bg);box-shadow:var(--shadow-1)}
 html[data-palette][data-theme] .editor-workspace .design-canvas{background:var(--canvas-bg)!important}
 html[data-palette][data-theme] .editor-workspace .design-canvas rect[fill="url(#hoop-fabric)"],
@@ -120,10 +120,10 @@ html[data-palette][data-theme] .editor-workspace .layers-dock-header .workspace-
 
 /* ---------- Canva-style left rail and add panel ---------- */
 html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout:not(.canvas-focus){
- grid-template-columns:64px var(--left-dock) minmax(0,1fr) var(--right-dock)!important;column-gap:10px!important;
+ grid-template-columns:60px var(--left-dock) minmax(0,1fr) var(--right-dock)!important;column-gap:6px!important;
 }
-html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout.hide-left:not(.canvas-focus){column-gap:0!important;grid-template-columns:64px 0 minmax(0,1fr) var(--right-dock)!important}
-html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout.hide-left:not(.canvas-focus)>.canvas-panel{margin-left:10px}
+html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout.hide-left:not(.canvas-focus){column-gap:0!important;grid-template-columns:60px 0 minmax(0,1fr) var(--right-dock)!important}
+html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout.hide-left:not(.canvas-focus)>.canvas-panel{margin-left:6px}
 html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout.hide-right:not(.canvas-focus)>.canvas-panel{margin-right:0}
 .editor-workspace .editor-grid.studio-canvas-layout.create-open{--left-dock:min(316px,28vw)!important}
 html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layout:not(.canvas-focus)>.editor-toolrail{
@@ -146,7 +146,10 @@ html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layo
 html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layout.hide-left>.studio-layers-dock{display:none!important}
 html[data-palette][data-theme] .editor-workspace .editor-toolrail .studio-shapes-panel{left:84px}
 @media(max-width:1099px){
- html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout:not(.canvas-focus){grid-template-columns:56px 0 minmax(0,1fr) 0!important;column-gap:8px!important;padding:8px}
+ /* Narrow windows give the canvas the full width; tools stay in the command bar and menus. */
+ html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout:not(.canvas-focus){grid-template-columns:0 0 minmax(0,1fr) 0!important;column-gap:0!important;padding:4px}
+ html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layout:not(.canvas-focus)>.editor-toolrail{display:none!important}
+ html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout.hide-left:not(.canvas-focus)>.canvas-panel{margin-left:0}
  html[data-palette][data-theme] .editor-workspace .editor-toolrail>:is(button,details>summary){min-height:46px}
  html[data-palette][data-theme] .editor-workspace .editor-grid.studio-canvas-layout>.studio-layers-dock{left:72px!important;width:min(316px,calc(100vw - 96px))}
 }
@@ -172,3 +175,35 @@ html[data-palette][data-theme] .editor-workspace .canvas-selection-bar>button{or
 .editor-crash h2{margin:0;font-size:18px}
 .editor-crash p{margin:0;max-width:46ch;color:var(--muted,#6c6379)}
 .editor-crash small{max-width:60ch;color:var(--faint,#9a91a8);font-family:ui-monospace,monospace}
+@media(max-width:1099px){
+ html[data-palette][data-theme] .app>main.editor-workspace>.editor-grid.studio-canvas-layout.hide-left:not(.canvas-focus){grid-template-columns:0 0 minmax(0,1fr) 0!important;column-gap:0!important}
+}
+
+/* Space budget: the canvas keeps at least three quarters of a 1280x668 window. */
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace){grid-template-rows:36px minmax(0,1fr)!important}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace).tour-active{grid-template-rows:36px minmax(0,1fr) auto!important}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace) .studio-topbar :is(.topbar-tour,.topbar-icon,.topbar-logo){height:28px}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace) .studio-topbar :is(.topbar-icon,.topbar-logo){width:28px}
+html[data-palette][data-theme] .app.studio-shell:has(.editor-workspace) .studio-topbar .topbar-logo .sidebar-logo{width:24px;height:24px}
+html[data-palette][data-theme] .editor-workspace .studio-edit-bar{min-height:46px;height:46px}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar{height:38px}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar>:is(.playback-tools,.workspace-status){height:37px}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .playback-tools>button{height:28px;min-height:28px}
+
+/* Narrow windows: the canvas toolbar docks outside the artwork instead of covering a small canvas. */
+@media(max-width:1099px){
+ html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera.studio-camera-docked,
+ html[data-palette][data-theme] .editor-workspace .canvas-panel>.studio-camera.studio-camera-docked.studio-camera-top{
+  position:static;transform:none;left:auto;right:auto;top:auto;bottom:auto;width:auto;max-width:none;
+  border:0;border-radius:0;box-shadow:none;backdrop-filter:none;justify-content:center;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+ }
+ html[data-palette][data-theme] .editor-workspace .canvas-panel{border-radius:0;border-left:0;border-right:0}
+}
+
+/* The status bar must not clip its pop-ups (zoom options open upward). Narrow windows
+   collapse secondary metrics instead of scrolling the bar. */
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .workspace-status{overflow:visible}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .status-metrics{min-width:0;overflow:hidden}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .studio-status-zoom{position:relative;box-shadow:none}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar .studio-zoom-options{z-index:60}
+html[data-palette][data-theme] .editor-workspace .editor-bottom-bar{position:relative;z-index:20}

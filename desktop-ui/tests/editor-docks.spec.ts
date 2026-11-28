@@ -1,3 +1,4 @@
+import {zoomReadout} from './helpers';
 import {expect,test} from '@playwright/test';
 
 test.beforeEach(async({page})=>{
@@ -51,7 +52,6 @@ test('desktop keeps the canvas central and puts layer tools in compact dialogs',
 
   const dock=page.locator('.studio-layers-dock');
   await expect(dock.getByRole('button',{name:/Petal 1 Fill/i})).toBeVisible();
-  await dock.getByRole('button',{name:'Next page'}).click();
   await expect(dock.getByRole('button',{name:/Petal 7 Fill/i})).toBeVisible();
   const search=dock.getByRole('searchbox',{name:'Search objects'});
   await search.fill('petal 2');
@@ -75,7 +75,6 @@ test('desktop keeps the canvas central and puts layer tools in compact dialogs',
   await expect(canvas.locator('[data-artwork-uid="1"]')).toBeVisible();
 
   await search.fill('');
-  await dock.getByRole('button',{name:'Previous page'}).click();
   const source=dock.locator('.studio-layer-item').filter({hasText:'Petal 1'}).locator('.studio-layer-grip');
   const target=dock.locator('.studio-layer-item').filter({hasText:'Middle petal'});
   const targetBox=(await target.boundingBox())!;
@@ -113,11 +112,11 @@ test('narrow windows offer one tool drawer at a time and keep the camera toolbar
   await expect(page.locator('.studio-inspector-dock')).toBeHidden();
 
   const toolbar=page.getByRole('group',{name:'Canvas view'});
-  await toolbar.getByRole('button',{name:'Move camera controls to bottom'}).click();
+  // Docked at the bottom by default; the grip toggles from the keyboard (it is a drag handle).
   await expect(toolbar).toHaveClass(/studio-camera-bottom/);
   const before=(await canvas.boundingBox())!;
   expect((await toolbar.boundingBox())!.y).toBeGreaterThanOrEqual(before.y+before.height-1);
-  await toolbar.getByRole('button',{name:'Move camera controls to top'}).click();
+  await toolbar.getByRole('button',{name:'Move camera controls to top'}).press('Enter');
   await expect(toolbar).toHaveClass(/studio-camera-top/);
   const top=(await toolbar.boundingBox())!;
   expect(top.y+top.height).toBeLessThanOrEqual((await canvas.boundingBox())!.y+1);
@@ -130,19 +129,21 @@ test('the canvas occupies at least three quarters of the window with both docks 
   await expect(page.getByRole('heading',{name:'Garden'})).toBeVisible();
   await expect(page.getByRole('tab',{name:'Garden'})).toBeVisible();
   const canvas=page.locator('.design-canvas');
-  const zoom=page.getByRole('button',{name:'Reset zoom to 100%'});
-  await expect(zoom).toHaveText('350%');
+  const zoom=zoomReadout(page);
+  await expect(zoom).toContainText('350%');
 
   const canvasBox=(await canvas.boundingBox())!;
   expect(canvasBox.width*canvasBox.height/(1280*668)).toBeGreaterThanOrEqual(.75);
   const stitch=canvas.locator('[data-stitch-block]').first();
   const originalPoints=await stitch.getAttribute('d');
 
-  await page.getByRole('button',{name:'Fit hoop view'}).click();
+  await zoom.click();
+  await page.locator('.studio-zoom-options').getByRole('button',{name:'Fit hoop',exact:true}).click();
   const hoop=(await canvas.locator('.studio-hoop').boundingBox())!;
   expect(hoop.height).toBeGreaterThan(canvasBox.height*.8);
   expect(hoop.y+hoop.height).toBeLessThanOrEqual(canvasBox.y+canvasBox.height);
-  await page.getByRole('button',{name:'Fit artwork'}).click();
-  await expect(zoom).toHaveText('400%');
+  await zoom.click();
+  await page.locator('.studio-zoom-options').getByRole('button',{name:'Fit artwork',exact:true}).click();
+  await expect(zoom).toContainText('400%');
   await expect(stitch).toHaveAttribute('d',originalPoints!);
 });

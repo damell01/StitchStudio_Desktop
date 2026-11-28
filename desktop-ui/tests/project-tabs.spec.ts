@@ -1,3 +1,4 @@
+import {chooseZoom,zoomReadout} from './helpers';
 import {expect,test} from '@playwright/test';
 
 test('opens a separate project tab with its own viewport, history and recovery', async ({page})=>{
@@ -46,9 +47,9 @@ test('opens a separate project tab with its own viewport, history and recovery',
   await page.getByRole('button',{name:/Continue current design/}).click();
   const tabs=page.getByRole('tablist',{name:'Project tabs'});
   await expect(tabs.getByRole('tab',{name:'First design'})).toHaveAttribute('aria-selected','true');
-  await page.getByRole('button',{name:'Reset zoom to 100%'}).click();
+  await chooseZoom(page,100);
   await page.getByRole('button',{name:'Zoom in',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Reset zoom to 100%'})).toHaveText('125%');
+  await expect(zoomReadout(page)).toContainText('125%');
   await page.getByRole('button',{name:'New project tab',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Your hoop is ready'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Undo',exact:true})).toBeDisabled();
@@ -67,7 +68,7 @@ test('opens a separate project tab with its own viewport, history and recovery',
   await expect(page.getByRole('button',{name:'Undo',exact:true})).toHaveAttribute('title','Undo: Draw on canvas');
   await tabs.getByRole('tab',{name:'First design'}).click();
   await expect(page.getByRole('button',{name:'Undo',exact:true})).toHaveAttribute('title','Undo: First edit');
-  await expect(page.getByRole('button',{name:'Reset zoom to 100%'})).toHaveText('125%');
+  await expect(zoomReadout(page)).toContainText('125%');
   await page.getByRole('button',{name:'Close Second design',exact:true}).click();
   await page.getByRole('button',{name:'Continue',exact:true}).click();
   await expect(tabs.getByRole('tab',{name:'Second design'})).toHaveCount(0);
