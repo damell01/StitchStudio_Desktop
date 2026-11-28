@@ -1,6 +1,7 @@
 // Canva-style color editing for embroidery: every thread color in the design is a swatch;
 // pick one and change it everywhere, or only inside the current selection.
 import {useEffect,useMemo,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {Check,Palette,MousePointerClick} from 'lucide-react';
 import {readThreads} from './threads';
 import './design-colors.css';
@@ -48,7 +49,7 @@ function ColorPicker({color,info,selectionCount,busy,onApply,onSelectAll,onClose
   const pick=(h:string)=>{const next=rgb(h);if(next&&!busy)onApply(next,scope)};
   const current=hex(color);
   const left=Math.max(8,Math.min(anchor.left,window.innerWidth-292));
-  return <div ref={ref} className="dc-popover" role="dialog" aria-label={'Change color '+current} style={{position:'fixed',left,top:anchor.top}}>
+  return createPortal(<div ref={ref} className="dc-popover" role="dialog" aria-label={'Change color '+current} style={{position:'fixed',left,top:Math.max(8,Math.min(anchor.top,window.innerHeight-420)),maxHeight:'calc(100vh - 16px)',overflowY:'auto',zIndex:2000}}>
     <div className="dc-pop-head"><span className="dc-big" style={{background:current}}/><div><strong>{current.toUpperCase()}</strong>
       <small>{info.objects?info.objects+(info.objects===1?' object':' objects')+' · ':''}{info.blocks} sewing {info.blocks===1?'block':'blocks'}</small></div></div>
     {selectionCount>0&&<div className="dc-scope" role="group" aria-label="Where to change this color">
@@ -62,7 +63,7 @@ function ColorPicker({color,info,selectionCount,busy,onApply,onSelectAll,onClose
       <input aria-label="Hex color" value={custom} onChange={e=>setCustom(e.target.value.startsWith('#')?e.target.value:'#'+e.target.value)} spellCheck={false}/>
       <button className="primary" disabled={busy||!rgb(custom)||custom.toLowerCase()===current} onClick={()=>pick(custom)}>Apply</button></div>
     <button className="dc-link" disabled={busy} onClick={onSelectAll}><MousePointerClick size={14}/> Select everything this color</button>
-  </div>;
+  </div>,document.body);
 }
 
 /** Floating "design colors" bar (no selection) or swatches inside the selection toolbar. */
