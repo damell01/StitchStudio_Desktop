@@ -540,3 +540,16 @@ html .app > main.editor-workspace > .editor-grid.studio-canvas-layout.canvas-foc
 .editor-workspace .studio-inspector-dock .workspace-segments{flex-wrap:wrap;}
 .editor-workspace .studio-inspector-dock .workspace-segments button{flex:1 1 auto;white-space:normal;}
 .editor-workspace .editor-toolrail{min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+
+/* Compact quality review, with severity totals and paged issues instead of an endless list. */
+.quality-counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:4px 0;}
+.quality-counts button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px;min-width:0;}
+.quality-counts button strong{font-size:17px;font-variant-numeric:tabular-nums;}
+.quality-counts button small{font-size:11px;}
+.quality-counts button[aria-pressed=true]{background:var(--brand-soft,#eee6fb);border-color:var(--brand,#6945a2);color:var(--brand,#6945a2);}
+.quality-issue-browser .stitch-tools-issues{margin:5px 0;padding:0;list-style:none;display:grid;gap:5px;}
+.quality-issue-browser .stitch-tools-issues li{padding:6px;border:1px solid var(--studio-line,#a99bb966);border-radius:7px;font-size:12px;overflow-wrap:anywhere;}
+.quality-pagination{display:flex;align-items:center;justify-content:space-between;gap:4px;}
+.quality-pagination button{font-size:11px;padding:4px 6px;}
+.quality-inspector .inspector-actions{display:flex;flex-wrap:wrap;gap:4px;}
+.quality-inspector .inspector-actions button{flex:1 1 auto;font-size:12px;white-space:normal;}
