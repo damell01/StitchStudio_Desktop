@@ -1188,7 +1188,7 @@ function selectObject(object:EditableObject|null,inspectLettering=true,forceWord
     if(!object.bounds||!object.fill_rule||object.kind==='manual'){if(forceWord)setMessage('Select digitized filled lettering shapes to reconstruct embedded text.');return;}
     const [,y,,h]=object.bounds;
     if(h<1.8){if(forceWord)return recognizeWord([object],request,true);return;}
-    const row=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||o.color.join(',')!==object.color.join(','))return false;
+    const row=objects.filter(o=>{if(!o.bounds||!o.fill_rule||o.hidden||o.locked||lockedObjects.includes(o.uid)||o.color.join(',')!==object.color.join(','))return false;
     const [,oy,ow,oh]=o.bounds;return oh>=h*.55&&oh<=h*1.65&&ow<=h*2.5&&Math.abs(oy+oh/2-y-h/2)<=h*.28}).sort((a,b)=>a.bounds![0]-b.bounds![0]);
     const index=row.findIndex(o=>o.uid===object.uid);
     if(index<0){if(forceWord)return recognizeWord([object],request,true);return;}
@@ -1949,7 +1949,7 @@ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();if(plan
   {selected.bounds&&<span className="studio-selection-size" title="Selected object dimensions">{(selected.bounds[2]/25.4).toFixed(2)} × {(selected.bounds[3]/25.4).toFixed(2)} in</span>}
   {stitchGuides.data?.textForm==='text'&&<button disabled={busy||lockedObjects.includes(selected.uid)} onClick={()=>openText(selected.uid)} title="Edit font, lettering, spacing and effects"><Type size={16}/> Edit text</button>}
   {canRecognizeSelection&&<button disabled={busy||recognizingWord} onClick={recognizeSelection} title="Recognize imported lettering and preview an editable replacement"><Type size={16}/> {recognizingWord?'Recognizing…':'Edit embedded text'}</button>}
-  <button onClick={()=>{showInspector(true);setInspectorTab('threads')}} title="Change thread colors"><Palette size={16}/> Colors</button>
+  <button onClick={()=>{showInspector(true);setInspectorTab('threads')}} title="Change thread colors"><Palette size={16}/> Colors</button><button disabled={busy||!selected.bounds} onClick={selectVisualElement} title="Select overlapping regions of this illustration"><Group size={16}/> Select element</button><button disabled={busy} title="Select all unlocked regions with this thread color" onClick={()=>{const ids=objects.filter(o=>!o.hidden&&!o.locked&&!lockedObjects.includes(o.uid)&&o.color.join(',')===selected.color.join(',')).map(o=>o.uid);dismissWordReview();setCanvasText(null);setCanvasEditTarget(null);setActiveGroup(null);setSelectedObject(null);setMulti(ids);setCanvasMode('select');showInspector(true);setInspectorTab('threads');setMessage(ids.length+' matching color regions selected.')}}><Palette size={16}/> Same color</button>
   <button onClick={()=>{showInspector(true);setInspectorTab('transform')}} title="Dimensions and alignment"><Move size={16}/> Position</button>
   {selected.bounds&&<><button disabled={busy||lockedObjects.includes(selected.uid)} title="Reduce selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:.9})}>− Size</button><button disabled={busy||lockedObjects.includes(selected.uid)} title="Increase selected object size by 10 percent" onClick={()=>editSelection({kind:'scale',factor:1.1})}>+ Size</button></>}
   <button disabled={busy||!plan?.stitches} title="Inspect design coverage and density" onClick={()=>openQuality()}><ScanLine size={16}/> Check quality</button>
